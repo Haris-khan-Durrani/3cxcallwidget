@@ -27,10 +27,8 @@ services:
       - MYSQL_USER=3cx_user
       - MYSQL_PASSWORD=3cx_secret
       - MYSQL_ROOT_PASSWORD=root_secret
-    ports:
-      - "3306:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - 3cxwidget_mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -39,4 +37,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  mysql_data:
+  3cxwidget_mysql_data:

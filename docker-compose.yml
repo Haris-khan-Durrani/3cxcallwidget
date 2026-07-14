@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: 3cxwidget-app
+    ports:
+      - "3005:3005"
+    environment:
+      - PORT=3005
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=3cx_user
+      - DB_PASSWORD=3cx_secret
+      - DB_NAME=3cxwidget
+      - JWT_SECRET=change_this_secret_in_production
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.0
+    container_name: 3cxwidget-db
+    environment:
+      - MYSQL_DATABASE=3cxwidget
+      - MYSQL_USER=3cx_user
+      - MYSQL_PASSWORD=3cx_secret
+      - MYSQL_ROOT_PASSWORD=root_secret
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  mysql_data:

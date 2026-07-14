@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3CX Widget Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f1117;
+      --bg2: #161b27;
+      --bg3: #1e2535;
+      --border: #2a3248;
+      --text: #e8eaf0;
+      --text2: #8b93a9;
+      --accent: #3b82f6;
+      --accent2: #6366f1;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ===== SCROLLBAR ===== */
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--bg); } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ===== LOGIN ===== */
+    .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 60% 40%, #1e3a5f 0%, var(--bg) 70%); }
+    .login-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 48px 40px; width: 100%; max-width: 420px; box-shadow: 0 32px 80px rgba(0,0,0,0.5); }
+    .login-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+    .login-logo .logo-icon { width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+    .login-logo span { font-size: 20px; font-weight: 700; }
+    .login-card h1 { font-size: 26px; font-weight: 800; margin-bottom: 6px; }
+    .login-card p { color: var(--text2); font-size: 14px; margin-bottom: 32px; }
+
+    /* ===== SIDEBAR ===== */
+    .app { display: flex; min-height: 100vh; }
+    .sidebar { width: 240px; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 24px 0; position: fixed; top: 0; left: 0; height: 100vh; z-index: 100; }
+    .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 0 20px 28px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .sidebar-logo .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .sidebar-logo span { font-size: 16px; font-weight: 700; }
+    .nav-label { font-size: 10px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 1.2px; padding: 0 20px 8px; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 11px 20px; font-size: 14px; font-weight: 500; color: var(--text2); cursor: pointer; transition: all 0.15s; border-left: 3px solid transparent; }
+    .nav-item:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    .nav-item.active { color: var(--accent); background: rgba(59,130,246,0.08); border-left-color: var(--accent); }
+    .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .sidebar-footer { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); }
+    .logout-btn { width: 100%; background: rgba(239,68,68,0.1); color: var(--danger); border: 1px solid rgba(239,68,68,0.2); padding: 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s; }
+    .logout-btn:hover { background: rgba(239,68,68,0.2); }
+
+    /* ===== MAIN ===== */
+    .main { margin-left: 240px; flex: 1; padding: 32px; min-height: 100vh; }
+    .page-header { margin-bottom: 28px; }
+    .page-header h2 { font-size: 24px; font-weight: 800; margin-bottom: 4px; }
+    .page-header p { color: var(--text2); font-size: 14px; }
+
+    /* ===== VIEWS ===== */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ===== FORMS ===== */
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+    .form-control { width: 100%; background: var(--bg); border: 1.5px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 14px; font-family: 'Inter', sans-serif; transition: border-color 0.2s; outline: none; }
+    .form-control:focus { border-color: var(--accent); }
+    .form-control::placeholder { color: var(--text2); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+    /* ===== BUTTONS ===== */
+    .btn { padding: 10px 18px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; border: none; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; }
+    .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(59,130,246,0.35); }
+    .btn-success { background: rgba(34,197,94,0.15); color: var(--success); border: 1px solid rgba(34,197,94,0.25); }
+    .btn-success:hover { background: rgba(34,197,94,0.25); }
+    .btn-danger { background: rgba(239,68,68,0.12); color: var(--danger); border: 1px solid rgba(239,68,68,0.2); }
+    .btn-danger:hover { background: rgba(239,68,68,0.22); }
+    .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--text2); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .btn-full { width: 100%; justify-content: center; padding: 12px; }
+
+    /* ===== CARD ===== */
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; }
+    .card-title { font-size: 16px; font-weight: 700; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; }
+    .card-title span { display: flex; align-items: center; gap: 8px; }
+
+    /* ===== WIDGET CARDS ===== */
+    .widget-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; transition: border-color 0.2s; }
+    .widget-card:hover { border-color: var(--accent); }
+    .widget-card-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+    .widget-card-name { display: flex; align-items: center; gap: 12px; }
+    .widget-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .widget-name-text h3 { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+    .widget-name-text p { font-size: 12px; color: var(--text2); }
+    .widget-actions { display: flex; gap: 8px; }
+    .widget-card-body { padding: 18px 22px; }
+    .widget-meta { display: flex; gap: 24px; margin-bottom: 16px; }
+    .widget-meta-item { display: flex; flex-direction: column; gap: 2px; }
+    .widget-meta-item .label { font-size: 11px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .widget-meta-item .value { font-size: 13px; font-weight: 500; font-family: monospace; color: var(--text); }
+    .embed-block { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 16px; font-family: monospace; font-size: 12px; color: #7dd3fc; position: relative; }
+    .copy-btn { position: absolute; top: 8px; right: 8px; background: var(--bg3); border: 1px solid var(--border); color: var(--text2); padding: 4px 10px; border-radius: 5px; font-size: 11px; cursor: pointer; }
+    .copy-btn:hover { color: var(--text); }
+
+    /* ===== AGENTS TABLE ===== */
+    .agents-section { margin-top: 16px; }
+    .agents-section h4 { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+    .agent-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; }
+    .agent-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+    .agent-info { flex: 1; }
+    .agent-info strong { display: block; font-size: 13px; font-weight: 600; }
+    .agent-info small { color: var(--text2); font-size: 12px; }
+
+    /* ===== STATS ===== */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+    .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); margin-bottom: 10px; }
+    .stat-value { font-size: 32px; font-weight: 800; line-height: 1; }
+    .stat-value.blue { color: var(--accent); } .stat-value.green { color: var(--success); } .stat-value.red { color: var(--danger); } .stat-value.yellow { color: var(--warning); }
+
+    /* ===== TABLE ===== */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); border-bottom: 1px solid var(--border); }
+    tbody td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid var(--border); }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.02); }
+    .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge.initiated { background: rgba(59,130,246,0.12); color: var(--accent); }
+    .badge.completed { background: rgba(34,197,94,0.12); color: var(--success); }
+    .badge.failed { background: rgba(239,68,68,0.12); color: var(--danger); }
+
+    /* ===== BUILDER ===== */
+    .builder-layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start; }
+    .preview-phone { position: sticky; top: 24px; }
+    .preview-frame { background: #1a1a2e; border-radius: 40px; padding: 18px 12px; border: 4px solid #2d2d4e; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .preview-screen { background: #f3f4f6; border-radius: 28px; overflow: hidden; min-height: 480px; position: relative; }
+    .preview-screen-header { background: #e5e7eb; height: 48px; display: flex; align-items: center; padding: 0 14px; gap: 6px; }
+    .preview-screen-header .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .preview-iframe { width: 100%; height: 440px; border: none; border-radius: 0 0 28px 28px; background: white; }
+    .color-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    input[type="color"] { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); cursor: pointer; padding: 2px 4px; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle-label { font-size: 13px; font-weight: 500; }
+    .toggle { position: relative; width: 42px; height: 24px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 12px; cursor: pointer; transition: 0.2s; }
+    .toggle-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+    .toggle input:checked + .toggle-slider { background: var(--accent); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+    /* ===== MODAL (Add Agent) ===== */
+    .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-backdrop.open { display: flex; }
+    .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; width: 100%; max-width: 460px; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+    .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+
+    /* ===== ALERTS ===== */
+    .toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 20px; font-size: 13px; font-weight: 500; z-index: 9999; transform: translateY(20px); opacity: 0; transition: all 0.3s; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { border-left: 3px solid var(--success); }
+    .toast.error { border-left: 3px solid var(--danger); }
+
+    /* ===== EMPTY STATE ===== */
+    .empty-state { text-align: center; padding: 60px 20px; }
+    .empty-state svg { width: 48px; height: 48px; fill: var(--border); margin-bottom: 16px; }
+    .empty-state h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .empty-state p { font-size: 13px; color: var(--text2); }
+
+    /* ===== SECTION TABS ===== */
+    .section-tabs { display: flex; gap: 4px; background: var(--bg); border: 1px solid var(--border); padding: 4px; border-radius: var(--radius-sm); margin-bottom: 20px; width: fit-content; }
+    .section-tab { padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text2); transition: all 0.15s; }
+    .section-tab.active { background: var(--bg2); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+  </style>
+</head>
+<body>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Add Agent Modal -->
+<div class="modal-backdrop" id="agent-modal">
+  <div class="modal">
+    <h3>➕ Add Agent</h3>
+    <input type="hidden" id="modal-widget-id">
+    <div class="form-row">
+      <div class="form-group"><label>First Name *</label><input type="text" id="a-fname" class="form-control" placeholder="John"></div>
+      <div class="form-group"><label>Last Name</label><input type="text" id="a-lname" class="form-control" placeholder="Doe"></div>
+    </div>
+    <div class="form-group"><label>Extension *</label><input type="text" id="a-ext" class="form-control" placeholder="101"></div>
+    <div class="form-group"><label>Avatar URL (optional)</label><input type="url" id="a-avatar" class="form-control" placeholder="https://..."></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+      <button class="btn btn-ghost" onclick="closeAgentModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitAgent()">Add Agent</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Widget Modal -->
+<div class="modal-backdrop" id="widget-modal">
+  <div class="modal" style="max-width:540px;">
+    <h3>🚀 Create New Widget</h3>
+    <div class="form-row">
+      <div class="form-group"><label>Widget Name *</label><input type="text" id="w-name" class="form-control" placeholder="e.g. Main Website"></div>
+      <div class="form-group"><label>3CX FQDN *</label><input type="text" id="w-fqdn" class="form-control" placeholder="myco.3cx.eu"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>3CX Access Key *</label><input type="text" id="w-key" class="form-control" placeholder="your_access_key"></div>
+      <div class="form-group"><label>Fallback Extension/Queue *</label><input type="text" id="w-ext" class="form-control" placeholder="800"></div>
+    </div>
+    <div class="form-group"><label>n8n / GHL Webhook URL</label><input type="url" id="w-webhook" class="form-control" placeholder="https://..."></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+      <button class="btn btn-ghost" onclick="closeWidgetModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitWidget()">Create Widget</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LOGIN ===== -->
+<div id="login-view" class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="logo-icon">📞</div>
+      <span>3CX Widgets</span>
+    </div>
+    <h1>Welcome back</h1>
+    <p>Sign in to your admin dashboard</p>
+    <form id="login-form">
+      <div class="form-group"><label>Username</label><input type="text" id="login-user" class="form-control" placeholder="admin" required></div>
+      <div class="form-group"><label>Password</label><input type="password" id="login-pass" class="form-control" placeholder="••••••••" required></div>
+      <div id="login-error" style="color:var(--danger);font-size:13px;margin-bottom:12px;display:none;">❌ Invalid username or password</div>
+      <button type="submit" class="btn btn-primary btn-full">Sign In →</button>
+    </form>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <nav class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">📞</div>
+        <span>3CX Widgets</span>
+      </div>
+      <div class="nav-label">Navigation</div>
+      <div class="nav-item active" onclick="showView('widgets')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+        Widgets
+      </div>
+      <div class="nav-item" onclick="showView('reports')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
+        Reports
+      </div>
+      <div class="sidebar-footer">
+        <button class="logout-btn" onclick="logout()">Sign Out</button>
+      </div>
+    </nav>
+
+    <main class="main">
+
+      <!-- WIDGETS VIEW -->
+      <div id="view-widgets" class="view active">
+        <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <h2>My Widgets</h2>
+            <p>Manage all your 3CX call widgets</p>
+          </div>
+          <button class="btn btn-primary" onclick="openWidgetModal()">+ Create Widget</button>
+        </div>
+        <div id="widgets-list"></div>
+      </div>
+
+      <!-- REPORTS VIEW -->
+      <div id="view-reports" class="view">
+        <div class="page-header">
+          <h2>Call Reports</h2>
+          <p>Track every lead and call initiated through your widgets</p>
+        </div>
+        <div class="form-group" style="max-width:320px;margin-bottom:24px;">
+          <label>Select Widget</label>
+          <select id="report-widget-select" class="form-control" onchange="loadReport()">
+            <option value="">-- Select a Widget --</option>
+          </select>
+        </div>
+        <div id="report-content"></div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Builder View (full page overlay) -->
+<div id="builder-overlay" style="display:none; position:fixed; inset:0; background:var(--bg); z-index:500; overflow-y:auto;">
+  <div style="padding:24px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+      <div>
+        <button class="btn btn-ghost btn-sm" onclick="closeBuilder()" style="margin-bottom:8px;">← Back to Widgets</button>
+        <h2 style="font-size:22px;font-weight:800;">Widget Builder</h2>
+        <p style="color:var(--text2);font-size:13px;" id="builder-widget-name"></p>
+      </div>
+      <button class="btn btn-primary" onclick="saveBuilder()">💾 Save Changes</button>
+    </div>
+    <div class="builder-layout">
+      <div>
+        <!-- Design -->
+        <div class="card">
+          <div class="card-title"><span>🎨 Design & Colors</span></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Primary Color</label>
+              <input type="color" id="b-color-primary" value="#0b4526">
+            </div>
+            <div class="form-group">
+              <label>Button Text Color</label>
+              <input type="color" id="b-color-btn-text" value="#ffffff">
+            </div>
+          </div>
+        </div>
+        <!-- Text -->
+        <div class="card">
+          <div class="card-title"><span>✍️ Text & Messaging</span></div>
+          <div class="form-group"><label>Tooltip Text</label><input type="text" id="b-tooltip" class="form-control" placeholder="Let's Talk! ..."></div>
+          <div class="form-group"><label>Modal Title</label><input type="text" id="b-title" class="form-control" placeholder="Need Expert Business Setup Advice?"></div>
+          <div class="form-group"><label>Modal Subtitle</label><input type="text" id="b-subtitle" class="form-control" placeholder="We'll Call You in 55 Seconds!"></div>
+          <div class="form-group"><label>Submit Button Text</label><input type="text" id="b-btn-text" class="form-control" placeholder="Call me!"></div>
+          <div class="form-group"><label>Success Title</label><input type="text" id="b-success-title" class="form-control" placeholder="Calling you now..."></div>
+          <div class="form-group"><label>Success Message</label><input type="text" id="b-success-msg" class="form-control" placeholder="Please keep your phone nearby..."></div>
+        </div>
+        <!-- Phone -->
+        <div class="card">
+          <div class="card-title"><span>📱 Phone Settings</span></div>
+          <div class="form-row">
+            <div class="form-group"><label>Country Flag Emoji</label><input type="text" id="b-flag" class="form-control" placeholder="🇦🇪"></div>
+            <div class="form-group"><label>Country Code</label><input type="text" id="b-code" class="form-control" placeholder="+971"></div>
+          </div>
+        </div>
+        <!-- Form Fields -->
+        <div class="card">
+          <div class="card-title"><span>📋 Form Fields</span></div>
+          <div class="toggle-row">
+            <span class="toggle-label">Require Last Name</span>
+            <label class="toggle"><input type="checkbox" id="b-req-last"><span class="toggle-slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">Require Email</span>
+            <label class="toggle"><input type="checkbox" id="b-req-email"><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+      </div>
+      <!-- Preview -->
+      <div class="preview-phone">
+        <p style="font-size:12px;color:var(--text2);text-align:center;margin-bottom:12px;">LIVE PREVIEW</p>
+        <div class="preview-frame">
+          <div class="preview-screen">
+            <div class="preview-screen-header">
+              <div class="dot" style="background:#ef4444;"></div>
+              <div class="dot" style="background:#f59e0b;"></div>
+              <div class="dot" style="background:#22c55e;"></div>
+            </div>
+            <iframe id="preview-iframe" class="preview-iframe" src="about:blank"></iframe>
+          </div>
+        </div>
+        <p style="font-size:11px;color:var(--text2);text-align:center;margin-top:10px;">Click "Preview Widget" after saving to test live</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let token = localStorage.getItem('admin_token');
+  let allWidgets = [];
+  let currentBuilderWidgetId = null;
+
+  if (token) showApp();
+
+  // ===== AUTH =====
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('login-user').value;
+    const password = document.getElementById('login-pass').value;
+    try {
+      const res = await fetch('/api/admin/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username, password }) });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('admin_token', data.token);
+        token = data.token;
+        showApp();
+      } else {
+        document.getElementById('login-error').style.display = 'block';
+      }
+    } catch(e) { showToast('Connection error', 'error'); }
+  });
+
+  function logout() {
+    localStorage.removeItem('admin_token');
+    token = null;
+    document.getElementById('login-view').style.display = 'flex';
+    document.getElementById('app-view').style.display = 'none';
+  }
+
+  function showApp() {
+    document.getElementById('login-view').style.display = 'none';
+    document.getElementById('app-view').style.display = 'block';
+    fetchWidgets();
+  }
+
+  // ===== API =====
+  async function api(url, opts = {}) {
+    if (!opts.headers) opts.headers = {};
+    opts.headers['Authorization'] = `Bearer ${token}`;
+    if (opts.body && !opts.headers['Content-Type']) opts.headers['Content-Type'] = 'application/json';
+    const res = await fetch(url, opts);
+    if (res.status === 401 || res.status === 403) { logout(); throw new Error('Unauth'); }
+    return res;
+  }
+
+  // ===== NAVIGATION =====
+  function showView(name) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById(`view-${name}`).classList.add('active');
+    event.currentTarget.classList.add('active');
+    if (name === 'reports') populateReportSelect();
+  }
+
+  // ===== TOAST =====
+  function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    t.textContent = type === 'success' ? '✅ ' + msg : '❌ ' + msg;
+    t.className = `toast ${type} show`;
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // ===== WIDGETS =====
+  async function fetchWidgets() {
+    try {
+      const res = await api('/api/admin/widgets');
+      allWidgets = await res.json();
+      renderWidgets();
+    } catch(e) {}
+  }
+
+  function renderWidgets() {
+    const list = document.getElementById('widgets-list');
+    if (!allWidgets.length) {
+      list.innerHTML = `<div class="empty-state">
+        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
+        <h3>No widgets yet</h3><p>Click "Create Widget" to get started</p>
+      </div>`;
+      return;
+    }
+    list.innerHTML = '';
+    allWidgets.forEach(w => {
+      const serverUrl = window.location.origin;
+      const embedCode = `&lt;script src="${serverUrl}/widget.js?id=${w.id}"&gt;&lt;/script&gt;`;
+      
+      let agentsHtml = '';
+      (w.Agents || []).forEach(a => {
+        const avt = a.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.first_name)}&background=3b82f6&color=fff`;
+        agentsHtml += `<div class="agent-row">
+          <img class="agent-avatar" src="${avt}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(a.first_name)}&background=3b82f6&color=fff'" alt="">
+          <div class="agent-info"><strong>${a.first_name} ${a.last_name||''}</strong><small>Ext: ${a.extension}</small></div>
+          <button class="btn btn-danger btn-sm" onclick="deleteAgent('${a.id}')">Remove</button>
+        </div>`;
+      });
+
+      const card = document.createElement('div');
+      card.className = 'widget-card';
+      card.innerHTML = `
+        <div class="widget-card-header">
+          <div class="widget-card-name">
+            <div class="widget-dot"></div>
+            <div class="widget-name-text">
+              <h3>${w.name}</h3>
+              <p>${w.fqdn_3cx}</p>
+            </div>
+          </div>
+          <div class="widget-actions">
+            <button class="btn btn-ghost btn-sm" onclick="openBuilder('${w.id}')">🎨 Design</button>
+            <a href="/preview/${w.id}" target="_blank" class="btn btn-success btn-sm">▶ Preview</a>
+            <button class="btn btn-danger btn-sm" onclick="deleteWidget('${w.id}')">Delete</button>
+          </div>
+        </div>
+        <div class="widget-card-body">
+          <div class="widget-meta">
+            <div class="widget-meta-item"><span class="label">Fallback Ext</span><span class="value">${w.agent_extension_3cx}</span></div>
+            <div class="widget-meta-item"><span class="label">Agents</span><span class="value">${(w.Agents||[]).length} configured</span></div>
+            ${w.webhook_url_n8n ? `<div class="widget-meta-item"><span class="label">Webhook</span><span class="value" style="color:var(--success)">✓ Connected</span></div>` : ''}
+          </div>
+          <p style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Embed Code</p>
+          <div class="embed-block">
+            ${embedCode}
+            <button class="copy-btn" onclick="copyEmbed('${w.id}')">Copy</button>
+          </div>
+          <div class="agents-section">
+            <h4>Agents (Round-Robin) <button class="btn btn-ghost btn-sm" onclick="openAgentModal('${w.id}')">+ Add Agent</button></h4>
+            ${agentsHtml || '<p style="font-size:13px;color:var(--text2);">No agents — widget will use fallback queue.</p>'}
+          </div>
+        </div>`;
+      list.appendChild(card);
+    });
+  }
+
+  // Copy embed code
+  const embedRealCode = (id) => `<script src="${window.location.origin}/widget.js?id=${id}"><\/script>`;
+  function copyEmbed(id) {
+    navigator.clipboard.writeText(embedRealCode(id));
+    showToast('Embed code copied!');
+  }
+
+  // Create widget
+  function openWidgetModal() { document.getElementById('widget-modal').classList.add('open'); }
+  function closeWidgetModal() { document.getElementById('widget-modal').classList.remove('open'); }
+  async function submitWidget() {
+    const payload = { name: document.getElementById('w-name').value, fqdn_3cx: document.getElementById('w-fqdn').value, access_key_3cx: document.getElementById('w-key').value, agent_extension_3cx: document.getElementById('w-ext').value, webhook_url_n8n: document.getElementById('w-webhook').value || null };
+    if (!payload.name || !payload.fqdn_3cx || !payload.access_key_3cx || !payload.agent_extension_3cx) return showToast('Please fill all required fields', 'error');
+    try {
+      await api('/api/admin/widgets', { method: 'POST', body: JSON.stringify(payload) });
+      closeWidgetModal();
+      document.getElementById('widget-modal').querySelectorAll('input').forEach(i => i.value = '');
+      showToast('Widget created!');
+      fetchWidgets();
+    } catch(e) { showToast('Error creating widget', 'error'); }
+  }
+
+  // Delete widget
+  async function deleteWidget(id) {
+    if (!confirm('Delete this widget? This cannot be undone.')) return;
+    await api(`/api/admin/widgets/${id}`, { method: 'DELETE' });
+    showToast('Widget deleted');
+    fetchWidgets();
+  }
+
+  // Add agent
+  function openAgentModal(widgetId) { document.getElementById('modal-widget-id').value = widgetId; document.getElementById('agent-modal').classList.add('open'); }
+  function closeAgentModal() { document.getElementById('agent-modal').classList.remove('open'); }
+  async function submitAgent() {
+    const widgetId = document.getElementById('modal-widget-id').value;
+    const payload = { extension: document.getElementById('a-ext').value, first_name: document.getElementById('a-fname').value, last_name: document.getElementById('a-lname').value, avatar_url: document.getElementById('a-avatar').value };
+    if (!payload.extension || !payload.first_name) return showToast('Extension and first name are required', 'error');
+    await api(`/api/admin/widgets/${widgetId}/agents`, { method: 'POST', body: JSON.stringify(payload) });
+    closeAgentModal();
+    ['a-ext','a-fname','a-lname','a-avatar'].forEach(id => document.getElementById(id).value = '');
+    showToast('Agent added!');
+    fetchWidgets();
+  }
+
+  // Delete agent
+  async function deleteAgent(id) {
+    if (!confirm('Remove this agent?')) return;
+    await api(`/api/admin/agents/${id}`, { method: 'DELETE' });
+    showToast('Agent removed');
+    fetchWidgets();
+  }
+
+  // ===== BUILDER =====
+  function openBuilder(widgetId) {
+    currentBuilderWidgetId = widgetId;
+    const w = allWidgets.find(x => x.id === widgetId);
+    if (!w) return;
+    document.getElementById('builder-widget-name').textContent = `Editing: ${w.name}`;
+    document.getElementById('b-color-primary').value = w.color_primary || '#0b4526';
+    document.getElementById('b-color-btn-text').value = w.color_button_text || '#ffffff';
+    document.getElementById('b-title').value = w.widget_title || '';
+    document.getElementById('b-subtitle').value = w.widget_subtitle || '';
+    document.getElementById('b-btn-text').value = w.widget_button_text || '';
+    document.getElementById('b-success-title').value = w.widget_success_title || '';
+    document.getElementById('b-success-msg').value = w.widget_success_msg || '';
+    document.getElementById('b-tooltip').value = w.tooltip_text || '';
+    document.getElementById('b-flag').value = w.country_flag || '🇦🇪';
+    document.getElementById('b-code').value = w.country_code || '+971';
+    document.getElementById('b-req-last').checked = w.require_lastname !== false;
+    document.getElementById('b-req-email').checked = w.require_email !== false;
+    document.getElementById('builder-overlay').style.display = 'block';
+    updatePreview(widgetId);
+  }
+
+  function closeBuilder() { document.getElementById('builder-overlay').style.display = 'none'; currentBuilderWidgetId = null; }
+
+  function updatePreview(widgetId) {
+    const iframe = document.getElementById('preview-iframe');
+    iframe.src = `/preview/${widgetId}?t=${Date.now()}`;
+  }
+
+  async function saveBuilder() {
+    if (!currentBuilderWidgetId) return;
+    const payload = {
+      color_primary: document.getElementById('b-color-primary').value,
+      color_button_text: document.getElementById('b-color-btn-text').value,
+      widget_title: document.getElementById('b-title').value,
+      widget_subtitle: document.getElementById('b-subtitle').value,
+      widget_button_text: document.getElementById('b-btn-text').value,
+      widget_success_title: document.getElementById('b-success-title').value,
+      widget_success_msg: document.getElementById('b-success-msg').value,
+      tooltip_text: document.getElementById('b-tooltip').value,
+      country_flag: document.getElementById('b-flag').value,
+      country_code: document.getElementById('b-code').value,
+      require_lastname: document.getElementById('b-req-last').checked,
+      require_email: document.getElementById('b-req-email').checked,
+    };
+    try {
+      await api(`/api/admin/widgets/${currentBuilderWidgetId}`, { method: 'PUT', body: JSON.stringify(payload) });
+      showToast('Settings saved!');
+      updatePreview(currentBuilderWidgetId);
+      fetchWidgets();
+    } catch(e) { showToast('Error saving', 'error'); }
+  }
+
+  // ===== REPORTS =====
+  function populateReportSelect() {
+    const sel = document.getElementById('report-widget-select');
+    sel.innerHTML = '<option value="">-- Select a Widget --</option>';
+    allWidgets.forEach(w => { const o = document.createElement('option'); o.value = w.id; o.textContent = w.name; sel.appendChild(o); });
+  }
+
+  async function loadReport() {
+    const id = document.getElementById('report-widget-select').value;
+    const content = document.getElementById('report-content');
+    if (!id) { content.innerHTML = ''; return; }
+    content.innerHTML = '<p style="color:var(--text2);font-size:14px;">Loading...</p>';
+    try {
+      const res = await api(`/api/admin/widgets/${id}/stats`);
+      const data = await res.json();
+      
+      let rows = '';
+      data.records.forEach(r => {
+        const d = new Date(r.createdAt);
+        const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+        rows += `<tr>
+          <td>${r.customer_name}</td>
+          <td>${r.customer_phone}</td>
+          <td>${r.customer_email || '—'}</td>
+          <td><span class="badge ${r.status.toLowerCase()}">${r.status}</span></td>
+          <td style="color:var(--text2)">${dateStr}</td>
+        </tr>`;
+      });
+
+      content.innerHTML = `
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-label">Total Calls</div><div class="stat-value blue">${data.total}</div></div>
+          <div class="stat-card"><div class="stat-label">Initiated</div><div class="stat-value yellow">${data.initiated}</div></div>
+          <div class="stat-card"><div class="stat-label">Completed</div><div class="stat-value green">${data.completed}</div></div>
+          <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value red">${data.failed}</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span>📋 Call Log</span></div>
+          ${data.records.length ? `
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Status</th><th>Date & Time</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>` : '<p style="color:var(--text2);font-size:14px;">No calls recorded yet for this widget.</p>'}
+        </div>`;
+    } catch(e) { content.innerHTML = '<p style="color:var(--danger)">Failed to load report.</p>'; }
+  }
+</script>
+</body>
+</html>

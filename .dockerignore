@@ -1,0 +1,8 @@
+node_modules
+admin-ui/node_modules
+.git
+.env
+scratch
+database.sqlite
+admin-ui/dist
+public/admin-dist

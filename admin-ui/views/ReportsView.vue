@@ -24,7 +24,16 @@
               <option value="today">Today</option>
               <option value="7days">Last 7 Days</option>
               <option value="30days">Last 30 Days</option>
+              <option value="custom">Custom Range</option>
             </select>
+          </div>
+          <div v-if="dateFilter === 'custom'" class="form-group filter-field">
+            <label class="form-label">From</label>
+            <input type="date" v-model="customStartDate" class="input" />
+          </div>
+          <div v-if="dateFilter === 'custom'" class="form-group filter-field">
+            <label class="form-label">To</label>
+            <input type="date" v-model="customEndDate" class="input" />
           </div>
           <div class="form-group filter-field">
             <label class="form-label">Status</label>
@@ -47,6 +56,7 @@
             </select>
           </div>
           <button class="btn btn-ghost btn-sm refresh-btn" @click="load" title="Refresh call log">↻ Refresh</button>
+          <button class="btn btn-primary btn-sm refresh-btn" @click="downloadCSV" :disabled="!filteredRecords.length" title="Download CSV Report">📥 Download CSV</button>
         </div>
       </div>
 
@@ -320,6 +330,8 @@ let pollTimer = null
 
 // New filter state variables
 const dateFilter = ref('all')
+const customStartDate = ref('')
+const customEndDate = ref('')
 const statusFilter = ref('')
 const agentFilter = ref('')
 const activeTab = ref('calls')
@@ -436,6 +448,12 @@ const filteredRecords = computed(() => {
       } else if (dateFilter.value === '30days') {
         const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
         return ts >= thirtyDaysAgo
+      } else if (dateFilter.value === 'custom') {
+        if (!customStartDate.value && !customEndDate.value) return true
+        // Add local timezone offset for accurate day matching
+        const start = customStartDate.value ? new Date(customStartDate.value).getTime() : 0
+        const end = customEndDate.value ? new Date(customEndDate.value).getTime() + 86399999 : Infinity
+        return ts >= start && ts <= end
       }
       return true
     })
@@ -565,7 +583,42 @@ const agentPerformanceStats = computed(() => {
   })
 })
 
+// Pagination logic
 const totalPages = computed(() => Math.ceil(filteredRecords.value.length / perPage))
+
+function downloadCSV() {
+  if (!filteredRecords.value.length) return
+  const rows = [
+    ['Name', 'Phone', 'Agent Call Flow', 'Duration', 'Status', 'Date & Time']
+  ]
+  filteredRecords.value.forEach(r => {
+    let flowStr = ''
+    if (r.agent_extension) {
+      const flow = parseCallFlow(r.agent_extension, r.status)
+      flowStr = flow.map(f => `${f.name} (${f.statusText})`).join(' -> ')
+    }
+    rows.push([
+      r.customer_name || '-',
+      r.customer_phone || '-',
+      flowStr || '-',
+      r.duration_seconds || '0s',
+      r.status || 'Unknown',
+      new Date(r.createdAt).toLocaleString()
+    ])
+  })
+  
+  const csvContent = rows.map(e => e.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n")
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement("a")
+  const url = URL.createObjectURL(blob)
+  link.setAttribute("href", url)
+  link.setAttribute("download", `3cx_report_${new Date().toISOString().split('T')[0]}.csv`)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
 const paginatedRecords = computed(() => filteredRecords.value.slice((page.value - 1) * perPage, page.value * perPage))
 
 function sortBy(key) {

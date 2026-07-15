@@ -538,7 +538,7 @@ const agentPerformanceStats = computed(() => {
   if (!currentWidget.value || !report.value) return []
   
   const agents = currentWidget.value.Agents || []
-  const records = report.value.records || []
+  const records = filteredRecords.value || []
   
   return agents.map(agent => {
     const extStr = String(agent.extension)

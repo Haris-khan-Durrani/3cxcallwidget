@@ -319,23 +319,8 @@ async function pollActiveDialerCalls() {
       const { dialer, records } = callsByDialer[dialerId];
       if (!dialer || !dialer.client_id_3cx || !dialer.client_secret_3cx) continue;
 
-      try {
-        let activeList = [];
+      for (const record of records) {
         try {
-          const token = await get3cxToken(dialer);
-          const activeUrl = `https://${sanitizeFqdn(dialer.fqdn_3cx)}/xapi/v1/ActiveCalls`;
-          const activeResp = await axios.get(activeUrl, {
-            headers: { Authorization: `Bearer ${token}` },
-            timeout: 4500,
-          });
-          activeList = Array.isArray(activeResp.data)
-            ? activeResp.data
-            : (activeResp.data?.value || []);
-        } catch (apiErr) {
-          console.log(`[3CX Dialer] ActiveCalls query failed:`, apiErr.message);
-        }
-
-        for (const record of records) {
           const ageMinutes = (new Date() - new Date(record.updatedAt)) / 60000;
           if (ageMinutes > 10) {
             const oldStatus = record.status;
@@ -346,75 +331,45 @@ async function pollActiveDialerCalls() {
             continue;
           }
 
-          const ageSeconds = (Date.now() - new Date(record.updatedAt).getTime()) / 1000;
-
           const ageSecondsSinceCreation = (Date.now() - new Date(record.createdAt).getTime()) / 1000;
 
-          // 1. Try to find a perfect match: call containing both extension and destination
-          let cxCall = activeList.find(c => {
-            const caller = String(c.Caller || c.CallerID || c.callerId || c.From || '');
-            const callee = String(c.Callee || c.To || '');
-            const ext = String(record.agent_extension);
-            const dest = String(record.destination);
-            
-            return (caller.includes(ext) && callee.includes(dest)) || 
-                   (caller.includes(dest) && callee.includes(ext));
-          });
+          // Fetch extension participant status using call control
+          const ccStatus = await checkDialerCallControlStatus(dialer, record.agent_extension, record.destination);
 
-          // 2. Try to find a partial match: call involving agent extension during the initial dialing phase
-          let isAgentRingingPhase = false;
-          if (!cxCall && (record.status === 'Initiated' || record.status === 'Ringing')) {
-            if (ageSecondsSinceCreation < 45) {
-              const partialMatch = activeList.find(c => {
-                const caller = String(c.Caller || c.CallerID || c.callerId || c.From || '');
-                const callee = String(c.Callee || c.To || '');
-                const ext = String(record.agent_extension);
-                return caller.includes(ext) || callee.includes(ext);
-              });
-              if (partialMatch) {
-                cxCall = partialMatch;
-                isAgentRingingPhase = true;
-              }
-            }
-          }
-
-          if (cxCall) {
-            const stateStr = String(cxCall.Status || cxCall.State || cxCall.state || '').toLowerCase();
-            const established = !isAgentRingingPhase && 
-                                (cxCall.Established || cxCall.established || cxCall.EstablishedAt || cxCall.establishedAt ||
-                                 (stateStr.includes('talking') || stateStr.includes('connected') || stateStr.includes('answered') || stateStr.includes('established')));
-
-            const newStatus = established ? 'Connected' : 'Ringing';
-            if (record.status !== newStatus) {
-              record.status = newStatus;
-              await record.save();
-              await triggerDialerWebhook(record, dialer);
-            }
-          } else {
-            if (record.status === 'Connected') {
-              console.log(`[3CX Dialer] Call ${record.id} ended talking. Marking Completed.`);
-              record.status = 'Completed';
-              record.ended_at = new Date();
-              const start = new Date(record.updatedAt);
-              record.duration_seconds = Math.max(1, Math.round((new Date() - start) / 1000));
-              await record.save();
-              await triggerDialerWebhook(record, dialer);
-
-              setTimeout(() => fetchAndLinkDialerRecording(record.id), 5000);
-            } else {
-              // Wait at least 15 seconds before marking as failed if not found in active calls
-              if (ageSecondsSinceCreation > 15) {
-                console.log(`[3CX Dialer] Call ${record.id} did not connect. Marking Failed.`);
-                record.status = 'Failed';
-                record.ended_at = new Date();
+          if (ccStatus) {
+            if (ccStatus.active) {
+              const newStatus = ccStatus.connected ? 'Connected' : 'Ringing';
+              if (record.status !== newStatus) {
+                record.status = newStatus;
                 await record.save();
                 await triggerDialerWebhook(record, dialer);
               }
+            } else {
+              if (record.status === 'Connected') {
+                console.log(`[3CX Dialer] Call ${record.id} ended talking. Marking Completed.`);
+                record.status = 'Completed';
+                record.ended_at = new Date();
+                const start = new Date(record.updatedAt);
+                record.duration_seconds = Math.max(1, Math.round((new Date() - start) / 1000));
+                await record.save();
+                await triggerDialerWebhook(record, dialer);
+
+                setTimeout(() => fetchAndLinkDialerRecording(record.id), 5000);
+              } else {
+                // Wait at least 15 seconds before marking as failed if not found in active calls
+                if (ageSecondsSinceCreation > 15) {
+                  console.log(`[3CX Dialer] Call ${record.id} did not connect. Marking Failed.`);
+                  record.status = 'Failed';
+                  record.ended_at = new Date();
+                  await record.save();
+                  await triggerDialerWebhook(record, dialer);
+                }
+              }
             }
           }
+        } catch (recordErr) {
+          console.error(`[3CX Dialer] Error processing record ${record.id}:`, recordErr.message);
         }
-      } catch (dialerErr) {
-        console.error(`[3CX Dialer] Global error in dialer ${dialerId} active call processing:`, dialerErr.message);
       }
     }
   } catch (err) {
@@ -748,6 +703,67 @@ async function checkCallStatusViaCallControl(widget, extension, cxCallId, custom
   } catch (err) {
     console.error(`[3CX] Failed checkCallStatusViaCallControl for Ext ${extension}:`, err.message);
     return null; // Return null to indicate the check itself failed
+  }
+}
+
+/**
+ * Specifically checks the state of a dialer call via extension participants.
+ * Distinguishes between agent-ringing phase, customer-ringing phase, and customer-connected phase.
+ */
+async function checkDialerCallControlStatus(dialer, extension, destination) {
+  try {
+    const token = await get3cxToken(dialer);
+    const url = `https://${sanitizeFqdn(dialer.fqdn_3cx)}/callcontrol/${encodeURIComponent(extension)}/participants`;
+    const resp = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 4000
+    });
+
+    const participants = resp.data || [];
+    if (participants.length === 0) {
+      return { active: false };
+    }
+
+    // Find the participant representing the customer
+    const agentExtStr = String(extension).trim();
+    const cleanDest = destination.replace(/\D/g, '');
+    const destSuffix = cleanDest.slice(-8);
+
+    const customerPart = participants.find(p => {
+      const pDn = String(p.PartyDn || p.partyDn || p.DN || p.dn || p.Number || p.number || '').trim();
+      if (pDn === agentExtStr) return false; // This is the agent
+      
+      const pDnClean = pDn.replace(/\D/g, '');
+      if (destSuffix && pDnClean.includes(destSuffix)) return true;
+
+      // Fallback: if it's not the agent extension, it's likely the customer
+      return true;
+    });
+
+    if (customerPart) {
+      const state = String(customerPart.State || customerPart.state || customerPart.Status || customerPart.status || '').toLowerCase().trim();
+      const isConnected = state === 'connected' || state === 'talking' || state === 'established';
+      const isRinging = state === 'ringing' || state === 'dialing' || state === 'invited';
+      console.log(`[3CX Dialer CC] Customer participant state: "${state}" (connected=${isConnected}, ringing=${isRinging})`);
+      return { active: true, connected: isConnected, ringing: isRinging };
+    }
+
+    // If there is only the agent in the call, check if the agent is connected or ringing
+    const agentPart = participants.find(p => {
+      const pDn = String(p.PartyDn || p.partyDn || p.DN || p.dn || p.Number || p.number || '').trim();
+      return pDn === agentExtStr;
+    });
+
+    if (agentPart) {
+      const state = String(agentPart.State || agentPart.state || agentPart.Status || agentPart.status || '').toLowerCase().trim();
+      const isRinging = state === 'ringing' || state === 'dialing' || state === 'invited';
+      return { active: true, connected: false, ringing: true };
+    }
+
+    return { active: true, connected: false, ringing: true };
+  } catch (err) {
+    console.error(`[3CX Dialer CC] Failed checking CallControl for Ext ${extension}:`, err.message);
+    return null;
   }
 }
 
@@ -2016,43 +2032,13 @@ app.get('/api/dialer/status', async (req, res) => {
       });
     }
 
-    const token = await get3cxToken(dialer);
-    const activeUrl = `https://${sanitizeFqdn(dialer.fqdn_3cx)}/xapi/v1/ActiveCalls`;
-    
-    const activeResp = await axios.get(activeUrl, {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 3000,
-    });
-    
-    const activeList = Array.isArray(activeResp.data) ? activeResp.data : (activeResp.data?.value || []);
-    console.log(`[3CX Dialer Status] ActiveCalls returned ${activeList.length} calls`);
-    
-    // Find if the extension and destination is in any call
-    let extMatch = activeList.find(c => {
-      const caller = String(c.Caller || c.CallerID || c.callerId || c.From || '');
-      const callee = String(c.Callee || c.To || '');
-      return (caller.includes(String(extension)) && callee.includes(String(destination))) ||
-             (caller.includes(String(destination)) && callee.includes(String(extension)));
-    });
-
-    // 2. Try to find a partial match: call involving agent extension during the initial dialing phase
-    let isAgentRingingPhase = false;
-    if (!extMatch && dbRecord && (dbRecord.status === 'Initiated' || dbRecord.status === 'Ringing')) {
-      const ageSecondsSinceCreation = (Date.now() - new Date(dbRecord.createdAt).getTime()) / 1000;
-      if (ageSecondsSinceCreation < 45) {
-        const partialMatch = activeList.find(c => {
-          const caller = String(c.Caller || c.CallerID || c.callerId || c.From || '');
-          const callee = String(c.Callee || c.To || '');
-          return caller.includes(String(extension)) || callee.includes(String(extension));
-        });
-        if (partialMatch) {
-          extMatch = partialMatch;
-          isAgentRingingPhase = true;
-        }
-      }
+    const ccStatus = await checkDialerCallControlStatus(dialer, extension, String(destination));
+    if (!ccStatus) {
+      // Fallback: if the API call itself failed, keep the current database status
+      return res.json({ state: dbRecord ? dbRecord.status.toLowerCase() : 'ringing' });
     }
 
-    if (!extMatch) {
+    if (!ccStatus.active) {
       if (dbRecord && dbRecord.status !== 'Completed' && dbRecord.status !== 'Failed') {
         const ageSecondsSinceCreation = (Date.now() - new Date(dbRecord.createdAt).getTime()) / 1000;
         if (ageSecondsSinceCreation > 15) {
@@ -2070,21 +2056,14 @@ app.get('/api/dialer/status', async (req, res) => {
           }
           return res.json({ state: 'idle' });
         } else {
-          // If within the 15-second grace period and not found yet, return 'ringing' state
           return res.json({ state: 'ringing' });
         }
       }
       return res.json({ state: 'idle' });
     }
 
-    // Call is active. Is it connected?
-    const stateStr = String(extMatch.Status || extMatch.State || '').toLowerCase();
-    const established = !isAgentRingingPhase && 
-                        (extMatch.Established || extMatch.established || extMatch.EstablishedAt || extMatch.establishedAt ||
-                         (stateStr.includes('talking') || stateStr.includes('connected') || stateStr.includes('answered') || stateStr.includes('established')));
-    
     if (dbRecord) {
-      const newStatus = established ? 'Connected' : 'Ringing';
+      const newStatus = ccStatus.connected ? 'Connected' : 'Ringing';
       if (dbRecord.status !== newStatus) {
         dbRecord.status = newStatus;
         await dbRecord.save();
@@ -2092,7 +2071,7 @@ app.get('/api/dialer/status', async (req, res) => {
       }
     }
 
-    if (established) {
+    if (ccStatus.connected) {
       return res.json({ state: 'connected' });
     } else {
       return res.json({ state: 'ringing' });

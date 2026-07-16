@@ -130,7 +130,25 @@
     .tab-content      { display: none; flex: 1; position: relative; }
     .tab-content.active { display: flex; flex-direction: column; }
     #tab-dialer       { overflow: hidden; }
-    #tab-history      { overflow-y: auto; max-height: 340px; }
+    #tab-history      {
+      overflow-y: auto;
+      max-height: 340px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0,0,0,0.15) transparent;
+    }
+    #tab-history::-webkit-scrollbar {
+      width: 4px;
+    }
+    #tab-history::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #tab-history::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.15);
+      border-radius: 4px;
+    }
+    #tab-history::-webkit-scrollbar-thumb:hover {
+      background: rgba(0,0,0,0.3);
+    }
 
     /* ── Agent Status ────────────────────────────── */
     .agent-status {
@@ -361,9 +379,9 @@
       transition: background 0.15s;
     }
     .history-item:hover { background: #f9fafb; }
-    .history-info    { display: flex; flex-direction: column; gap: 2px; }
-    .history-number  { font-size: 13px; font-weight: 700; color: var(--text); }
-    .history-meta    { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text2); }
+    .history-info    { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; margin-right: 8px; }
+    .history-number  { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-meta    { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: 10px; color: var(--text2); }
     .history-status  { font-weight: 600; }
     .history-status.connected { color: var(--success); }
     .history-status.missed    { color: var(--danger); }

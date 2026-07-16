@@ -186,6 +186,10 @@ const CallRecord = sequelize.define('CallRecord', {
     type: DataTypes.STRING,
     allowNull: true,   // 3CX recording ID (e.g. 66804) for downloads
   },
+  recording_token: {
+    type: DataTypes.STRING,
+    allowNull: true,   // Opaque sharing/listen token (lifetime validity)
+  },
 });
 
 
@@ -282,6 +286,10 @@ const DialerCallRecord = sequelize.define('DialerCallRecord', {
   recording_id: {
     type: DataTypes.STRING,
     allowNull: true,
+  },
+  recording_token: {
+    type: DataTypes.STRING,
+    allowNull: true,   // Opaque sharing/listen token (lifetime validity)
   }
 });
 

@@ -89,31 +89,35 @@ async function triggerUserWebhook(callRecord, widget) {
   try {
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
     let recordingUrl = null;
+    let recordingListenUrl = null;
 
     if (callRecord.recording_id) {
-      // Generate a secure signed token (no expiration) for permanent CRM download links
-      const downloadToken = jwt.sign(
-        { widgetId: widget.id, recId: callRecord.recording_id, role: 'download' },
-        process.env.JWT_SECRET || 'secret'
-      );
-      recordingUrl = `${appUrl}/api/admin/widgets/${widget.id}/recordings/${callRecord.recording_id}/download?token=${encodeURIComponent(downloadToken)}`;
+      // Auto-generate recording_token if missing
+      if (!callRecord.recording_token) {
+        const crypto = require('crypto');
+        callRecord.recording_token = crypto.randomBytes(32).toString('hex');
+        await callRecord.save();
+      }
+      recordingUrl = `${appUrl}/recordings/${callRecord.recording_token}/download`;
+      recordingListenUrl = `${appUrl}/recordings/${callRecord.recording_token}/listen`;
     }
 
     const payload = {
-      callId:          callRecord.id,
-      widgetId:        widget.id,
-      widgetName:      widget.name,
-      customerName:    callRecord.customer_name,
-      customerPhone:   callRecord.customer_phone,
-      customerEmail:   callRecord.customer_email || '',
-      agentExtension:  callRecord.agent_extension,
-      status:          callRecord.status,
-      outcome:         callRecord.outcome || callRecord.status,
-      durationSeconds: callRecord.duration_seconds || 0,
-      retryCount:      callRecord.retry_count || 0,
-      recordingId:     callRecord.recording_id || null,
-      recordingUrl:    recordingUrl,
-      timestamp:       new Date()
+      callId:             callRecord.id,
+      widgetId:           widget.id,
+      widgetName:         widget.name,
+      customerName:       callRecord.customer_name,
+      customerPhone:      callRecord.customer_phone,
+      customerEmail:      callRecord.customer_email || '',
+      agentExtension:     callRecord.agent_extension,
+      status:             callRecord.status,
+      outcome:            callRecord.outcome || callRecord.status,
+      durationSeconds:    callRecord.duration_seconds || 0,
+      retryCount:         callRecord.retry_count || 0,
+      recordingId:        callRecord.recording_id || null,
+      recordingUrl:       recordingUrl,
+      recordingListenUrl: recordingListenUrl,
+      timestamp:          new Date()
     };
 
     for (const url of uniqueUrls) {
@@ -157,12 +161,14 @@ async function triggerDialerWebhook(record, dialer) {
     let recordingListenUrl = null;
 
     if (record.recording_id) {
-      const downloadToken = jwt.sign(
-        { dialerId: dialer.id, recId: record.recording_id, role: 'dialer_download' },
-        process.env.JWT_SECRET || 'secret'
-      );
-      recordingUrl = `${appUrl}/api/admin/dialers/${dialer.id}/recordings/${record.recording_id}/download?token=${encodeURIComponent(downloadToken)}`;
-      recordingListenUrl = `${appUrl}/api/admin/dialers/${dialer.id}/recordings/${record.recording_id}/listen?token=${encodeURIComponent(downloadToken)}`;
+      // Auto-generate recording_token if missing
+      if (!record.recording_token) {
+        const crypto = require('crypto');
+        record.recording_token = crypto.randomBytes(32).toString('hex');
+        await record.save();
+      }
+      recordingUrl = `${appUrl}/recordings/${record.recording_token}/download`;
+      recordingListenUrl = `${appUrl}/recordings/${record.recording_token}/listen`;
     }
 
     const payload = {
@@ -268,6 +274,8 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
       if (recId) {
         console.log(`[3CX Dialer] Found recording ID ${recId} for call ${record.id}!`);
         record.recording_id = recId;
+        const crypto = require('crypto');
+        record.recording_token = crypto.randomBytes(32).toString('hex');
         await record.save();
         
         // Push update to webhook
@@ -842,6 +850,8 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
       if (recId) {
         console.log(`[3CX] Found recording ID ${recId} for call ${record.id}!`);
         record.recording_id = recId;
+        const crypto = require('crypto');
+        record.recording_token = crypto.randomBytes(32).toString('hex');
         await record.save();
         
         // Push update to webhook.site / n8n so they get the download link!
@@ -1783,6 +1793,121 @@ app.delete('/api/admin/dialer-widgets/:id/agents/:agentId', authenticateToken, a
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Opaque proxy routes for call recording download and listen (using secure hash token)
+app.get('/recordings/:token/download', async (req, res) => {
+  try {
+    const recordingToken = req.params.token;
+    if (!recordingToken) return res.status(400).json({ error: 'Missing token' });
+
+    // Search DialerCallRecord first
+    let record = await DialerCallRecord.findOne({
+      where: { recording_token: recordingToken },
+      include: [DialerWidget]
+    });
+    
+    let isDialer = true;
+    let widgetOrDialer = record ? record.DialerWidget : null;
+
+    if (!record) {
+      // Search standard CallRecord
+      record = await CallRecord.findOne({
+        where: { recording_token: recordingToken },
+        include: [Widget]
+      });
+      isDialer = false;
+      widgetOrDialer = record ? record.Widget : null;
+    }
+
+    if (!record || !widgetOrDialer) {
+      return res.status(404).json({ error: 'Call recording not found or invalid token' });
+    }
+
+    const cxToken = await get3cxToken(widgetOrDialer);
+    const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
+    const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
+    
+    console.log(`[3CX Share] Streaming download for recording ${record.recording_id}...`);
+
+    const response = await axios({
+      method: 'get',
+      url: downloadUrl,
+      responseType: 'stream',
+      headers: {
+        Authorization: `Bearer ${cxToken}`
+      },
+      timeout: 20000
+    });
+
+    res.setHeader('Content-Type', response.headers['content-type'] || 'audio/wav');
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+    res.setHeader('Content-Disposition', response.headers['content-disposition'] || `attachment; filename="recording_${record.recording_id}.wav"`);
+
+    response.data.pipe(res);
+  } catch (err) {
+    console.error('[3CX Share] Proxy download failed:', err.message);
+    res.status(500).json({ error: `Failed to stream recording: ${err.message}` });
+  }
+});
+
+app.get('/recordings/:token/listen', async (req, res) => {
+  try {
+    const recordingToken = req.params.token;
+    if (!recordingToken) return res.status(400).json({ error: 'Missing token' });
+
+    // Search DialerCallRecord first
+    let record = await DialerCallRecord.findOne({
+      where: { recording_token: recordingToken },
+      include: [DialerWidget]
+    });
+    
+    let isDialer = true;
+    let widgetOrDialer = record ? record.DialerWidget : null;
+
+    if (!record) {
+      // Search standard CallRecord
+      record = await CallRecord.findOne({
+        where: { recording_token: recordingToken },
+        include: [Widget]
+      });
+      isDialer = false;
+      widgetOrDialer = record ? record.Widget : null;
+    }
+
+    if (!record || !widgetOrDialer) {
+      return res.status(404).json({ error: 'Call recording not found or invalid token' });
+    }
+
+    const cxToken = await get3cxToken(widgetOrDialer);
+    const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
+    const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
+    
+    console.log(`[3CX Share] Streaming inline playback for recording ${record.recording_id}...`);
+
+    const response = await axios({
+      method: 'get',
+      url: downloadUrl,
+      responseType: 'stream',
+      headers: {
+        Authorization: `Bearer ${cxToken}`
+      },
+      timeout: 20000
+    });
+
+    res.setHeader('Content-Type', response.headers['content-type'] || 'audio/wav');
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+    res.setHeader('Content-Disposition', 'inline');
+
+    response.data.pipe(res);
+  } catch (err) {
+    console.error('[3CX Share] Proxy listen failed:', err.message);
+    res.status(500).json({ error: `Failed to stream recording: ${err.message}` });
   }
 });
 

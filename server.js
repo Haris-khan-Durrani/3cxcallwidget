@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
-const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord } = require('./db');
+const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent } = require('./db');
 require('dotenv').config();
 
 // ─── 3CX OAuth Token Cache ───────────────────────────────────────────────────

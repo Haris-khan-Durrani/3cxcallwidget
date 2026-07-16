@@ -34,6 +34,8 @@ Designed with SEO, performance, and user experience at its core, this applicatio
 - ⚡ **Dynamic Micro-Animations**: Smooth tooltip auto-hiding, floating button pulses, and state-driven visual feedback for users.
 - ⚙️ **Advanced 3CX Integrations**: Connect seamlessly using FQDN, Client IDs, and API extensions natively.
 - 🏢 **Office Hours Management**: Intelligent routing that hides or modifies widget behavior based on timezone-aware business hours.
+- 🔌 **Webhook Event Notifications**: Automatically hit webhook URLs (Initiated, Connected, Completed, Failed) with detailed payloads and call duration metrics.
+- 🎙️ **Call Recording Proxy**: Secure signed proxy download links for call recordings, protecting raw 3CX credentials.
 - 🐳 **Docker Native Deployment**: Deploy anywhere instantly with our out-of-the-box Docker multi-stage environment.
 
 ---
@@ -84,6 +86,20 @@ Deploying the **3CX Call Widget Builder** is incredibly straightforward using Do
 4. Preview the changes in real-time in the central workspace.
 5. Click **Save** and grab the generated `<script>` tag.
 6. Drop the script onto any HTML/React/WordPress site.
+
+---
+
+## 🔌 Dialer Webhooks & CRM Integration
+
+You can configure webhook event notifications for dialer-originated calls to push live updates directly to CRM platforms (such as GoHighLevel) or automation tools (like n8n). 
+
+The system supports four distinct event lifecycles:
+- **Initiated**: Triggered when a call is placed.
+- **Connected**: Triggered when the call is answered by both agent and customer.
+- **Completed**: Triggered when the call completes. Also automatically fetches and appends a signed call recording download link from the 3CX PBX.
+- **Failed**: Triggered when a call is missed or fails to connect.
+
+For detailed payload structures, signed token security details, and n8n integration guides, please refer to the [Developer Documentation (DEVELOPER.md)](DEVELOPER.md).
 
 ---
 

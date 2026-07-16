@@ -213,6 +213,94 @@ const Agent = sequelize.define('Agent', {
   }
 });
 
+const DialerWidget = sequelize.define('DialerWidget', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  fqdn_3cx: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  client_id_3cx: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  client_secret_3cx: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  webhook_initiated: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  webhook_connected: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  webhook_completed: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  webhook_failed: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  }
+});
+
+const DialerCallRecord = sequelize.define('DialerCallRecord', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  agent_extension: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  destination: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  status: {
+    type: DataTypes.STRING,
+    defaultValue: 'Initiated',
+  },
+  duration_seconds: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  ended_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  recording_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  }
+});
+
+const DialerAgent = sequelize.define('DialerAgent', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  crm_user_id: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  extension: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  }
+});
+
 // Relationships
 Widget.hasMany(CallRecord, { foreignKey: 'widgetId' });
 CallRecord.belongsTo(Widget, { foreignKey: 'widgetId' });
@@ -220,9 +308,18 @@ CallRecord.belongsTo(Widget, { foreignKey: 'widgetId' });
 Widget.hasMany(Agent, { foreignKey: 'widgetId' });
 Agent.belongsTo(Widget, { foreignKey: 'widgetId' });
 
+DialerWidget.hasMany(DialerCallRecord, { foreignKey: 'dialerId', onDelete: 'CASCADE' });
+DialerCallRecord.belongsTo(DialerWidget, { foreignKey: 'dialerId' });
+
+DialerWidget.hasMany(DialerAgent, { foreignKey: 'dialerId', onDelete: 'CASCADE' });
+DialerAgent.belongsTo(DialerWidget, { foreignKey: 'dialerId' });
+
 module.exports = {
   sequelize,
   Widget,
   CallRecord,
-  Agent
+  Agent,
+  DialerWidget,
+  DialerCallRecord,
+  DialerAgent
 };

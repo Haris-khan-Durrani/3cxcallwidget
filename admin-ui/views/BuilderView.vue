@@ -397,14 +397,17 @@
               <div class="ps-divider"></div>
               <div class="ps-head" style="display:flex;align-items:center;justify-content:space-between">
                 Agents on this Widget
-                <button class="btn btn-ghost btn-sm" @click="showAddAgent=true">+ Add</button>
+                <button class="btn btn-ghost btn-sm" @click="openAddAgent">+ Add</button>
               </div>
               <div v-if="!widget?.Agents?.length" class="empty-agents">No agents — calls go to fallback queue.</div>
               <div v-else class="agent-list">
                 <div v-for="ag in widget.Agents" :key="ag.id" class="agent-row">
                   <img :src="ag.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(ag.first_name)}&background=1f6feb&color=fff&size=64`" class="ag-av"/>
                   <div class="ag-info"><strong>{{ ag.first_name }} {{ ag.last_name || '' }}</strong><span>Ext {{ ag.extension }}</span></div>
-                  <button class="btn btn-danger btn-sm" @click="removeAgent(ag.id)">✕</button>
+                  <div style="display:flex; gap:6px;">
+                    <button class="btn btn-ghost btn-sm" @click="editAgent(ag)">Edit</button>
+                    <button class="btn btn-danger btn-sm" @click="removeAgent(ag.id)">✕</button>
+                  </div>
                 </div>
               </div>
 
@@ -413,7 +416,7 @@
                 <transition name="fade">
                   <div v-if="showAddAgent" class="mbd" @click.self="showAddAgent=false">
                     <div class="mbx card">
-                      <div class="mbx-h"><h3>Add Agent</h3><button class="btn btn-icon btn-ghost" @click="showAddAgent=false">✕</button></div>
+                      <div class="mbx-h"><h3>{{ editingAgentId ? 'Edit Agent' : 'Add Agent' }}</h3><button class="btn btn-icon btn-ghost" @click="showAddAgent=false">✕</button></div>
                       <div class="mbx-b">
                         <div class="ps-row-2">
                           <div class="ps-field"><label>First Name *</label><input v-model="agForm.first_name" class="inp" placeholder="John"/></div>
@@ -431,7 +434,7 @@
                       </div>
                       <div class="mbx-f">
                         <button class="btn btn-ghost" @click="showAddAgent=false">Cancel</button>
-                        <button class="btn btn-primary" :disabled="addingAgent" @click="addAgent">{{ addingAgent ? 'Adding…' : 'Add Agent' }}</button>
+                        <button class="btn btn-primary" :disabled="addingAgent" @click="addAgent">{{ addingAgent ? 'Saving…' : (editingAgentId ? 'Save Changes' : 'Add Agent') }}</button>
                       </div>
                     </div>
                   </div>
@@ -809,8 +812,10 @@ const device      = ref('desktop')
 const modalOpen   = ref(false)
 const showTooltip = ref(true)
 const callSuccess = ref(false)
-const showAddAgent= ref(false)
+// Agent Management
+const showAddAgent = ref(false)
 const addingAgent = ref(false)
+const editingAgentId = ref(null)
 const showSecret  = ref(false)
 const testingConn = ref(false)
 const testResult  = ref(null)
@@ -1168,18 +1173,41 @@ async function save() {
   finally { saving.value = false }
 }
 
+function openAddAgent() {
+  editingAgentId.value = null
+  Object.assign(agForm, { first_name:'', last_name:'', extension:'', avatar_url:'' })
+  showAddAgent.value = true
+}
+
 async function addAgent() {
   if (!agForm.first_name || !agForm.extension) return toast('First name and extension required', 'error')
   addingAgent.value = true
   try {
-    await store.addAgent(route.params.id, { ...agForm })
+    if (editingAgentId.value) {
+      await store.updateAgent(editingAgentId.value, { ...agForm })
+      toast('Agent updated!')
+    } else {
+      await store.addAgent(route.params.id, { ...agForm })
+      toast('Agent added!')
+    }
     await store.fetch()
     widget.value = store.getById(route.params.id)
     showAddAgent.value = false
+    editingAgentId.value = null
     Object.assign(agForm, { first_name:'', last_name:'', extension:'', avatar_url:'' })
-    toast('Agent added!')
   } catch { toast('Failed', 'error') }
   finally { addingAgent.value = false }
+}
+
+function editAgent(ag) {
+  editingAgentId.value = ag.id
+  Object.assign(agForm, {
+    first_name: ag.first_name,
+    last_name: ag.last_name || '',
+    extension: ag.extension,
+    avatar_url: ag.avatar_url || ''
+  })
+  showAddAgent.value = true
 }
 
 async function removeAgent(id) {

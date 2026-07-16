@@ -93,7 +93,7 @@
       <div class="agents-section">
         <div class="agents-header">
           <h4>Agents (Round-Robin)</h4>
-          <button class="btn btn-ghost btn-sm add-agent-trigger-btn" @click="showAddAgent = true">
+          <button class="btn btn-ghost btn-sm add-agent-trigger-btn" @click="openAddAgent">
             <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
             Add Agent
           </button>
@@ -114,7 +114,10 @@
               <strong>{{ agent.first_name }} {{ agent.last_name || '' }}</strong>
               <span>Ext: {{ agent.extension }}</span>
             </div>
-            <button class="btn btn-danger btn-sm agent-remove-btn" @click="delAgent(agent.id)">Remove</button>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-ghost btn-sm agent-edit-btn" @click="editAgent(agent)">Edit</button>
+              <button class="btn btn-danger btn-sm agent-remove-btn" @click="delAgent(agent.id)">Remove</button>
+            </div>
           </div>
         </div>
       </div>
@@ -126,7 +129,7 @@
         <div v-if="showAddAgent" class="modal-backdrop" @click.self="showAddAgent = false">
           <div class="modal-box card" @click.stop>
             <div class="modal-header">
-              <h3>Add Agent</h3>
+              <h3>{{ editingAgentId ? 'Edit Agent' : 'Add Agent' }}</h3>
               <button class="btn btn-icon btn-ghost" @click="showAddAgent = false">✕</button>
             </div>
             <div class="modal-body">
@@ -156,7 +159,7 @@
             <div class="modal-footer">
               <button class="btn btn-ghost" @click="showAddAgent = false">Cancel</button>
               <button class="btn btn-primary" :disabled="addingAgent" @click="addAgent">
-                {{ addingAgent ? 'Adding...' : 'Add Agent' }}
+                {{ addingAgent ? 'Saving...' : (editingAgentId ? 'Save Changes' : 'Add Agent') }}
               </button>
             </div>
           </div>
@@ -180,6 +183,7 @@ const addingAgent = ref(false)
 const copied = ref(false)
 const cloning = ref(false)
 
+const editingAgentId = ref(null)
 const agentForm = reactive({ first_name: '', last_name: '', extension: '', avatar_url: '' })
 
 const embedSrc = computed(() => `${window.location.origin}/widget.js?id=${props.widget.id}`)
@@ -211,17 +215,40 @@ async function doClone() {
   finally { cloning.value = false }
 }
 
+function openAddAgent() {
+  editingAgentId.value = null
+  Object.assign(agentForm, { first_name: '', last_name: '', extension: '', avatar_url: '' })
+  showAddAgent.value = true
+}
+
 async function addAgent() {
   if (!agentForm.first_name || !agentForm.extension) return toast('First name and extension are required', 'error')
   addingAgent.value = true
   try {
-    await store.addAgent(props.widget.id, { ...agentForm })
+    if (editingAgentId.value) {
+      await store.updateAgent(editingAgentId.value, { ...agentForm })
+      toast('Agent updated!')
+    } else {
+      await store.addAgent(props.widget.id, { ...agentForm })
+      toast('Agent added!')
+    }
     showAddAgent.value = false
+    editingAgentId.value = null
     Object.assign(agentForm, { first_name: '', last_name: '', extension: '', avatar_url: '' })
     emit('agent-added')
-    toast('Agent added!')
-  } catch { toast('Failed to add agent', 'error') }
+  } catch { toast('Failed to save agent', 'error') }
   finally { addingAgent.value = false }
+}
+
+function editAgent(agent) {
+  editingAgentId.value = agent.id
+  Object.assign(agentForm, {
+    first_name: agent.first_name,
+    last_name: agent.last_name || '',
+    extension: agent.extension,
+    avatar_url: agent.avatar_url || ''
+  })
+  showAddAgent.value = true
 }
 
 async function delAgent(agentId) {

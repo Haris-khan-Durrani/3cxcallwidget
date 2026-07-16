@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
-const { sequelize, Widget, CallRecord, Agent } = require('./db');
+const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord } = require('./db');
 require('dotenv').config();
 
 // ─── 3CX OAuth Token Cache ───────────────────────────────────────────────────
@@ -126,6 +126,278 @@ async function triggerUserWebhook(callRecord, widget) {
     }
   } catch (err) {
     console.error(`[Webhook] Global error in triggerUserWebhook:`, err.message);
+  }
+}
+
+/**
+ * Sends a detailed webhook payload to configured dialer webhook URLs on call lifecycle changes.
+ */
+async function triggerDialerWebhook(record, dialer) {
+  if (!dialer) return;
+
+  const urls = [];
+  if (record.status === 'Initiated') {
+    if (dialer.webhook_initiated) urls.push(dialer.webhook_initiated);
+  } else if (record.status === 'Ringing') {
+    // Optionally fire on ringing if configured
+  } else if (record.status === 'Connected') {
+    if (dialer.webhook_connected) urls.push(dialer.webhook_connected);
+  } else if (record.status === 'Completed') {
+    if (dialer.webhook_completed) urls.push(dialer.webhook_completed);
+  } else if (record.status === 'Failed') {
+    if (dialer.webhook_failed) urls.push(dialer.webhook_failed);
+  }
+
+  if (urls.length === 0) return;
+  const uniqueUrls = [...new Set(urls)];
+
+  try {
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    let recordingUrl = null;
+
+    if (record.recording_id) {
+      const downloadToken = jwt.sign(
+        { dialerId: dialer.id, recId: record.recording_id, role: 'dialer_download' },
+        process.env.JWT_SECRET || 'secret'
+      );
+      recordingUrl = `${appUrl}/api/admin/dialers/${dialer.id}/recordings/${record.recording_id}/download?token=${encodeURIComponent(downloadToken)}`;
+    }
+
+    const payload = {
+      callId:          record.id,
+      dialerId:        dialer.id,
+      dialerName:      dialer.name,
+      agentExtension:  record.agent_extension,
+      destination:     record.destination,
+      status:          record.status,
+      durationSeconds: record.duration_seconds || 0,
+      recordingId:     record.recording_id || null,
+      recordingUrl:    recordingUrl,
+      endedAt:         record.ended_at || null,
+      timestamp:       new Date()
+    };
+
+    for (const url of uniqueUrls) {
+      try {
+        await axios.post(url, payload, { timeout: 5000 });
+        console.log(`[Dialer Webhook] Sent call update for ${record.id} to ${url}`);
+      } catch (err) {
+        console.error(`[Dialer Webhook] Failed to send update to ${url}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error(`[Dialer Webhook] Global error in triggerDialerWebhook:`, err.message);
+  }
+}
+
+/**
+ * Searches the 3CX recordings list for a match and links it to the dialer call record.
+ * Retries up to 4 times with a 5-second delay.
+ */
+async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
+  try {
+    const record = await DialerCallRecord.findByPk(recordId, { include: [DialerWidget] });
+    if (!record || !record.DialerWidget) return;
+    
+    const dialer = record.DialerWidget;
+    if (!dialer.client_id_3cx || !dialer.client_secret_3cx) return;
+
+    console.log(`[3CX Dialer] Searching call recording for destination ${record.destination} / call ${record.id} (Attempt ${attempt}/4)...`);
+
+    const token = await get3cxToken(dialer);
+    const fqdn = sanitizeFqdn(dialer.fqdn_3cx);
+    const url = `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`;
+    
+    const resp = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 5000
+    });
+
+    const list = Array.isArray(resp.data) ? resp.data : (resp.data?.value || []);
+    
+    console.log(`[3CX Dialer] Total recordings fetched: ${list.length}.`);
+
+    const matches = list.filter(r => {
+      const fields = [
+        r.FromCallerNumber,
+        r.ToCallerNumber,
+        r.FromDisplayName,
+        r.ToDisplayName,
+        r.RecordingUrl,
+        r.FromDn,
+        r.ToDn
+      ];
+      
+      const callerText = fields.filter(Boolean).map(String).join(' | ').replace(/\D/g, '');
+      const cleanPhone = record.destination.replace(/\D/g, '');
+      const agentExt = record.agent_extension.replace(/\D/g, '');
+      
+      const phoneSuffix = cleanPhone.slice(-8);
+      const phoneMatch = phoneSuffix && callerText.includes(phoneSuffix);
+      const extMatch = agentExt && callerText.includes(agentExt);
+      
+      if (!phoneMatch || !extMatch) return false;
+
+      const recDateStr = r.Date || r.date || r.StartTime || r.startTime || r.DateTime || r.dateTime;
+      let timeMatch = true;
+      if (recDateStr) {
+        const recTime = new Date(recDateStr).getTime();
+        const callTime = new Date(record.ended_at || record.updatedAt).getTime();
+        const diffMs = Math.abs(recTime - callTime);
+        timeMatch = diffMs < 12 * 60 * 60 * 1000;
+      }
+
+      return phoneMatch && timeMatch;
+    });
+
+    let match = null;
+    if (matches.length > 0) {
+      matches.sort((a, b) => {
+        const idA = parseInt(a.Id || a.id || a.recId || 0, 10);
+        const idB = parseInt(b.Id || b.id || b.recId || 0, 10);
+        return idB - idA;
+      });
+      match = matches[0];
+    }
+
+    if (match) {
+      const recId = String(match.Id || match.id || match.recId || '');
+      if (recId) {
+        console.log(`[3CX Dialer] Found recording ID ${recId} for call ${record.id}!`);
+        record.recording_id = recId;
+        await record.save();
+        
+        // Push update to webhook
+        await triggerDialerWebhook(record, dialer);
+      }
+    } else {
+      if (attempt < 4) {
+        console.log(`[3CX Dialer] Recording not found yet. Retrying search (attempt ${attempt + 1}/4) in 5s...`);
+        setTimeout(() => fetchAndLinkDialerRecording(recordId, attempt + 1), 5000);
+      } else {
+        console.log(`[3CX Dialer] Max recording search attempts reached. No matching recording found in the recent recordings list for call ${record.id}.`);
+      }
+    }
+  } catch (err) {
+    console.error('[3CX Dialer] Error fetching recordings list:', err.response?.data || err.message);
+    if (attempt < 4) {
+      console.log(`[3CX Dialer] Retrying search due to error (attempt ${attempt + 1}/4) in 5s...`);
+      setTimeout(() => fetchAndLinkDialerRecording(recordId, attempt + 1), 5000);
+    }
+  }
+}
+
+/**
+ * Polls 3CX ActiveCalls API every 4s to track live dialer calls and handle state transitions.
+ */
+async function pollActiveDialerCalls() {
+  try {
+    const { Op } = require('sequelize');
+    const activeCalls = await DialerCallRecord.findAll({
+      where: {
+        status: {
+          [Op.in]: ['Initiated', 'Ringing', 'Connected']
+        }
+      },
+      include: [DialerWidget]
+    });
+
+    if (activeCalls.length === 0) return;
+
+    const callsByDialer = {};
+    for (const record of activeCalls) {
+      if (!callsByDialer[record.dialerId]) {
+        callsByDialer[record.dialerId] = {
+          dialer: record.DialerWidget,
+          records: []
+        };
+      }
+      callsByDialer[record.dialerId].records.push(record);
+    }
+
+    for (const dialerId in callsByDialer) {
+      const { dialer, records } = callsByDialer[dialerId];
+      if (!dialer || !dialer.client_id_3cx || !dialer.client_secret_3cx) continue;
+
+      try {
+        let activeList = [];
+        try {
+          const token = await get3cxToken(dialer);
+          const activeUrl = `https://${sanitizeFqdn(dialer.fqdn_3cx)}/xapi/v1/ActiveCalls`;
+          const activeResp = await axios.get(activeUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 4500,
+          });
+          activeList = Array.isArray(activeResp.data)
+            ? activeResp.data
+            : (activeResp.data?.value || []);
+        } catch (apiErr) {
+          console.log(`[3CX Dialer] ActiveCalls query failed:`, apiErr.message);
+        }
+
+        for (const record of records) {
+          const ageMinutes = (new Date() - new Date(record.updatedAt)) / 60000;
+          if (ageMinutes > 10) {
+            const oldStatus = record.status;
+            record.status = oldStatus === 'Connected' ? 'Completed' : 'Failed';
+            record.ended_at = new Date();
+            await record.save();
+            await triggerDialerWebhook(record, dialer);
+            continue;
+          }
+
+          const ageSeconds = (Date.now() - new Date(record.updatedAt).getTime()) / 1000;
+
+          // Find if the agent's extension or the destination is in the active list
+          const cxCall = activeList.find(c => {
+            const caller = String(c.Caller || c.CallerID || c.callerId || c.From || '');
+            const callee = String(c.Callee || c.To || '');
+            const ext = String(record.agent_extension);
+            const dest = String(record.destination);
+            
+            return (caller.includes(ext) && callee.includes(dest)) || 
+                   (caller.includes(dest) && callee.includes(ext));
+          });
+
+          if (cxCall) {
+            const stateStr = String(cxCall.Status || cxCall.State || cxCall.state || '').toLowerCase();
+            const established = cxCall.Established || cxCall.established || cxCall.EstablishedAt || cxCall.establishedAt ||
+                                (stateStr.includes('talking') || stateStr.includes('connected') || stateStr.includes('answered') || stateStr.includes('established'));
+
+            const newStatus = established ? 'Connected' : 'Ringing';
+            if (record.status !== newStatus) {
+              record.status = newStatus;
+              await record.save();
+              await triggerDialerWebhook(record, dialer);
+            }
+          } else {
+            if (record.status === 'Connected') {
+              console.log(`[3CX Dialer] Call ${record.id} ended talking. Marking Completed.`);
+              record.status = 'Completed';
+              record.ended_at = new Date();
+              const start = new Date(record.updatedAt);
+              record.duration_seconds = Math.max(1, Math.round((new Date() - start) / 1000));
+              await record.save();
+              await triggerDialerWebhook(record, dialer);
+
+              setTimeout(() => fetchAndLinkDialerRecording(record.id), 5000);
+            } else {
+              if (ageSeconds > 10) {
+                console.log(`[3CX Dialer] Call ${record.id} did not connect. Marking Failed.`);
+                record.status = 'Failed';
+                record.ended_at = new Date();
+                await record.save();
+                await triggerDialerWebhook(record, dialer);
+              }
+            }
+          }
+        }
+      } catch (dialerErr) {
+        console.error(`[3CX Dialer] Global error in dialer ${dialerId} active call processing:`, dialerErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('[3CX Dialer] Error in pollActiveDialerCalls loop:', err.message);
   }
 }
 
@@ -761,6 +1033,7 @@ async function pollActiveCalls() {
 
 // Start active call polling interval
 setInterval(pollActiveCalls, 4000);
+setInterval(pollActiveDialerCalls, 4000);
 // ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -769,6 +1042,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve dialer-embed.js and dialer.html with disabled cache
+app.get('/dialer-embed.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.sendFile(path.join(__dirname, 'public/dialer-embed.js'));
+});
+
+app.get('/dialer.html', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.sendFile(path.join(__dirname, 'public/dialer.html'));
+});
+
 // Serve Vue admin-dist FIRST so /assets/ JS/CSS resolve correctly
 app.use(express.static(path.join(__dirname, 'public/admin-dist')));
 // Then serve other public files (widget.css, widget-template.js etc.)
@@ -1268,6 +1553,18 @@ app.post('/api/admin/widgets/:id/agents', authenticateToken, async (req, res) =>
   }
 });
 
+// Update Agent
+app.put('/api/admin/agents/:id', authenticateToken, async (req, res) => {
+  try {
+    const agent = await Agent.findByPk(req.params.id);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    await agent.update(req.body);
+    res.json(agent);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Delete Agent
 app.delete('/api/admin/agents/:id', authenticateToken, async (req, res) => {
   try {
@@ -1394,6 +1691,79 @@ app.get('/api/admin/widgets/:id/stats', authenticateToken, async (req, res) => {
   }
 });
 
+// Reporting: get call stats for a dialer widget
+app.get('/api/admin/dialer-widgets/:id/stats', authenticateToken, async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    const dialerId = req.params.id;
+    const total = await DialerCallRecord.count({ where: { dialerId } });
+    
+    const initiated = await DialerCallRecord.count({
+      where: {
+        dialerId,
+        status: { [Op.in]: ['Initiated', 'Ringing'] }
+      }
+    });
+
+    const failed = await DialerCallRecord.count({
+      where: {
+        dialerId,
+        status: { [Op.in]: ['Failed', 'Missed', 'Cancelled'] }
+      }
+    });
+
+    const completed = await DialerCallRecord.count({
+      where: {
+        dialerId,
+        status: { [Op.in]: ['Completed', 'Connected', 'Answered'] }
+      }
+    });
+
+    const records = await DialerCallRecord.findAll({
+      where: { dialerId },
+      order: [['createdAt', 'DESC']],
+      limit: 200
+    });
+    res.json({ total, initiated, failed, completed, records });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Routes for Dialer Agents mapping
+app.get('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, res) => {
+  try {
+    const agents = await DialerAgent.findAll({ where: { dialerId: req.params.id } });
+    res.json(agents);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, res) => {
+  try {
+    const { crm_user_id, extension } = req.body;
+    if (!crm_user_id || !extension) return res.status(400).json({ error: 'Missing crm_user_id or extension' });
+    const agent = await DialerAgent.create({
+      dialerId: req.params.id,
+      crm_user_id,
+      extension
+    });
+    res.json(agent);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/dialer-widgets/:id/agents/:agentId', authenticateToken, async (req, res) => {
+  try {
+    await DialerAgent.destroy({ where: { id: req.params.agentId, dialerId: req.params.id } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Secure call recording proxy download route
 app.get('/api/admin/widgets/:widgetId/recordings/:recId/download', async (req, res) => {
   try {
@@ -1441,6 +1811,266 @@ app.get('/api/admin/widgets/:widgetId/recordings/:recId/download', async (req, r
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Secure dialer call recording proxy download route
+app.get('/api/admin/dialers/:dialerId/recordings/:recId/download', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token) token = req.query.token;
+
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+    jwt.verify(token, process.env.JWT_SECRET || 'secret', async (err) => {
+      if (err) return res.status(403).json({ error: 'Forbidden' });
+
+      try {
+        const dialer = await DialerWidget.findByPk(req.params.dialerId);
+        if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
+
+        const cxToken = await get3cxToken(dialer);
+        const fqdn = sanitizeFqdn(dialer.fqdn_3cx);
+        const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
+        
+        console.log(`[3CX Dialer] Streaming recording ${req.params.recId} for dialer ${dialer.id}...`);
+
+        const response = await axios({
+          method: 'get',
+          url: downloadUrl,
+          responseType: 'stream',
+          headers: {
+            Authorization: `Bearer ${cxToken}`
+          },
+          timeout: 20000
+        });
+
+        // Set attachment headers
+        res.setHeader('Content-Type', response.headers['content-type'] || 'audio/wav');
+        if (response.headers['content-length']) {
+          res.setHeader('Content-Length', response.headers['content-length']);
+        }
+        res.setHeader('Content-Disposition', response.headers['content-disposition'] || `attachment; filename="dialer_recording_${req.params.recId}.wav"`);
+
+        response.data.pipe(res);
+      } catch (innerErr) {
+        console.error('[3CX Dialer] Recording streaming failed:', innerErr.message);
+        res.status(500).json({ error: `Failed to download recording from 3CX: ${innerErr.message}` });
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DIALER WIDGET ADMIN ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get('/api/admin/dialers', authenticateToken, async (req, res) => {
+  try {
+    const dialers = await DialerWidget.findAll({ order: [['createdAt', 'DESC']] });
+    res.json(dialers);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/dialers', authenticateToken, async (req, res) => {
+  try {
+    const dialer = await DialerWidget.create(req.body);
+    res.status(201).json(dialer);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/dialers/:id', authenticateToken, async (req, res) => {
+  try {
+    const dialer = await DialerWidget.findByPk(req.params.id);
+    if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
+    await dialer.update(req.body);
+    res.json(dialer);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/dialers/:id', authenticateToken, async (req, res) => {
+  try {
+    const dialer = await DialerWidget.findByPk(req.params.id);
+    if (dialer) await dialer.destroy();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DIALER PUBLIC ROUTE (CLICK TO CALL)
+// ─────────────────────────────────────────────────────────────────────────────
+// Resolve Dialer Agent by CRM User ID
+app.get('/api/dialer/resolve-agent', async (req, res) => {
+  try {
+    const { dialerId, userid } = req.query;
+    if (!dialerId || !userid) return res.status(400).json({ error: 'Missing parameters' });
+    
+    const agent = await DialerAgent.findOne({ where: { dialerId, crm_user_id: userid } });
+    if (agent) {
+      return res.json({ extension: agent.extension });
+    } else {
+      return res.status(404).json({ error: 'Mapping not found' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/dialer/call', async (req, res) => {
+  try {
+    const { dialerId, extension, destination } = req.body;
+    if (!dialerId || !extension || !destination) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    const dialer = await DialerWidget.findByPk(dialerId);
+    if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
+
+    // Ensure we have a valid 3CX token using the same function for inbound widgets
+    const token = await get3cxToken(dialer);
+
+    const callUrl = `https://${sanitizeFqdn(dialer.fqdn_3cx)}/callcontrol/${encodeURIComponent(extension)}/makecall`;
+    const payload = { destination: String(destination) };
+
+    console.log(`[3CX Dialer] Dialing ${destination} from extension ${extension} via ${callUrl}`);
+
+    const callRes = await axios.post(callUrl, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    // Create Call Record
+    const record = await DialerCallRecord.create({
+      dialerId,
+      agent_extension: extension,
+      destination: String(destination),
+      status: 'Initiated'
+    });
+
+    // Trigger Dialer webhook for Initiated state
+    await triggerDialerWebhook(record, dialer);
+
+    res.json({ success: true, message: 'Call initiated', callId: record.id });
+  } catch (err) {
+    console.error('[3CX Dialer Error]', err.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to initiate call on 3CX' });
+  }
+});
+
+app.get('/api/dialer/status', async (req, res) => {
+  try {
+    const { dialerId, extension, destination, callId, duration } = req.query;
+    if (!dialerId || !extension) return res.json({ state: 'idle' });
+
+    const dialer = await DialerWidget.findByPk(dialerId);
+    if (!dialer) return res.json({ state: 'idle' });
+
+    let dbRecord = null;
+    const { Op } = require('sequelize');
+    if (callId) {
+      dbRecord = await DialerCallRecord.findByPk(callId);
+    } else {
+      // Find the most recent active call record for this dialer, agent, and destination
+      dbRecord = await DialerCallRecord.findOne({
+        where: {
+          dialerId,
+          agent_extension: extension,
+          destination: String(destination),
+          status: { [Op.in]: ['Initiated', 'Ringing', 'Connected'] }
+        },
+        order: [['createdAt', 'DESC']]
+      });
+    }
+
+    const token = await get3cxToken(dialer);
+    const activeUrl = `https://${sanitizeFqdn(dialer.fqdn_3cx)}/xapi/v1/ActiveCalls`;
+    
+    const activeResp = await axios.get(activeUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 3000,
+    });
+    
+    const activeList = Array.isArray(activeResp.data) ? activeResp.data : (activeResp.data?.value || []);
+    console.log(`[3CX Dialer Status] ActiveCalls returned ${activeList.length} calls`);
+    
+    // Find if the extension and destination is in any call
+    const extMatch = activeList.find(c => {
+      const caller = String(c.Caller || c.CallerID || c.callerId || c.From || '');
+      const callee = String(c.Callee || c.To || '');
+      return (caller.includes(String(extension)) && callee.includes(String(destination))) ||
+             (caller.includes(String(destination)) && callee.includes(String(extension)));
+    });
+
+    if (!extMatch) {
+      if (dbRecord && dbRecord.status !== 'Completed' && dbRecord.status !== 'Failed') {
+        const oldStatus = dbRecord.status;
+        dbRecord.status = oldStatus === 'Connected' ? 'Completed' : 'Failed';
+        dbRecord.duration_seconds = parseInt(duration || '0');
+        dbRecord.ended_at = new Date();
+        await dbRecord.save();
+        
+        await triggerDialerWebhook(dbRecord, dialer);
+
+        if (dbRecord.status === 'Completed') {
+          // Search and link recording after 5s settle delay
+          setTimeout(() => fetchAndLinkDialerRecording(dbRecord.id), 5000);
+        }
+      }
+      return res.json({ state: 'idle' });
+    }
+
+    // Call is active. Is it connected?
+    const stateStr = String(extMatch.Status || extMatch.State || '').toLowerCase();
+    const established = extMatch.Established || extMatch.established || extMatch.EstablishedAt || extMatch.establishedAt ||
+                        (stateStr.includes('talking') || stateStr.includes('connected') || stateStr.includes('answered') || stateStr.includes('established'));
+    
+    if (dbRecord) {
+      const newStatus = established ? 'Connected' : 'Ringing';
+      if (dbRecord.status !== newStatus) {
+        dbRecord.status = newStatus;
+        await dbRecord.save();
+        await triggerDialerWebhook(dbRecord, dialer);
+      }
+    }
+
+    if (established) {
+      return res.json({ state: 'connected' });
+    } else {
+      return res.json({ state: 'ringing' });
+    }
+  } catch (err) {
+    console.log('[3CX Dialer Status] Error:', err.message);
+    res.json({ state: 'idle' }); // Silent fail on polling
+  }
+});
+
+app.get('/api/dialer/history', async (req, res) => {
+  try {
+    const { dialerId, extension } = req.query;
+    if (!dialerId || !extension) return res.status(400).json({ error: 'Missing parameters' });
+
+    const history = await DialerCallRecord.findAll({
+      where: { dialerId, agent_extension: extension },
+      order: [['createdAt', 'DESC']],
+      limit: 30
+    });
+    res.json(history);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch history' });
   }
 });
 

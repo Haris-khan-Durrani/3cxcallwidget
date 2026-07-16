@@ -50,12 +50,42 @@ export const useWidgetStore = defineStore('widgets', {
       await axios.post(`/api/admin/widgets/${widgetId}/agents`, payload)
       await this.fetch()
     },
+    async updateAgent(agentId, payload) {
+      await axios.put(`/api/admin/agents/${agentId}`, payload)
+      await this.fetch()
+    },
     async deleteAgent(agentId) {
       await axios.delete(`/api/admin/agents/${agentId}`)
       await this.fetch()
     },
     getById(id) {
       return this.widgets.find(w => w.id === id)
+    }
+  }
+})
+
+export const useDialerStore = defineStore('dialers', {
+  state: () => ({ dialers: [], loading: false }),
+  actions: {
+    async fetch() {
+      this.loading = true
+      const res = await axios.get('/api/admin/dialers')
+      this.dialers = res.data
+      this.loading = false
+    },
+    async create(payload) {
+      const res = await axios.post('/api/admin/dialers', payload)
+      await this.fetch()
+      return res.data
+    },
+    async update(id, payload) {
+      const res = await axios.put(`/api/admin/dialers/${id}`, payload)
+      await this.fetch()
+      return res.data
+    },
+    async delete(id) {
+      await axios.delete(`/api/admin/dialers/${id}`)
+      await this.fetch()
     }
   }
 })

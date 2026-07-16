@@ -7,6 +7,9 @@ import LoginView from './views/LoginView.vue'
 import WidgetsView from './views/WidgetsView.vue'
 import BuilderView from './views/BuilderView.vue'
 import ReportsView from './views/ReportsView.vue'
+import DocsView from './views/DocsView.vue'
+import DialersView from './views/DialersView.vue'
+import DialerReportsView from './views/DialerReportsView.vue'
 import './style.css'
 
 // Restore auth header after page refresh (interceptor approach — works even with cached JS)
@@ -24,11 +27,14 @@ axios.interceptors.request.use(config => {
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: '/', redirect: '/widgets' },
     { path: '/login', component: LoginView },
+    { path: '/', redirect: '/widgets' },
     { path: '/widgets', component: WidgetsView, meta: { requiresAuth: true } },
     { path: '/builder/:id', component: BuilderView, meta: { requiresAuth: true } },
+    { path: '/dialers', component: DialersView, meta: { requiresAuth: true } },
     { path: '/reports', component: ReportsView, meta: { requiresAuth: true } },
+    { path: '/dialer-reports', component: DialerReportsView, meta: { requiresAuth: true } },
+    { path: '/docs', component: DocsView, meta: { requiresAuth: true } }
   ]
 })
 

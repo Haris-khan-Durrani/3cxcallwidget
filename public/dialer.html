@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GoHighLevel Dialer</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- intl-tel-input -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/css/intlTelInput.css">
+  
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #22c55e;
+      --success-dark: #16a34a;
+      --danger: #ef4444;
+      --text: #111827;
+      --text2: #6b7280;
+      --border: #e5e7eb;
+      --bg-key: #f3f4f6;
+      --bg-key-hover: #e5e7eb;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    /* ── FAB ─────────────────────────────────────── */
+    #fab {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      height: 38px;
+      padding: 0 14px;
+      border-radius: 19px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      outline: none;
+      cursor: grab;
+      user-select: none;
+      box-shadow: 0 4px 14px rgba(37,99,235,0.45);
+      z-index: 100000;
+      transition: box-shadow 0.2s;
+    }
+    #fab:hover  { box-shadow: 0 6px 18px rgba(37,99,235,0.55); }
+    #fab:active { cursor: grabbing; }
+    #fab svg    { width: 16px; height: 16px; }
+
+    /* ── Popup ───────────────────────────────────── */
+    #popup {
+      position: fixed;
+      bottom: 66px;
+      right: 20px;
+      width: 220px;
+      height: 380px;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.18);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,0.07);
+      z-index: 99999;
+      opacity: 0;
+      transform: translateY(10px) scale(0.96);
+      pointer-events: none;
+      transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.16,1,0.3,1);
+    }
+    #popup.active {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: all;
+    }
+
+    /* ── Header / Tabs ───────────────────────────── */
+    .tabs {
+      display: flex;
+      background: linear-gradient(135deg, #1e40af, #2563eb);
+      padding: 0 4px;
+    }
+    .tab {
+      flex: 1;
+      padding: 11px 0;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.6);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.18s;
+      letter-spacing: 0.3px;
+    }
+    .tab.active {
+      color: #fff;
+      border-bottom-color: #fff;
+    }
+    .btn-close-popup {
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.6);
+      font-size: 14px;
+      font-weight: 500;
+      padding: 0 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s;
+    }
+    .btn-close-popup:hover {
+      color: #fff;
+    }
+
+    .tab-content      { display: none; flex: 1; position: relative; }
+    .tab-content.active { display: flex; flex-direction: column; }
+    #tab-dialer       { overflow: hidden; }
+    #tab-history      { overflow-y: auto; max-height: 340px; }
+
+    /* ── Agent Status ────────────────────────────── */
+    .agent-status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 8px 0 4px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text2);
+    }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 2px rgba(34,197,94,0.25);
+      animation: blink 2s infinite;
+    }
+    @keyframes blink {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.5; }
+    }
+
+    /* ── Phone Input ─────────────────────────────── */
+    .dialer-container {
+      flex: 1;
+      padding: 8px 14px 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .input-wrapper { margin-bottom: 10px; width: 100%; }
+    .iti { width: 100%; }
+    .iti__flag-container { border-radius: 8px 0 0 8px; }
+    .iti__country-list {
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      border: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    /* shrink the flag + dial-code pill */
+    .iti__selected-flag {
+      padding: 0 2px 0 4px !important;
+    }
+    .iti__selected-dial-code {
+      font-size: 11px !important;
+      font-weight: 600 !important;
+      color: var(--text) !important;
+      margin-left: 2px !important;
+    }
+    .iti__flag {
+      transform: scale(0.75);
+    }
+    .iti__arrow {
+      border-top-width: 3px !important;
+      margin-left: 1px !important;
+    }
+
+    #phone-input {
+      width: 100%;
+      font-size: 14px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      border: none;
+      border-bottom: 1.5px solid var(--border);
+      padding: 4px 4px 4px 62px;
+      color: var(--text);
+      outline: none;
+      background: transparent;
+      transition: border-color 0.18s;
+      letter-spacing: 0.5px;
+    }
+    #phone-input:focus { border-bottom-color: var(--primary); }
+    #phone-input::placeholder { color: #d1d5db; font-weight: 400; }
+
+    /* ── Keypad ──────────────────────────────────── */
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+      margin-bottom: 10px;
+    }
+
+    .key {
+      background: var(--bg-key);
+      border: none;
+      border-radius: 10px;
+      height: 42px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.1s, transform 0.1s;
+      user-select: none;
+    }
+    .key:hover  { background: var(--bg-key-hover); }
+    .key:active { transform: scale(0.92); background: #d1d5db; }
+    .key-num {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+    }
+    .key-letters {
+      font-size: 8px;
+      font-weight: 600;
+      color: var(--text2);
+      letter-spacing: 1.2px;
+      margin-top: 1px;
+      height: 9px;
+    }
+
+    /* ── Action Row ──────────────────────────────── */
+    .action-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .btn-call {
+      width: 46px; height: 46px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(145deg, #22c55e, #16a34a);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(34,197,94,0.4);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn-call:hover  { transform: scale(1.07); box-shadow: 0 6px 18px rgba(34,197,94,0.5); }
+    .btn-call:active { transform: scale(0.94); }
+    .btn-call.disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
+    .btn-call svg { width: 20px; height: 20px; fill: currentColor; }
+
+    .btn-del {
+      background: var(--bg-key);
+      border: none;
+      border-radius: 50%;
+      width: 36px; height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text2);
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-del:hover { background: var(--bg-key-hover); color: var(--text); }
+    .btn-del svg   { width: 16px; height: 16px; }
+
+    /* Spacer beside delete */
+    .action-spacer { width: 36px; }
+
+    /* ── Status Overlay ──────────────────────────── */
+    #status-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(160deg, #eff6ff 0%, #fff 60%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.28s;
+      z-index: 10;
+    }
+    #status-overlay.active { opacity: 1; pointer-events: all; }
+
+    .pulsing-circle {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      background: rgba(37,99,235,0.1);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px;
+      animation: pulse 2s infinite;
+      transition: all 0.3s;
+    }
+    .pulsing-circle svg   { width: 28px; height: 28px; color: var(--primary); }
+    .pulsing-circle.connected { background: rgba(34,197,94,0.12); animation: pulse-green 2s infinite; }
+    .pulsing-circle.connected svg { color: var(--success); }
+
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0   rgba(37,99,235,0.4); }
+      70%  { box-shadow: 0 0 0 16px rgba(37,99,235,0); }
+      100% { box-shadow: 0 0 0 0   rgba(37,99,235,0); }
+    }
+    @keyframes pulse-green {
+      0%   { box-shadow: 0 0 0 0   rgba(34,197,94,0.4); }
+      70%  { box-shadow: 0 0 0 16px rgba(34,197,94,0); }
+      100% { box-shadow: 0 0 0 0   rgba(34,197,94,0); }
+    }
+
+    #status-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    #status-desc {
+      font-size: 11px;
+      color: var(--text2);
+      text-align: center;
+      padding: 0 20px;
+      line-height: 1.5;
+    }
+    #call-timer {
+      font-size: 24px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: var(--success);
+      margin-top: 10px;
+    }
+
+    /* ── History Tab ─────────────────────────────── */
+    .history-list { list-style: none; padding: 0; margin: 0; }
+    .history-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    .history-item:hover { background: #f9fafb; }
+    .history-info    { display: flex; flex-direction: column; gap: 2px; }
+    .history-number  { font-size: 13px; font-weight: 700; color: var(--text); }
+    .history-meta    { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text2); }
+    .history-status  { font-weight: 600; }
+    .history-status.connected { color: var(--success); }
+    .history-status.missed    { color: var(--danger); }
+
+    .btn-redial {
+      background: rgba(37,99,235,0.08);
+      color: var(--primary);
+      border: none;
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .btn-redial:hover { background: rgba(37,99,235,0.16); }
+    .btn-redial svg   { width: 14px; height: 14px; }
+
+    .empty-history {
+      padding: 36px 20px;
+      text-align: center;
+      color: var(--text2);
+      font-size: 12px;
+    }
+
+    /* ── Error Banner ────────────────────────────── */
+    #error-banner {
+      display: none;
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      text-align: center;
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="popup">
+    <div class="tabs">
+      <div class="tab active" data-tab="dialer">Dialpad</div>
+      <div class="tab" data-tab="history" id="tab-btn-history">History</div>
+      <button class="btn-close-popup" id="btn-close-popup" title="Close">✕</button>
+    </div>
+      
+      <!-- DIALER TAB -->
+      <div id="tab-dialer" class="tab-content active">
+        <div class="dialer-container">
+          
+          <div id="error-banner"></div>
+          
+          <div class="agent-status" id="agent-status">
+            <div class="status-dot"></div>
+            <span id="agent-ext-text">Loading...</span>
+          </div>
+          
+          <div class="input-wrapper">
+            <input type="tel" id="phone-input" placeholder="Phone number" autocomplete="off" />
+          </div>
+          
+          <div class="keypad">
+            <div class="key" data-val="1">
+              <span class="key-num">1</span>
+              <span class="key-letters"></span>
+            </div>
+            <div class="key" data-val="2">
+              <span class="key-num">2</span>
+              <span class="key-letters">ABC</span>
+            </div>
+            <div class="key" data-val="3">
+              <span class="key-num">3</span>
+              <span class="key-letters">DEF</span>
+            </div>
+            <div class="key" data-val="4">
+              <span class="key-num">4</span>
+              <span class="key-letters">GHI</span>
+            </div>
+            <div class="key" data-val="5">
+              <span class="key-num">5</span>
+              <span class="key-letters">JKL</span>
+            </div>
+            <div class="key" data-val="6">
+              <span class="key-num">6</span>
+              <span class="key-letters">MNO</span>
+            </div>
+            <div class="key" data-val="7">
+              <span class="key-num">7</span>
+              <span class="key-letters">PQRS</span>
+            </div>
+            <div class="key" data-val="8">
+              <span class="key-num">8</span>
+              <span class="key-letters">TUV</span>
+            </div>
+            <div class="key" data-val="9">
+              <span class="key-num">9</span>
+              <span class="key-letters">WXYZ</span>
+            </div>
+            <div class="key" data-val="*">
+              <span class="key-num" style="transform: translateY(4px)">*</span>
+              <span class="key-letters"></span>
+            </div>
+            <div class="key" data-val="0">
+              <span class="key-num">0</span>
+              <span class="key-letters">+</span>
+            </div>
+            <div class="key" data-val="#">
+              <span class="key-num">#</span>
+              <span class="key-letters"></span>
+            </div>
+          </div>
+          
+          <div class="action-row">
+            <div class="action-spacer"></div>
+            <button class="btn-call" id="btn-call" title="Call">
+              <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+            </button>
+            <button class="btn-del" id="btn-del" title="Backspace" style="width:40px">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z"/></svg>
+            </button>
+          </div>
+          
+          <!-- Status Overlay -->
+          <div id="status-overlay">
+            <div class="pulsing-circle" id="status-circle">
+              <svg id="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+            </div>
+            <div id="status-title">Calling...</div>
+            <div id="status-desc">Please answer your 3CX app or desk phone first.</div>
+            <div id="call-timer" style="font-size:28px; font-weight:800; font-variant-numeric: tabular-nums; margin-top:16px; display:none;">00:00</div>
+            <button id="btn-close-overlay" class="btn-del" style="margin-top:32px;background:#f1f5f9;border-radius:20px;padding:8px 16px;color:#0f172a;font-weight:600;font-size:13px;" onclick="resetDialer()">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- HISTORY TAB -->
+      <div id="tab-history" class="tab-content">
+        <ul class="history-list" id="history-list">
+          <div class="empty-history">Loading history...</div>
+        </ul>
+      </div>
+    </div> <!-- End Popup -->
+
+  <!-- Floating Action Button -->
+  <button id="fab">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+    </svg>
+    <span>Dialer</span>
+  </button>
+
+  <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/intlTelInput.min.js"></script>
+  
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const dialerId = urlParams.get('id');
+    let extension = urlParams.get('ext');
+    const userid = urlParams.get('userid');
+    let initialPhone = urlParams.get('phone');
+    
+    // Clean GHL placeholders if they weren't replaced
+    if (extension && extension.includes('{{')) extension = '';
+    if (initialPhone && initialPhone.includes('{{')) initialPhone = '';
+    
+    const input = document.querySelector("#phone-input");
+    const btnDel = document.getElementById("btn-del");
+    const btnCall = document.getElementById("btn-call");
+    const errorBanner = document.querySelector("#error-banner");
+    const statusOverlay = document.getElementById("status-overlay");
+    
+    // Resolve userid to extension if provided
+    async function initDialer() {
+      if (userid && !userid.includes('{{')) {
+        try {
+          const res = await fetch(`/api/dialer/resolve-agent?dialerId=${dialerId}&userid=${userid}`);
+          const data = await res.json();
+          if (data.extension) extension = data.extension;
+        } catch (e) { console.error("Agent resolution failed", e); }
+      }
+      
+      if (!extension || !dialerId) {
+        document.getElementById("fab").style.display = "none";
+        document.getElementById("popup").style.display = "none";
+        return;
+      }
+
+      // Phone initial config is handled in initDialer  }
+    }
+    
+    // FAB Logic (Drag + Toggle)
+    const fab = document.getElementById("fab");
+    const popup = document.getElementById("popup");
+    
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+    let didDrag = false;
+    const DRAG_THRESHOLD = 6;
+
+    function applyPos(left, top) {
+      const w = fab.offsetWidth || 120;
+      const h = fab.offsetHeight || 40;
+      fab.style.left   = Math.max(8, Math.min(left, window.innerWidth  - w - 8)) + 'px';
+      fab.style.top    = Math.max(8, Math.min(top,  window.innerHeight - h - 8)) + 'px';
+      fab.style.right  = 'auto';
+      fab.style.bottom = 'auto';
+    }
+
+    function positionPopup() {
+      const r   = fab.getBoundingClientRect();
+      const pH  = 380, pW = 220;
+      let pTop  = r.top - pH - 8;
+      let pLeft = r.right - pW;
+      if (pTop  < 8) pTop  = r.bottom + 8;
+      if (pLeft < 8) pLeft = 8;
+      if (pLeft + pW > window.innerWidth - 8) pLeft = window.innerWidth - pW - 8;
+      popup.style.top    = pTop  + 'px';
+      popup.style.left   = pLeft + 'px';
+      popup.style.right  = 'auto';
+      popup.style.bottom = 'auto';
+    }
+
+    // Clamp FAB inside viewport — works even after zoom changes innerWidth/innerHeight
+    function clampFab() {
+      const w = fab.offsetWidth  || 120;
+      const h = fab.offsetHeight || 40;
+      const cur = fab.getBoundingClientRect();
+      // Only re-apply if FAB has been explicitly positioned (has left style set)
+      if (fab.style.left) {
+        const safeLeft = Math.max(8, Math.min(cur.left, window.innerWidth  - w - 8));
+        const safeTop  = Math.max(8, Math.min(cur.top,  window.innerHeight - h - 8));
+        fab.style.left   = safeLeft + 'px';
+        fab.style.top    = safeTop  + 'px';
+        fab.style.right  = 'auto';
+        fab.style.bottom = 'auto';
+      }
+    }
+
+    // Restore saved position — deferred so offsetWidth is ready
+    requestAnimationFrame(() => {
+      try {
+        const sp = JSON.parse(localStorage.getItem('dialer_fab_pos') || 'null');
+        if (sp) applyPos(sp.left, sp.top);
+      } catch(e) {}
+    });
+
+    // Re-clamp on resize/zoom so FAB never hides off-screen
+    window.addEventListener('resize', clampFab);
+
+    document.getElementById("btn-close-popup").addEventListener("click", () => {
+      popup.classList.remove("active");
+    });
+
+    fab.addEventListener('pointerdown', (e) => {
+      startX    = e.clientX;
+      startY    = e.clientY;
+      const r   = fab.getBoundingClientRect();
+      startLeft = r.left;
+      startTop  = r.top;
+      isDragging = true;
+      didDrag    = false;
+      fab.setPointerCapture(e.pointerId);
+      fab.style.transition = 'none';
+    });
+
+    fab.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!didDrag && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+        didDrag = true;
+        if (popup.classList.contains('active')) popup.classList.remove('active');
+      }
+      if (didDrag) applyPos(startLeft + dx, startTop + dy);
+    });
+
+    fab.addEventListener('pointerup', (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      fab.style.transition = '';
+      if (didDrag) {
+        const r = fab.getBoundingClientRect();
+        localStorage.setItem('dialer_fab_pos', JSON.stringify({ left: r.left, top: r.top }));
+      } else {
+        // It was a clean click — toggle popup
+        positionPopup();
+        popup.classList.toggle('active');
+      }
+      didDrag = false;
+    });
+
+    fab.addEventListener('pointercancel', () => {
+      isDragging = false;
+      didDrag = false;
+      fab.style.transition = '';
+    });
+    
+    // (initDialer will be called after iti is initialized)
+
+    // Tab Logic
+    const tabBtns = document.querySelectorAll('.tab');
+    const tabContents = document.querySelectorAll('.tab-content');
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`tab-${btn.getAttribute('data-tab')}`).classList.add('active');
+        
+        if (btn.getAttribute('data-tab') === 'history') {
+          loadHistory();
+        }
+      });
+    });
+
+    // History Logic
+    async function loadHistory() {
+      const list = document.getElementById('history-list');
+      try {
+        const res = await fetch(`/api/dialer/history?dialerId=${dialerId}&extension=${extension}`);
+        const data = await res.json();
+        
+        if (data.length === 0) {
+          list.innerHTML = '<div class="empty-history">No recent calls found.</div>';
+          return;
+        }
+
+        list.innerHTML = data.map(call => {
+          const d = new Date(call.createdAt);
+          const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const isConnected = call.status === 'Completed' || call.status === 'Connected';
+          const dur = call.duration_seconds ? formatTime(call.duration_seconds) : '';
+          
+          return `
+            <li class="history-item">
+              <div class="history-info">
+                <div class="history-number">${call.destination}</div>
+                <div class="history-meta">
+                  <span class="history-status ${isConnected ? 'connected' : 'missed'}">
+                    ${isConnected ? 'Connected' : call.status}
+                  </span>
+                  <span>•</span>
+                  <span>${time}</span>
+                  ${dur ? `<span>• ${dur}</span>` : ''}
+                </div>
+              </div>
+              <button class="btn-redial" onclick="redial('${call.destination}')" title="Redial">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                </svg>
+              </button>
+            </li>
+          `;
+        }).join('');
+      } catch (err) {
+        list.innerHTML = '<div class="empty-history" style="color:var(--danger)">Failed to load history</div>';
+      }
+    }
+
+    window.redial = function(number) {
+      iti.setNumber(number);
+      tabBtns[0].click(); // Switch to dialpad
+      btnCall.click(); // Auto call
+    };
+    
+    function showError(msg) {
+      errorBanner.textContent = msg;
+      errorBanner.style.display = "block";
+      setTimeout(() => { errorBanner.style.display = "none"; }, 5000);
+    }
+
+    // Initialize intl-tel-input
+    const iti = window.intlTelInput(input, {
+      utilsScript: "https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js",
+      initialCountry: "ae",
+      preferredCountries: ["ae", "sa", "gb", "us", "in"],
+      separateDialCode: true
+    });
+
+    // Auto-detect country as user types
+    input.addEventListener('input', () => {
+      const num = iti.getNumber();
+      if (num && num.length > 4) {
+        try { iti.setNumber(num); } catch(e) {}
+      }
+    });
+
+    // Auto-fill phone if provided
+    if (initialPhone && initialPhone !== '{{contact.phone}}') {
+      setTimeout(() => { iti.setNumber(initialPhone); }, 500);
+    }
+    
+    // Now call initDialer and wait for it
+    initDialer().then(() => {
+      // Auto-clean the GHL extension param if it came through empty or as a raw merge tag string
+      if (!extension || extension === '{{user.extension}}') {
+        document.getElementById("fab").style.display = "none";
+        document.getElementById("popup").style.display = "none";
+      } else {
+        document.querySelector("#agent-ext-text").textContent = `Agent Extension: ${extension}`;
+      }
+    });
+    
+    // Keypad Logic
+    let pressTimer;
+    let isLongPress = false;
+
+    document.querySelectorAll(".key").forEach(key => {
+      
+      const handlePressStart = (e) => {
+        if (!extension) return;
+        isLongPress = false;
+        const val = key.getAttribute("data-val");
+        
+        if (val === '0') {
+          // Start timer for long press
+          pressTimer = setTimeout(() => {
+            isLongPress = true;
+            input.value += '+';
+            iti.setNumber(input.value);
+            // Optional visual feedback for long press
+            key.style.background = '#cbd5e1';
+            setTimeout(() => key.style.background = '', 200);
+          }, 600); // 600ms long press
+        }
+      };
+
+      const handlePressEnd = (e) => {
+        if (!extension) return;
+        const val = key.getAttribute("data-val");
+        
+        if (val === '0') {
+          clearTimeout(pressTimer);
+          if (!isLongPress) {
+            input.value += val;
+            iti.setNumber(input.value);
+          }
+        } else {
+          // Normal tap for other keys
+          input.value += val;
+          iti.setNumber(input.value);
+        }
+      };
+
+      // Mouse events
+      key.addEventListener("mousedown", handlePressStart);
+      key.addEventListener("mouseup", handlePressEnd);
+      key.addEventListener("mouseleave", () => clearTimeout(pressTimer));
+      
+      // Touch events (for mobile)
+      key.addEventListener("touchstart", (e) => { e.preventDefault(); handlePressStart(e); });
+      key.addEventListener("touchend", (e) => { e.preventDefault(); handlePressEnd(e); });
+    });
+    
+    btnDel.addEventListener("click", () => {
+      input.value = input.value.slice(0, -1);
+    });
+    
+    // Make Call Logic
+    let pollInterval;
+    let callTimerInterval;
+    let secondsElapsed = 0;
+
+    function formatTime(s) {
+      const m = Math.floor(s / 60).toString().padStart(2, '0');
+      const sec = (s % 60).toString().padStart(2, '0');
+      return `${m}:${sec}`;
+    }
+
+    btnCall.addEventListener("click", async () => {
+      if (btnCall.classList.contains("disabled")) return;
+      
+      const destination = iti.getNumber();
+      if (!destination || !iti.isValidNumber()) {
+        showError("Please enter a valid phone number.");
+        return;
+      }
+      
+      if (!dialerId) {
+        showError("Dialer ID is missing from URL.");
+        return;
+      }
+
+      // Show Status Overlay in Ringing State
+      statusOverlay.classList.add("active");
+      document.getElementById("status-circle").classList.remove("connected");
+      document.getElementById("status-title").textContent = "Calling...";
+      document.getElementById("status-desc").textContent = "Please answer your 3CX app or desk phone first.";
+      document.getElementById("call-timer").style.display = "none";
+      document.getElementById("btn-close-overlay").textContent = "Close";
+      
+      try {
+        const res = await fetch('/api/dialer/call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dialerId, extension, destination })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to make call");
+
+        // Start Polling
+        let wasConnected = false;
+        let idleCount = 0;
+        
+        pollInterval = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`/api/dialer/status?dialerId=${dialerId}&extension=${extension}&destination=${encodeURIComponent(destination)}&duration=${typeof secondsElapsed !== 'undefined' ? secondsElapsed : 0}&callId=${data.callId || ''}`);
+            const statusData = await statusRes.json();
+            
+            if (statusData.state === 'connected') {
+              idleCount = 0;
+              if (!wasConnected) {
+                wasConnected = true;
+                document.getElementById("status-circle").classList.add("connected");
+                document.getElementById("status-title").textContent = "Call Connected";
+                document.getElementById("status-desc").textContent = "Conversation started.";
+                document.getElementById("call-timer").style.display = "block";
+                document.getElementById("btn-close-overlay").textContent = "End / Close";
+                secondsElapsed = 0;
+                document.getElementById("call-timer").textContent = "00:00";
+                
+                clearInterval(callTimerInterval);
+                callTimerInterval = setInterval(() => {
+                  secondsElapsed++;
+                  document.getElementById("call-timer").textContent = formatTime(secondsElapsed);
+                }, 1000);
+              }
+            } else if (statusData.state === 'idle') {
+              idleCount++;
+              if (wasConnected || idleCount >= 2) {
+                // Call ended or failed to connect
+                document.getElementById("status-circle").classList.remove("connected");
+                document.getElementById("status-title").textContent = wasConnected ? "Call Ended" : "Call Ended / Cancelled";
+                if (wasConnected) {
+                  document.getElementById("status-desc").textContent = `Duration: ${formatTime(secondsElapsed)}`;
+                } else {
+                  document.getElementById("status-desc").textContent = "The call did not connect.";
+                }
+                clearInterval(callTimerInterval);
+                clearInterval(pollInterval);
+                
+                // Auto close after 3 seconds
+                setTimeout(() => {
+                  resetDialer();
+                  // Refresh history if tab is open
+                  if (tabBtns[1].classList.contains('active')) loadHistory();
+                }, 3000);
+              }
+            } else {
+              // state === 'ringing'
+              idleCount = 0;
+            }
+          } catch (e) {
+            // Ignore polling errors
+          }
+        }, 2500);
+        
+      } catch (err) {
+        resetDialer();
+        showError(err.message);
+      }
+    });
+    
+    function resetDialer() {
+      clearInterval(pollInterval);
+      clearInterval(callTimerInterval);
+      statusOverlay.classList.remove("active");
+    }
+
+  </script>
+</body>
+</html>

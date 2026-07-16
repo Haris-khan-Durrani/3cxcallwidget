@@ -154,6 +154,7 @@ async function triggerDialerWebhook(record, dialer) {
   try {
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
     let recordingUrl = null;
+    let recordingListenUrl = null;
 
     if (record.recording_id) {
       const downloadToken = jwt.sign(
@@ -161,20 +162,22 @@ async function triggerDialerWebhook(record, dialer) {
         process.env.JWT_SECRET || 'secret'
       );
       recordingUrl = `${appUrl}/api/admin/dialers/${dialer.id}/recordings/${record.recording_id}/download?token=${encodeURIComponent(downloadToken)}`;
+      recordingListenUrl = `${appUrl}/api/admin/dialers/${dialer.id}/recordings/${record.recording_id}/listen?token=${encodeURIComponent(downloadToken)}`;
     }
 
     const payload = {
-      callId:          record.id,
-      dialerId:        dialer.id,
-      dialerName:      dialer.name,
-      agentExtension:  record.agent_extension,
-      destination:     record.destination,
-      status:          record.status,
-      durationSeconds: record.duration_seconds || 0,
-      recordingId:     record.recording_id || null,
-      recordingUrl:    recordingUrl,
-      endedAt:         record.ended_at || null,
-      timestamp:       new Date()
+      callId:             record.id,
+      dialerId:           dialer.id,
+      dialerName:         dialer.name,
+      agentExtension:     record.agent_extension,
+      destination:        record.destination,
+      status:             record.status,
+      durationSeconds:    record.duration_seconds || 0,
+      recordingId:        record.recording_id || null,
+      recordingUrl:       recordingUrl,
+      recordingListenUrl: recordingListenUrl,
+      endedAt:            record.ended_at || null,
+      timestamp:          new Date()
     };
 
     for (const url of uniqueUrls) {
@@ -1833,6 +1836,56 @@ app.get('/api/admin/widgets/:widgetId/recordings/:recId/download', async (req, r
   }
 });
 
+// Secure call recording proxy live stream/listen route (inline playback)
+app.get('/api/admin/widgets/:widgetId/recordings/:recId/listen', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token) token = req.query.token;
+
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+    jwt.verify(token, process.env.JWT_SECRET || 'secret', async (err) => {
+      if (err) return res.status(403).json({ error: 'Forbidden' });
+
+      try {
+        const widget = await Widget.findByPk(req.params.widgetId);
+        if (!widget) return res.status(404).json({ error: 'Widget not found' });
+
+        const cxToken = await get3cxToken(widget);
+        const fqdn = sanitizeFqdn(widget.fqdn_3cx);
+        const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
+        
+        console.log(`[3CX] Streaming recording ${req.params.recId} for widget ${widget.id} inline playback...`);
+
+        const response = await axios({
+          method: 'get',
+          url: downloadUrl,
+          responseType: 'stream',
+          headers: {
+            Authorization: `Bearer ${cxToken}`
+          },
+          timeout: 20000
+        });
+
+        // Set inline headers
+        res.setHeader('Content-Type', response.headers['content-type'] || 'audio/wav');
+        if (response.headers['content-length']) {
+          res.setHeader('Content-Length', response.headers['content-length']);
+        }
+        res.setHeader('Content-Disposition', 'inline');
+
+        response.data.pipe(res);
+      } catch (innerErr) {
+        console.error('[3CX] Recording streaming failed:', innerErr.message);
+        res.status(500).json({ error: `Failed to stream recording from 3CX: ${innerErr.message}` });
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Secure dialer call recording proxy download route
 app.get('/api/admin/dialers/:dialerId/recordings/:recId/download', async (req, res) => {
   try {
@@ -1876,6 +1929,56 @@ app.get('/api/admin/dialers/:dialerId/recordings/:recId/download', async (req, r
       } catch (innerErr) {
         console.error('[3CX Dialer] Recording streaming failed:', innerErr.message);
         res.status(500).json({ error: `Failed to download recording from 3CX: ${innerErr.message}` });
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Secure dialer call recording proxy live stream/listen route (inline playback)
+app.get('/api/admin/dialers/:dialerId/recordings/:recId/listen', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token) token = req.query.token;
+
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+    jwt.verify(token, process.env.JWT_SECRET || 'secret', async (err) => {
+      if (err) return res.status(403).json({ error: 'Forbidden' });
+
+      try {
+        const dialer = await DialerWidget.findByPk(req.params.dialerId);
+        if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
+
+        const cxToken = await get3cxToken(dialer);
+        const fqdn = sanitizeFqdn(dialer.fqdn_3cx);
+        const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
+        
+        console.log(`[3CX Dialer] Streaming recording ${req.params.recId} for inline listen playback...`);
+
+        const response = await axios({
+          method: 'get',
+          url: downloadUrl,
+          responseType: 'stream',
+          headers: {
+            Authorization: `Bearer ${cxToken}`
+          },
+          timeout: 20000
+        });
+
+        // Set inline headers
+        res.setHeader('Content-Type', response.headers['content-type'] || 'audio/wav');
+        if (response.headers['content-length']) {
+          res.setHeader('Content-Length', response.headers['content-length']);
+        }
+        res.setHeader('Content-Disposition', 'inline');
+
+        response.data.pipe(res);
+      } catch (innerErr) {
+        console.error('[3CX Dialer] Recording streaming failed:', innerErr.message);
+        res.status(500).json({ error: `Failed to stream recording from 3CX: ${innerErr.message}` });
       }
     });
   } catch (err) {

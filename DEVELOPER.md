@@ -82,6 +82,7 @@ Webhooks are sent as `POST` requests with a `Content-Type: application/json` hea
   "durationSeconds": 0,
   "recordingId": null,
   "recordingUrl": null,
+  "recordingListenUrl": null,
   "endedAt": null,
   "timestamp": "2026-07-15T14:54:00.000Z"
 }
@@ -99,6 +100,7 @@ Webhooks are sent as `POST` requests with a `Content-Type: application/json` hea
   "durationSeconds": 0,
   "recordingId": null,
   "recordingUrl": null,
+  "recordingListenUrl": null,
   "endedAt": null,
   "timestamp": "2026-07-15T14:54:12.000Z"
 }
@@ -117,6 +119,7 @@ Sent immediately when the call hangs up.
   "durationSeconds": 45,
   "recordingId": null,
   "recordingUrl": null,
+  "recordingListenUrl": null,
   "endedAt": "2026-07-15T14:54:57.000Z",
   "timestamp": "2026-07-15T14:54:57.000Z"
 }
@@ -135,6 +138,7 @@ Sent after the 5-second settle delay if a matching recording is identified on th
   "durationSeconds": 45,
   "recordingId": "66804",
   "recordingUrl": "https://widget-builder-domain.com/api/admin/dialers/a9e64e10-6c92-491c-8e01-f2f6027ffb2a/recordings/66804/download?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "recordingListenUrl": "https://widget-builder-domain.com/api/admin/dialers/a9e64e10-6c92-491c-8e01-f2f6027ffb2a/recordings/66804/listen?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "endedAt": "2026-07-15T14:54:57.000Z",
   "timestamp": "2026-07-15T14:55:02.000Z"
 }
@@ -152,6 +156,7 @@ Sent after the 5-second settle delay if a matching recording is identified on th
   "durationSeconds": 0,
   "recordingId": null,
   "recordingUrl": null,
+  "recordingListenUrl": null,
   "endedAt": "2026-07-15T14:54:10.000Z",
   "timestamp": "2026-07-15T14:54:10.000Z"
 }

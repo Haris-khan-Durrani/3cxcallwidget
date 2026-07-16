@@ -720,46 +720,28 @@ async function checkDialerCallControlStatus(dialer, extension, destination) {
     });
 
     const participants = resp.data || [];
+    console.log(`[3CX Dialer CC Debug] Ext ${extension} participants:`, JSON.stringify(participants));
     if (participants.length === 0) {
       return { active: false };
     }
 
-    // Find the participant representing the customer
     const agentExtStr = String(extension).trim();
-    const cleanDest = destination.replace(/\D/g, '');
-    const destSuffix = cleanDest.slice(-8);
-
-    const customerPart = participants.find(p => {
-      const pDn = String(p.PartyDn || p.partyDn || p.DN || p.dn || p.Number || p.number || '').trim();
-      if (pDn === agentExtStr) return false; // This is the agent
-      
-      const pDnClean = pDn.replace(/\D/g, '');
-      if (destSuffix && pDnClean.includes(destSuffix)) return true;
-
-      // Fallback: if it's not the agent extension, it's likely the customer
-      return true;
-    });
-
-    if (customerPart) {
-      const state = String(customerPart.State || customerPart.state || customerPart.Status || customerPart.status || '').toLowerCase().trim();
-      const isConnected = state === 'connected' || state === 'talking' || state === 'established';
-      const isRinging = state === 'ringing' || state === 'dialing' || state === 'invited';
-      console.log(`[3CX Dialer CC] Customer participant state: "${state}" (connected=${isConnected}, ringing=${isRinging})`);
-      return { active: true, connected: isConnected, ringing: isRinging };
-    }
-
-    // If there is only the agent in the call, check if the agent is connected or ringing
+    // Find the participant representing the agent's extension (p.dn)
     const agentPart = participants.find(p => {
-      const pDn = String(p.PartyDn || p.partyDn || p.DN || p.dn || p.Number || p.number || '').trim();
+      const pDn = String(p.dn || p.DN || p.PartyDn || p.partyDn || '').trim();
       return pDn === agentExtStr;
     });
 
     if (agentPart) {
-      const state = String(agentPart.State || agentPart.state || agentPart.Status || agentPart.status || '').toLowerCase().trim();
-      const isRinging = state === 'ringing' || state === 'dialing' || state === 'invited';
-      return { active: true, connected: false, ringing: true };
+      const state = String(agentPart.status || agentPart.Status || agentPart.state || agentPart.State || '').toLowerCase().trim();
+      const isConnected = state === 'connected' || state === 'talking' || state === 'established';
+      const isRinging = state === 'ringing' || state === 'dialing' || state === 'invited' || state === 'routing' || state === 'initiating';
+      
+      console.log(`[3CX Dialer CC] Ext ${extension} state: "${state}" (connected=${isConnected}, ringing=${isRinging})`);
+      return { active: true, connected: isConnected, ringing: isRinging };
     }
 
+    // Fallback if agentPart is not found but there are active participants
     return { active: true, connected: false, ringing: true };
   } catch (err) {
     console.error(`[3CX Dialer CC] Failed checking CallControl for Ext ${extension}:`, err.message);

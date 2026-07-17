@@ -1106,8 +1106,7 @@ app.get('/', (req, res) => {
 app.get('/preview/:id', (req, res) => {
   const widgetId = req.params.id;
   const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
-  const protocol = req.headers['x-forwarded-proto'] || 'http';
-  const fallbackUrl = `${protocol}://${host}`;
+  const fallbackUrl = `//${host}`;
   const serverUrl = process.env.FRONTEND_URL || fallbackUrl;
   
   res.send(`
@@ -1153,8 +1152,7 @@ app.get('/widget.js', async (req, res) => {
     }
 
     const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
-    const protocol = req.headers['x-forwarded-proto'] || 'http';
-    const fallbackUrl = `${protocol}://${host}`;
+    const fallbackUrl = `//${host}`;
     const frontendUrl = process.env.FRONTEND_URL || fallbackUrl;
     const fs = require('fs');
     const widgetScriptPath = path.join(__dirname, 'public', 'widget-template.js');

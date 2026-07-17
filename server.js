@@ -3,7 +3,26 @@ const cors = require('cors');
 const path = require('path');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
-const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent } = require('./db');
+const dns = require('dns');
+
+// Force DNS resolution to prefer IPv4 to prevent IPv6 Docker timeouts on dual-stack servers
+dns.setDefaultResultOrder('ipv4first');
+const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent, User } = require('./db');
+const crypto = require('crypto');
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedPassword) {
+  if (!storedPassword || !storedPassword.includes(':')) return false;
+  const [salt, originalHash] = storedPassword.split(':');
+  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return hash === originalHash;
+}
+
 require('dotenv').config();
 
 // ─── 3CX OAuth Token Cache ───────────────────────────────────────────────────
@@ -1499,16 +1518,116 @@ function authenticateToken(req, res, next) {
 }
 
 // Login
-app.post('/api/admin/login', (req, res) => {
-  const { username, password } = req.body;
-  const adminUser = process.env.ADMIN_USERNAME || 'admin';
-  const adminPass = process.env.ADMIN_PASSWORD || 'password123';
+app.post('/api/admin/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    // Check database users
+    const user = await User.findOne({ where: { username } });
+    if (user && verifyPassword(password, user.password)) {
+      const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
+      return res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+    }
 
-  if (username === adminUser && password === adminPass) {
-    const token = jwt.sign({ username }, process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
-    res.json({ token });
-  } else {
+    // Fallback: If no users matched but user is trying default admin env details, match them
+    const adminUser = process.env.ADMIN_USERNAME || 'admin';
+    const adminPass = process.env.ADMIN_PASSWORD || 'password123';
+    if (username === adminUser && password === adminPass) {
+      const token = jwt.sign({ username, role: 'admin' }, process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
+      return res.json({ token, user: { username, role: 'admin' } });
+    }
+
     res.status(401).json({ error: 'Invalid credentials' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all users
+app.get('/api/admin/users', authenticateToken, async (req, res) => {
+  try {
+    const users = await User.findAll({
+      attributes: ['id', 'username', 'role', 'createdAt']
+    });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a new user
+app.post('/api/admin/users', authenticateToken, async (req, res) => {
+  try {
+    const { username, password, role } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    const existing = await User.findOne({ where: { username } });
+    if (existing) {
+      return res.status(400).json({ error: 'Username is already taken' });
+    }
+
+    const hashed = hashPassword(password);
+    const newUser = await User.create({
+      username,
+      password: hashed,
+      role: role || 'admin'
+    });
+
+    res.json({ id: newUser.id, username: newUser.username, role: newUser.role });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update user details (optionally password)
+app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
+  try {
+    const { username, password, role } = req.body;
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (username) {
+      // Check uniqueness
+      const existing = await User.findOne({ where: { username } });
+      if (existing && existing.id !== user.id) {
+        return res.status(400).json({ error: 'Username is already taken' });
+      }
+      user.username = username;
+    }
+
+    if (password) {
+      user.password = hashPassword(password);
+    }
+
+    if (role) {
+      user.role = role;
+    }
+
+    await user.save();
+    res.json({ id: user.id, username: user.username, role: user.role });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete user
+app.delete('/api/admin/users/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Prevent deleting the last admin
+    const adminCount = await User.count({ where: { role: 'admin' } });
+    if (user.role === 'admin' && adminCount <= 1) {
+      return res.status(400).json({ error: 'Cannot delete the last administrator' });
+    }
+
+    await user.destroy();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -2312,8 +2431,27 @@ app.get('/api/dialer/history', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-sequelize.sync({ alter: true }).then(() => {
+sequelize.sync({ alter: true }).then(async () => {
   console.log('Database synced');
+  
+  // Seed default admin user if none exists
+  try {
+    const userCount = await User.count();
+    if (userCount === 0) {
+      const defaultUser = process.env.ADMIN_USERNAME || 'admin';
+      const defaultPass = process.env.ADMIN_PASSWORD || 'password123';
+      const hashed = hashPassword(defaultPass);
+      await User.create({
+        username: defaultUser,
+        password: hashed,
+        role: 'admin'
+      });
+      console.log(`[Seed] Created default user: ${defaultUser}`);
+    }
+  } catch (seedErr) {
+    console.error('[Seed] Failed to seed default user:', seedErr);
+  }
+
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });

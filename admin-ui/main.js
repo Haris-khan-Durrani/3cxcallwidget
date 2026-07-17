@@ -10,6 +10,7 @@ import ReportsView from './views/ReportsView.vue'
 import DocsView from './views/DocsView.vue'
 import DialersView from './views/DialersView.vue'
 import DialerReportsView from './views/DialerReportsView.vue'
+import UsersView from './views/UsersView.vue'
 import './style.css'
 
 // Restore auth header after page refresh (interceptor approach — works even with cached JS)
@@ -34,7 +35,8 @@ const router = createRouter({
     { path: '/dialers', component: DialersView, meta: { requiresAuth: true } },
     { path: '/reports', component: ReportsView, meta: { requiresAuth: true } },
     { path: '/dialer-reports', component: DialerReportsView, meta: { requiresAuth: true } },
-    { path: '/docs', component: DocsView, meta: { requiresAuth: true } }
+    { path: '/docs', component: DocsView, meta: { requiresAuth: true } },
+    { path: '/users', component: UsersView, meta: { requiresAuth: true } }
   ]
 })
 

@@ -324,9 +324,39 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true,
+  },
   role: {
     type: DataTypes.STRING,
     defaultValue: 'admin', // admin, agent, etc.
+  },
+  reset_token: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  reset_token_expires: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  }
+});
+
+const SystemSetting = sequelize.define('SystemSetting', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  key: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+  value: {
+    type: DataTypes.TEXT,
+    allowNull: true,
   }
 });
 
@@ -351,5 +381,6 @@ module.exports = {
   DialerWidget,
   DialerCallRecord,
   DialerAgent,
-  User
+  User,
+  SystemSetting
 };

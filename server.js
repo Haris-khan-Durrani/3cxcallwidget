@@ -7,7 +7,7 @@ const dns = require('dns');
 
 // Force DNS resolution to prefer IPv4 to prevent IPv6 Docker timeouts on dual-stack servers
 dns.setDefaultResultOrder('ipv4first');
-const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent, User } = require('./db');
+const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent, User, SystemSetting } = require('./db');
 const crypto = require('crypto');
 
 function hashPassword(password) {
@@ -1547,7 +1547,7 @@ app.post('/api/admin/login', async (req, res) => {
 app.get('/api/admin/users', authenticateToken, async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: ['id', 'username', 'role', 'createdAt']
+      attributes: ['id', 'username', 'email', 'role', 'createdAt']
     });
     res.json(users);
   } catch (err) {
@@ -1558,7 +1558,7 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 // Create a new user
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
   try {
-    const { username, password, role } = req.body;
+    const { username, password, email, role } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
@@ -1568,14 +1568,22 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Username is already taken' });
     }
 
+    if (email) {
+      const existingEmail = await User.findOne({ where: { email } });
+      if (existingEmail) {
+        return res.status(400).json({ error: 'Email address is already in use' });
+      }
+    }
+
     const hashed = hashPassword(password);
     const newUser = await User.create({
       username,
       password: hashed,
+      email: email || null,
       role: role || 'admin'
     });
 
-    res.json({ id: newUser.id, username: newUser.username, role: newUser.role });
+    res.json({ id: newUser.id, username: newUser.username, email: newUser.email, role: newUser.role });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1584,7 +1592,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
 // Update user details (optionally password)
 app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
   try {
-    const { username, password, role } = req.body;
+    const { username, password, email, role } = req.body;
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -1597,6 +1605,16 @@ app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
       user.username = username;
     }
 
+    if (email !== undefined) {
+      if (email) {
+        const existingEmail = await User.findOne({ where: { email } });
+        if (existingEmail && existingEmail.id !== user.id) {
+          return res.status(400).json({ error: 'Email address is already in use' });
+        }
+      }
+      user.email = email || null;
+    }
+
     if (password) {
       user.password = hashPassword(password);
     }
@@ -1606,7 +1624,7 @@ app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
     }
 
     await user.save();
-    res.json({ id: user.id, username: user.username, role: user.role });
+    res.json({ id: user.id, username: user.username, email: user.email, role: user.role });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1628,6 +1646,209 @@ app.delete('/api/admin/users/:id', authenticateToken, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- SMTP & Password Reset Helper Functions ---
+const nodemailer = require('nodemailer');
+
+async function sendResetEmail(email, resetUrl) {
+  // Retrieve SMTP settings from DB
+  const settingsList = await SystemSetting.findAll();
+  const settings = {};
+  settingsList.forEach(s => {
+    settings[s.key] = s.value;
+  });
+
+  const host = settings.smtp_host || process.env.SMTP_HOST;
+  const port = parseInt(settings.smtp_port || process.env.SMTP_PORT || '587', 10);
+  const user = settings.smtp_user || process.env.SMTP_USER;
+  const pass = settings.smtp_pass || process.env.SMTP_PASS;
+  const from = settings.smtp_from || process.env.SMTP_FROM || 'noreply@yourdomain.com';
+  const secure = settings.smtp_secure === 'true' || process.env.SMTP_SECURE === 'true';
+
+  if (!host || !user || !pass) {
+    throw new Error('SMTP mail server is not configured. Please configure SMTP in Settings.');
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+    tls: { rejectUnauthorized: false }
+  });
+
+  const mailOptions = {
+    from: `"3CX Widget Admin" <${from}>`,
+    to: email,
+    subject: 'Reset Password Request',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e1e4e8; border-radius: 12px; background-color: #ffffff; color: #24292f;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="margin-top: 10px; font-weight: 700; color: #0b4526;">3CX Call Connect Platform</h2>
+        </div>
+        <p style="font-size: 14px; line-height: 1.5;">Hello,</p>
+        <p style="font-size: 14px; line-height: 1.5;">We received a request to reset your password for your 3CX Widget Admin account. Click the button below to choose a new password. This link is valid for 1 hour.</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetUrl}" style="background-color: #0b4526; color: #ffffff; padding: 12px 24px; text-decoration: none; font-size: 14px; font-weight: 600; border-radius: 8px; display: inline-block;">Reset Password</a>
+        </div>
+        <p style="font-size: 12px; color: #57606a; line-height: 1.5;">If the button above does not work, copy and paste the following URL into your browser:</p>
+        <p style="font-size: 12px; color: #0969da; word-break: break-all;"><a href="${resetUrl}">${resetUrl}</a></p>
+        <hr style="border: 0; border-top: 1px solid #d0d7de; margin: 30px 0;" />
+        <p style="font-size: 11px; color: #6e7781; text-align: center;">If you did not request this, you can safely ignore this email.</p>
+      </div>
+    `
+  };
+
+  await transporter.sendMail(mailOptions);
+}
+
+// --- SMTP & Forgot Password API Endpoints ---
+
+// Forgot Password Request
+app.post('/api/admin/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email address is required' });
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ error: 'User with this email address was not found' });
+    }
+
+    // Generate token
+    const token = crypto.randomBytes(32).toString('hex');
+    user.reset_token = token;
+    user.reset_token_expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await user.save();
+
+    const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
+    const protocol = req.headers['x-forwarded-proto'] || 'http';
+    const resetUrl = `${protocol}://${host}/#/reset-password?token=${token}`;
+
+    await sendResetEmail(email, resetUrl);
+    res.json({ success: true, message: 'Reset password email sent successfully' });
+  } catch (err) {
+    console.error('[forgot-password]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reset Password with Token
+app.post('/api/admin/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Token and new password are required' });
+
+    const { Op } = require('sequelize');
+    const user = await User.findOne({
+      where: {
+        reset_token: token,
+        reset_token_expires: { [Op.gt]: new Date() }
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired password reset token' });
+    }
+
+    user.password = hashPassword(password);
+    user.reset_token = null;
+    user.reset_token_expires = null;
+    await user.save();
+
+    res.json({ success: true, message: 'Password has been updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get SMTP settings
+app.get('/api/admin/settings/smtp', authenticateToken, async (req, res) => {
+  try {
+    const list = await SystemSetting.findAll();
+    const settings = {
+      smtp_host: '',
+      smtp_port: '587',
+      smtp_user: '',
+      smtp_from: 'noreply@yourdomain.com',
+      smtp_secure: 'false',
+      smtp_pass_configured: false
+    };
+
+    list.forEach(s => {
+      if (s.key === 'smtp_pass') {
+        settings.smtp_pass_configured = !!s.value;
+      } else {
+        settings[s.key] = s.value;
+      }
+    });
+
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update SMTP settings
+app.put('/api/admin/settings/smtp', authenticateToken, async (req, res) => {
+  try {
+    const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_secure } = req.body;
+    const items = { smtp_host, smtp_port, smtp_user, smtp_from, smtp_secure };
+
+    for (const [key, val] of Object.entries(items)) {
+      if (val !== undefined) {
+        await SystemSetting.upsert({ key, value: String(val) });
+      }
+    }
+
+    // Only update password if it isn't the masked value and isn't blank
+    if (smtp_pass && smtp_pass !== '••••••••') {
+      await SystemSetting.upsert({ key: 'smtp_pass', value: smtp_pass });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Test SMTP settings
+app.post('/api/admin/settings/smtp/test', authenticateToken, async (req, res) => {
+  try {
+    const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_secure, test_email } = req.body;
+    if (!test_email) return res.status(400).json({ error: 'Destination test email is required' });
+
+    let finalPass = smtp_pass;
+    // Fallback to saved password if masked is submitted
+    if (smtp_pass === '••••••••') {
+      const savedPass = await SystemSetting.findOne({ where: { key: 'smtp_pass' } });
+      finalPass = savedPass ? savedPass.value : '';
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtp_host,
+      port: parseInt(smtp_port || '587', 10),
+      secure: smtp_secure === 'true',
+      auth: {
+        user: smtp_user,
+        pass: finalPass
+      },
+      tls: { rejectUnauthorized: false }
+    });
+
+    await transporter.sendMail({
+      from: `"3CX Widget Test" <${smtp_from || 'noreply@yourdomain.com'}>`,
+      to: test_email,
+      subject: '3CX Widget Admin SMTP Test Email',
+      text: 'Congratulations! Your SMTP settings are correctly configured and working.',
+      html: '<h3>Congratulations!</h3><p>Your 3CX Call Connect Platform SMTP settings are correctly configured and working.</p>'
+    });
+
+    res.json({ success: true, message: 'Test email sent successfully' });
+  } catch (err) {
+    res.status(500).json({ error: `SMTP test failed: ${err.message}` });
   }
 });
 

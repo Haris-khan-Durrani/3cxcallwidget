@@ -28,6 +28,7 @@
             <thead>
               <tr>
                 <th>Username</th>
+                <th>Email</th>
                 <th>Role</th>
                 <th>Created At</th>
                 <th style="text-align: right;">Actions</th>
@@ -38,6 +39,9 @@
                 <td class="user-name-cell">
                   <span class="user-icon">👤</span>
                   <span class="user-username">{{ u.username }}</span>
+                </td>
+                <td class="date-cell">
+                  {{ u.email || '—' }}
                 </td>
                 <td>
                   <span class="badge" :class="u.role === 'admin' ? 'badge-blue' : 'badge-orange'">
@@ -78,6 +82,10 @@
             <div class="form-group">
               <label class="form-label">Username</label>
               <input type="text" v-model="newUser.username" class="input" placeholder="e.g. jsmith" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email Address (Optional)</label>
+              <input type="email" v-model="newUser.email" class="input" placeholder="e.g. user@domain.com" />
             </div>
             <div class="form-group">
               <label class="form-label">Password</label>
@@ -131,7 +139,7 @@ const users = ref([])
 const loading = ref(false)
 
 const showCreateModal = ref(false)
-const newUser = reactive({ username: '', password: '', role: 'admin' })
+const newUser = reactive({ username: '', email: '', password: '', role: 'admin' })
 
 const showResetModal = ref(false)
 const activeUser = ref(null)
@@ -155,6 +163,7 @@ async function fetchUsers() {
 
 function openCreateModal() {
   newUser.username = ''
+  newUser.email = ''
   newUser.password = ''
   newUser.role = 'admin'
   showCreateModal.value = true

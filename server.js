@@ -1503,7 +1503,10 @@ function authenticateToken(req, res, next) {
 // Login
 app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body;
-  if (username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
+  const adminUser = process.env.ADMIN_USERNAME || 'admin';
+  const adminPass = process.env.ADMIN_PASSWORD || 'password123';
+
+  if (username === adminUser && password === adminPass) {
     const token = jwt.sign({ username }, process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
     res.json({ token });
   } else {

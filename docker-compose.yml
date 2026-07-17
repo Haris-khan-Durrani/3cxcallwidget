@@ -14,6 +14,8 @@ services:
       - DB_PASSWORD=3cx_secret
       - DB_NAME=3cxwidget
       - JWT_SECRET=change_this_secret_in_production
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=password123
     depends_on:
       db:
         condition: service_healthy

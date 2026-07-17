@@ -53,6 +53,9 @@
                 </td>
                 <td style="text-align: right;">
                   <div class="actions-group">
+                    <button class="btn btn-sm btn-ghost" @click="openEditModal(u)">
+                      Edit
+                    </button>
                     <button class="btn btn-sm btn-ghost" @click="openResetModal(u)">
                       Reset Password
                     </button>
@@ -68,6 +71,37 @@
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Edit User Modal -->
+      <div v-if="showEditModal" class="modal-backdrop" @click.self="showEditModal = false">
+        <div class="modal-box card animate-slide-up" @click.stop>
+          <div class="modal-header">
+            <h3>Edit System User</h3>
+            <button class="btn btn-icon btn-ghost close-modal" @click="showEditModal = false">❌</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Username</label>
+              <input type="text" v-model="editUser.username" class="input" placeholder="e.g. jsmith" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email Address (Optional)</label>
+              <input type="email" v-model="editUser.email" class="input" placeholder="e.g. user@domain.com" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Role</label>
+              <select v-model="editUser.role" class="input">
+                <option value="admin">Administrator</option>
+                <option value="agent">Agent / Regular User</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" @click="showEditModal = false">Cancel</button>
+            <button class="btn btn-primary" :disabled="!editUser.username" @click="updateUser">Save Changes</button>
+          </div>
         </div>
       </div>
 
@@ -141,6 +175,9 @@ const loading = ref(false)
 const showCreateModal = ref(false)
 const newUser = reactive({ username: '', email: '', password: '', role: 'admin' })
 
+const showEditModal = ref(false)
+const editUser = reactive({ id: '', username: '', email: '', role: 'admin' })
+
 const showResetModal = ref(false)
 const activeUser = ref(null)
 const resetPasswordVal = ref('')
@@ -177,6 +214,29 @@ async function createUser() {
     fetchUsers()
   } catch (err) {
     toast(err.response?.data?.error || 'Failed to create user', 'error')
+  }
+}
+
+function openEditModal(user) {
+  editUser.id = user.id
+  editUser.username = user.username
+  editUser.email = user.email || ''
+  editUser.role = user.role
+  showEditModal.value = true
+}
+
+async function updateUser() {
+  try {
+    await axios.put(`/api/admin/users/${editUser.id}`, {
+      username: editUser.username,
+      email: editUser.email,
+      role: editUser.role
+    })
+    toast('User details updated successfully', 'success')
+    showEditModal.value = false
+    fetchUsers()
+  } catch (err) {
+    toast(err.response?.data?.error || 'Failed to update user', 'error')
   }
 }
 

@@ -344,6 +344,16 @@
           </div>
         </div>
       </div>
+      <audio 
+        ref="audioRef" 
+        :src="activeAudioUrl" 
+        @play="audioPlaying = true" 
+        @pause="audioPlaying = false" 
+        @timeupdate="onTimeUpdate" 
+        @loadedmetadata="onLoadedMetadata"
+        @ended="onAudioEnded"
+        style="display: none;"
+      ></audio>
     </div>
   </AppLayout>
 </template>

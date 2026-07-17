@@ -6,9 +6,19 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async login(username, password) {
       const res = await axios.post('/api/admin/login', { username, password })
+      if (res.data.token) {
+        this.token = res.data.token
+        localStorage.setItem('admin_token', this.token)
+        axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`
+      }
+      return res.data
+    },
+    async verify2fa(userId, code) {
+      const res = await axios.post('/api/admin/verify-2fa', { userId, code })
       this.token = res.data.token
       localStorage.setItem('admin_token', this.token)
       axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`
+      return res.data
     },
     logout() {
       this.token = null

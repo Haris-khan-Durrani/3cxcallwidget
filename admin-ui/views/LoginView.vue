@@ -13,7 +13,7 @@
         <p>Sign in to manage your call widgets</p>
       </div>
 
-      <form v-if="!showForgot" @submit.prevent="submit" class="login-form">
+      <form v-if="!showForgot && !show2fa" @submit.prevent="submit" class="login-form">
         <div class="form-group">
           <label class="form-label">Username</label>
           <input v-model="form.username" type="text" class="input" placeholder="admin" autocomplete="username" required />
@@ -42,6 +42,35 @@
           <span v-if="loading">Signing in...</span>
           <span v-else>Sign In →</span>
         </button>
+      </form>
+
+      <!-- 2-Step Verification Form -->
+      <form v-else-if="show2fa" @submit.prevent="submit2fa" class="login-form">
+        <div style="text-align: center; margin-bottom: 8px;">
+          <p style="font-size: 13px; color: var(--text2);">
+            We sent a 6-digit verification code to <strong>{{ twoFactorMaskedEmail }}</strong>. Enter it below to verify.
+          </p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Verification Code</label>
+          <input v-model="twoFactorCode" type="text" class="input" placeholder="e.g. 123456" maxlength="6" required style="text-align: center; font-size: 18px; letter-spacing: 4px; font-weight: 700;" />
+        </div>
+
+        <transition name="slide-up">
+          <div v-if="error" class="login-error">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            {{ error }}
+          </div>
+        </transition>
+
+        <button type="submit" class="btn btn-primary btn-lg btn-block" :disabled="loading || twoFactorCode.length < 6">
+          <span v-if="loading">Verifying...</span>
+          <span v-else>Verify & Sign In →</span>
+        </button>
+
+        <a href="javascript:void(0)" class="back-link" @click="show2fa = false; error = ''; twoFactorCode = ''">
+          ← Back to Sign In
+        </a>
       </form>
 
       <!-- Forgot Password Form -->
@@ -95,14 +124,38 @@ const showPass = ref(false)
 const showForgot = ref(false)
 const forgotEmail = ref('')
 
+const show2fa = ref(false)
+const twoFactorUserId = ref('')
+const twoFactorMaskedEmail = ref('')
+const twoFactorCode = ref('')
+
 async function submit() {
   loading.value = true
   error.value = ''
   try {
-    await auth.login(form.username, form.password)
+    const data = await auth.login(form.username, form.password)
+    if (data && data.two_factor_required) {
+      twoFactorUserId.value = data.userId
+      twoFactorMaskedEmail.value = data.email
+      show2fa.value = true
+    } else {
+      router.push('/widgets')
+    }
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Invalid username or password'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function submit2fa() {
+  loading.value = true
+  error.value = ''
+  try {
+    await auth.verify2fa(twoFactorUserId.value, twoFactorCode.value)
     router.push('/widgets')
-  } catch {
-    error.value = 'Invalid username or password'
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Invalid or expired verification code'
   } finally {
     loading.value = false
   }

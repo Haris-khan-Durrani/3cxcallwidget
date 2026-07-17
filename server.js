@@ -1525,6 +1525,26 @@ app.post('/api/admin/login', async (req, res) => {
     // Check database users
     const user = await User.findOne({ where: { username } });
     if (user && verifyPassword(password, user.password)) {
+      if (user.two_factor_enabled) {
+        if (!user.email) {
+          return res.status(400).json({ error: '2-Step Verification is enabled, but no email is configured. Please contact the administrator.' });
+        }
+        // Generate 6-digit code
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        user.two_factor_code = code;
+        user.two_factor_expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        await user.save();
+
+        try {
+          await send2faEmail(user.email, code);
+        } catch (emailErr) {
+          console.error('[2fa-email-error]', emailErr);
+          return res.status(500).json({ error: `Failed to send verification code. Please check SMTP settings. Detail: ${emailErr.message}` });
+        }
+
+        return res.json({ two_factor_required: true, userId: user.id, email: maskEmail(user.email) });
+      }
+
       const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
       return res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
     }
@@ -1547,7 +1567,7 @@ app.post('/api/admin/login', async (req, res) => {
 app.get('/api/admin/users', authenticateToken, async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: ['id', 'username', 'email', 'role', 'createdAt']
+      attributes: ['id', 'username', 'email', 'role', 'two_factor_enabled', 'createdAt']
     });
     res.json(users);
   } catch (err) {
@@ -1558,9 +1578,13 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 // Create a new user
 app.post('/api/admin/users', authenticateToken, async (req, res) => {
   try {
-    const { username, password, email, role } = req.body;
+    const { username, password, email, role, two_factor_enabled } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    if (two_factor_enabled && !email) {
+      return res.status(400).json({ error: 'Email address is required to enable 2-Step Verification' });
     }
 
     const existing = await User.findOne({ where: { username } });
@@ -1580,10 +1604,11 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
       username,
       password: hashed,
       email: email || null,
-      role: role || 'admin'
+      role: role || 'admin',
+      two_factor_enabled: !!two_factor_enabled
     });
 
-    res.json({ id: newUser.id, username: newUser.username, email: newUser.email, role: newUser.role });
+    res.json({ id: newUser.id, username: newUser.username, email: newUser.email, role: newUser.role, two_factor_enabled: newUser.two_factor_enabled });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1592,7 +1617,7 @@ app.post('/api/admin/users', authenticateToken, async (req, res) => {
 // Update user details (optionally password)
 app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
   try {
-    const { username, password, email, role } = req.body;
+    const { username, password, email, role, two_factor_enabled } = req.body;
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -1605,6 +1630,8 @@ app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
       user.username = username;
     }
 
+    // Determine final email to validate 2FA requirement
+    let finalEmail = user.email;
     if (email !== undefined) {
       if (email) {
         const existingEmail = await User.findOne({ where: { email } });
@@ -1613,6 +1640,14 @@ app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
         }
       }
       user.email = email || null;
+      finalEmail = email || null;
+    }
+
+    if (two_factor_enabled !== undefined) {
+      if (two_factor_enabled && !finalEmail) {
+        return res.status(400).json({ error: 'Email address is required to enable 2-Step Verification' });
+      }
+      user.two_factor_enabled = !!two_factor_enabled;
     }
 
     if (password) {
@@ -1624,7 +1659,7 @@ app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
     }
 
     await user.save();
-    res.json({ id: user.id, username: user.username, email: user.email, role: user.role });
+    res.json({ id: user.id, username: user.username, email: user.email, role: user.role, two_factor_enabled: user.two_factor_enabled });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1644,6 +1679,97 @@ app.delete('/api/admin/users/:id', authenticateToken, async (req, res) => {
 
     await user.destroy();
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- 2FA Verification Helper & Routes ---
+function maskEmail(email) {
+  if (!email) return '';
+  const parts = email.split('@');
+  if (parts.length !== 2) return email;
+  const [local, domain] = parts;
+  if (local.length <= 2) return `*@${domain}`;
+  return `${local[0]}${'*'.repeat(local.length - 2)}${local[local.length - 1]}@${domain}`;
+}
+
+async function send2faEmail(email, code) {
+  const settingsList = await SystemSetting.findAll();
+  const settings = {};
+  settingsList.forEach(s => {
+    settings[s.key] = s.value;
+  });
+
+  const host = settings.smtp_host || process.env.SMTP_HOST;
+  const port = parseInt(settings.smtp_port || process.env.SMTP_PORT || '587', 10);
+  const user = settings.smtp_user || process.env.SMTP_USER;
+  const pass = settings.smtp_pass || process.env.SMTP_PASS;
+  const from = settings.smtp_from || process.env.SMTP_FROM || 'noreply@yourdomain.com';
+  const secure = settings.smtp_secure === 'true' || process.env.SMTP_SECURE === 'true';
+
+  if (!host || !user || !pass) {
+    throw new Error('SMTP mail server is not configured. Please configure SMTP in Settings.');
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+    tls: { rejectUnauthorized: false }
+  });
+
+  const mailOptions = {
+    from: `"3CX Widget Security" <${from}>`,
+    to: email,
+    subject: 'Your 2-Step Verification Code',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e1e4e8; border-radius: 12px; background-color: #ffffff; color: #24292f;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="margin-top: 10px; font-weight: 700; color: #0b4526;">3CX Call Connect Platform</h2>
+        </div>
+        <p style="font-size: 14px; line-height: 1.5;">Hello,</p>
+        <p style="font-size: 14px; line-height: 1.5;">A login attempt was made for your account. Please use the following 6-digit verification code to complete your login. This code is valid for 10 minutes.</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <div style="background-color: #f6f8fa; border: 1px dashed #d0d7de; color: #24292f; font-size: 32px; font-weight: 700; letter-spacing: 6px; padding: 16px 24px; border-radius: 8px; display: inline-block;">
+            ${code}
+          </div>
+        </div>
+        <p style="font-size: 11px; color: #6e7781; text-align: center;">If you did not attempt to sign in, please update your password immediately.</p>
+      </div>
+    `
+  };
+
+  await transporter.sendMail(mailOptions);
+}
+
+// Verify 2FA OTP Code
+app.post('/api/admin/verify-2fa', async (req, res) => {
+  try {
+    const { userId, code } = req.body;
+    if (!userId || !code) return res.status(400).json({ error: 'User ID and verification code are required' });
+
+    const { Op } = require('sequelize');
+    const user = await User.findOne({
+      where: {
+        id: userId,
+        two_factor_code: code,
+        two_factor_expires: { [Op.gt]: new Date() }
+      }
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid or expired verification code' });
+    }
+
+    // Clear verification session code
+    user.two_factor_code = null;
+    user.two_factor_expires = null;
+    await user.save();
+
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

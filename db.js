@@ -340,6 +340,18 @@ const User = sequelize.define('User', {
   reset_token_expires: {
     type: DataTypes.DATE,
     allowNull: true,
+  },
+  two_factor_enabled: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  two_factor_code: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  two_factor_expires: {
+    type: DataTypes.DATE,
+    allowNull: true,
   }
 });
 

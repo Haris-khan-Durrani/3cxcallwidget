@@ -29,6 +29,7 @@
               <tr>
                 <th>Username</th>
                 <th>Email</th>
+                <th>2-Step Verification</th>
                 <th>Role</th>
                 <th>Created At</th>
                 <th style="text-align: right;">Actions</th>
@@ -42,6 +43,11 @@
                 </td>
                 <td class="date-cell">
                   {{ u.email || '—' }}
+                </td>
+                <td>
+                  <span class="badge" :class="u.two_factor_enabled ? 'badge-green' : 'badge-red'">
+                    {{ u.two_factor_enabled ? 'Active (Email)' : 'Disabled' }}
+                  </span>
                 </td>
                 <td>
                   <span class="badge" :class="u.role === 'admin' ? 'badge-blue' : 'badge-orange'">
@@ -97,6 +103,18 @@
                 <option value="agent">Agent / Regular User</option>
               </select>
             </div>
+            <div class="form-group toggle-wrap">
+              <div>
+                <span class="toggle-label-text">2-Step Verification</span>
+                <p class="toggle-sub" :style="!editUser.email ? 'color: var(--red)' : ''">
+                  {{ !editUser.email ? '⚠️ Requires email address to enable.' : 'Require email OTP code when signing in.' }}
+                </p>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" v-model="editUser.two_factor_enabled" :disabled="!editUser.email" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
           </div>
           <div class="modal-footer">
             <button class="btn btn-ghost" @click="showEditModal = false">Cancel</button>
@@ -131,6 +149,18 @@
                 <option value="admin">Administrator</option>
                 <option value="agent">Agent / Regular User</option>
               </select>
+            </div>
+            <div class="form-group toggle-wrap">
+              <div>
+                <span class="toggle-label-text">2-Step Verification</span>
+                <p class="toggle-sub" :style="!newUser.email ? 'color: var(--red)' : ''">
+                  {{ !newUser.email ? '⚠️ Requires email address to enable.' : 'Require email OTP code when signing in.' }}
+                </p>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" v-model="newUser.two_factor_enabled" :disabled="!newUser.email" />
+                <span class="toggle-track"></span>
+              </label>
             </div>
           </div>
           <div class="modal-footer">
@@ -173,10 +203,10 @@ const users = ref([])
 const loading = ref(false)
 
 const showCreateModal = ref(false)
-const newUser = reactive({ username: '', email: '', password: '', role: 'admin' })
+const newUser = reactive({ username: '', email: '', password: '', role: 'admin', two_factor_enabled: false })
 
 const showEditModal = ref(false)
-const editUser = reactive({ id: '', username: '', email: '', role: 'admin' })
+const editUser = reactive({ id: '', username: '', email: '', role: 'admin', two_factor_enabled: false })
 
 const showResetModal = ref(false)
 const activeUser = ref(null)
@@ -203,6 +233,7 @@ function openCreateModal() {
   newUser.email = ''
   newUser.password = ''
   newUser.role = 'admin'
+  newUser.two_factor_enabled = false
   showCreateModal.value = true
 }
 
@@ -222,6 +253,7 @@ function openEditModal(user) {
   editUser.username = user.username
   editUser.email = user.email || ''
   editUser.role = user.role
+  editUser.two_factor_enabled = !!user.two_factor_enabled
   showEditModal.value = true
 }
 
@@ -230,7 +262,8 @@ async function updateUser() {
     await axios.put(`/api/admin/users/${editUser.id}`, {
       username: editUser.username,
       email: editUser.email,
-      role: editUser.role
+      role: editUser.role,
+      two_factor_enabled: editUser.two_factor_enabled
     })
     toast('User details updated successfully', 'success')
     showEditModal.value = false

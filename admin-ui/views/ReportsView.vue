@@ -233,8 +233,11 @@
                     <span class="badge" :class="statusClass(r.status)">{{ r.status }}</span>
                   </td>
                   <td>
-                    <a v-if="r.recording_id" :href="getRecordingUrl(r)" class="rec-link" title="Download recording" target="_blank">
-                      <svg style="width:16px;height:16px;display:block;" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                    <a v-if="r.recording_id" href="javascript:void(0)" @click.prevent="playRecording(r)" class="rec-link" title="Play recording">
+                      <svg style="width:16px;height:16px;display:block;" viewBox="0 0 24 24" fill="currentColor">
+                        <path v-if="activeAudioUrl && activeAudioUrl.includes('/recordings/' + r.recording_id + '/listen') && audioPlaying" d="M9 19H7V5h2v14zm8 0h-2V5h2v14z"/>
+                        <path v-else d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                      </svg>
                     </a>
                     <span v-else style="color:var(--text3)">—</span>
                   </td>
@@ -306,12 +309,58 @@
           </div>
         </div>
       </div>
+      <!-- Floating Audio Player Bar -->
+      <div v-if="activeAudioUrl" class="audio-player-bar card animate-slide-up">
+        <audio 
+          ref="audioRef" 
+          :src="activeAudioUrl" 
+          @play="audioPlaying = true" 
+          @pause="audioPlaying = false" 
+          @timeupdate="onTimeUpdate" 
+          @loadedmetadata="onLoadedMetadata"
+          @waiting="audioLoading = true"
+          @playing="audioLoading = false"
+          @ended="onAudioEnded"
+          style="display: none;"
+        ></audio>
+
+        <div class="ap-info">
+          <span class="ap-icon">🎵</span>
+          <div class="ap-meta">
+            <div class="ap-title">{{ activeAudioTitle }}</div>
+            <div class="ap-sub">Listening to 3CX Recording</div>
+          </div>
+        </div>
+
+        <div class="ap-controls">
+          <button class="btn btn-icon btn-ghost play-btn" @click="togglePlay" style="font-size: 16px;">
+            <span v-if="audioLoading" class="ap-spinner"></span>
+            <span v-else-if="audioPlaying">⏸️</span>
+            <span v-else>▶️</span>
+          </button>
+          
+          <div class="ap-timeline">
+            <span class="time-label">{{ formatAudioTime(audioCurrentTime) }}</span>
+            <input 
+              type="range" 
+              min="0" 
+              :max="audioDuration || 100" 
+              :value="audioCurrentTime" 
+              @input="onSeek" 
+              class="ap-slider" 
+            />
+            <span class="time-label">{{ formatAudioTime(audioDuration) }}</span>
+          </div>
+        </div>
+
+        <button class="btn btn-icon btn-ghost close-btn" @click="closeAudio" style="font-size: 12px; margin-left: 10px;">✕</button>
+      </div>
     </div>
   </AppLayout>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject, nextTick } from 'vue'
 import axios from 'axios'
 import AppLayout from '../components/AppLayout.vue'
 import { useWidgetStore } from '../stores'
@@ -335,6 +384,92 @@ const customEndDate = ref('')
 const statusFilter = ref('')
 const agentFilter = ref('')
 const activeTab = ref('calls')
+
+// Audio player state
+const audioRef = ref(null)
+const activeAudioUrl = ref('')
+const activeAudioTitle = ref('')
+const audioPlaying = ref(false)
+const audioDuration = ref(0)
+const audioCurrentTime = ref(0)
+const audioLoading = ref(false)
+
+function playRecording(r) {
+  const token = localStorage.getItem('admin_token') || ''
+  const apiBase = import.meta.env.VITE_API_URL || window.location.origin
+  const url = `${apiBase}/api/admin/widgets/${r.widgetId}/recordings/${r.recording_id}/listen?token=${encodeURIComponent(token)}`
+  
+  if (activeAudioUrl.value === url) {
+    togglePlay()
+    return
+  }
+  
+  activeAudioUrl.value = url
+  activeAudioTitle.value = `Call from ${r.customer_name || r.customer_phone || 'Customer'} (${r.duration_seconds || '0'}s)`
+  audioPlaying.value = false
+  audioLoading.value = true
+  audioCurrentTime.value = 0
+  audioDuration.value = 0
+
+  nextTick(() => {
+    if (audioRef.value) {
+      audioRef.value.load()
+      audioRef.value.play().catch(err => {
+        console.error('Audio playback failed:', err)
+        audioLoading.value = false
+      })
+    }
+  })
+}
+
+function togglePlay() {
+  if (!audioRef.value) return
+  if (audioPlaying.value) {
+    audioRef.value.pause()
+  } else {
+    audioRef.value.play().catch(e => console.error(e))
+  }
+}
+
+function closeAudio() {
+  if (audioRef.value) {
+    audioRef.value.pause()
+  }
+  activeAudioUrl.value = ''
+  audioPlaying.value = false
+}
+
+function onTimeUpdate() {
+  if (audioRef.value) {
+    audioCurrentTime.value = audioRef.value.currentTime
+  }
+}
+
+function onLoadedMetadata() {
+  if (audioRef.value) {
+    audioDuration.value = audioRef.value.duration
+  }
+  audioLoading.value = false
+}
+
+function onSeek(e) {
+  if (audioRef.value) {
+    audioRef.value.currentTime = parseFloat(e.target.value)
+    audioCurrentTime.value = audioRef.value.currentTime
+  }
+}
+
+function onAudioEnded() {
+  audioPlaying.value = false
+  audioCurrentTime.value = 0
+}
+
+function formatAudioTime(s) {
+  if (!s || isNaN(s)) return '0:00'
+  const mins = Math.floor(s / 60)
+  const secs = Math.floor(s % 60)
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`
+}
 
 onMounted(() => {
   if (!store.widgets.length) store.fetch()
@@ -935,4 +1070,104 @@ tbody tr:hover { background: rgba(255,255,255,.02); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 768px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Floating Premium Audio Player Bar */
+.audio-player-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 680px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  z-index: 1000;
+}
+.ap-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 180px;
+  max-width: 240px;
+}
+.ap-icon {
+  font-size: 20px;
+  background: var(--bg3);
+  padding: 6px;
+  border-radius: 8px;
+  line-height: 1;
+}
+.ap-meta {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ap-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ap-sub {
+  font-size: 10px;
+  color: var(--text3);
+}
+.ap-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+}
+.ap-timeline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.time-label {
+  font-size: 11px;
+  color: var(--text2);
+  font-family: monospace;
+}
+.ap-slider {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  appearance: none;
+  outline: none;
+  cursor: pointer;
+}
+.ap-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 50%;
+  transition: transform 0.1s;
+}
+.ap-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+.ap-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ap-spin 0.8s linear infinite;
+  display: inline-block;
+}
+@keyframes ap-spin {
+  to { transform: rotate(360deg); }
+}
 </style>

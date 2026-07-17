@@ -233,15 +233,40 @@
                     <span class="badge" :class="statusClass(r.status)">{{ r.status }}</span>
                   </td>
                   <td>
-                    <div class="rec-cell" style="display: flex; align-items: center; gap: 6px;">
-                      <audio 
-                        v-if="activeAudioRowId === r.id" 
-                        controls 
-                        autoplay 
-                        class="inline-audio"
-                        :src="getListenUrl(r)"
-                      ></audio>
-                      <button v-if="activeAudioRowId === r.id" class="btn-close-inline" @click="activeAudioRowId = null" title="Close player">✕</button>
+                    <div class="rec-cell">
+                      <div v-if="activeAudioRowId === r.id" class="inline-player">
+                        <audio 
+                          ref="audioRef" 
+                          :src="getListenUrl(r)" 
+                          autoplay
+                          @play="audioPlaying = true"
+                          @pause="audioPlaying = false"
+                          @timeupdate="onTimeUpdate"
+                          @loadedmetadata="onLoadedMetadata"
+                          @ended="onAudioEnded"
+                          style="display: none;"
+                        ></audio>
+                        
+                        <button class="inline-btn play-btn" @click.prevent="togglePlay" type="button">
+                          <span v-if="audioPlaying">⏸️</span>
+                          <span v-else>▶️</span>
+                        </button>
+                        
+                        <div class="inline-timeline">
+                          <span class="inline-time">{{ formatAudioTime(audioCurrentTime) }}</span>
+                          <input 
+                            type="range" 
+                            min="0" 
+                            :max="audioDuration || 100" 
+                            :value="audioCurrentTime" 
+                            @input="onSeek" 
+                            class="inline-slider" 
+                          />
+                          <span class="inline-time">{{ formatAudioTime(audioDuration) }}</span>
+                        </div>
+                        
+                        <button class="inline-btn close-btn" @click.prevent="closeAudio" title="Close">✕</button>
+                      </div>
 
                       <a v-else-if="r.recording_id" href="javascript:void(0)" @click.prevent="playInline(r)" class="rec-link" title="Play recording">
                         <svg style="width:16px;height:16px;display:block;" viewBox="0 0 24 24" fill="currentColor">
@@ -351,9 +376,77 @@ const activeTab = ref('calls')
 
 // Inline audio player state
 const activeAudioRowId = ref(null)
+const audioRef = ref(null)
+const audioPlaying = ref(false)
+const audioDuration = ref(0)
+const audioCurrentTime = ref(0)
 
 function playInline(r) {
+  if (activeAudioRowId.value === r.id) {
+    togglePlay()
+    return
+  }
   activeAudioRowId.value = r.id
+  audioPlaying.value = false
+  audioCurrentTime.value = 0
+  audioDuration.value = 0
+
+  nextTick(() => {
+    if (audioRef.value) {
+      audioRef.value.load()
+      audioRef.value.play().catch(err => {
+        console.error('Audio playback failed:', err)
+      })
+    }
+  })
+}
+
+function togglePlay() {
+  if (!audioRef.value) return
+  if (audioPlaying.value) {
+    audioRef.value.pause()
+  } else {
+    audioRef.value.play().catch(e => console.error(e))
+  }
+}
+
+function closeAudio() {
+  if (audioRef.value) {
+    audioRef.value.pause()
+  }
+  activeAudioRowId.value = null
+  audioPlaying.value = false
+}
+
+function onTimeUpdate() {
+  if (audioRef.value) {
+    audioCurrentTime.value = audioRef.value.currentTime
+  }
+}
+
+function onLoadedMetadata() {
+  if (audioRef.value) {
+    audioDuration.value = audioRef.value.duration
+  }
+}
+
+function onSeek(e) {
+  if (audioRef.value) {
+    audioRef.value.currentTime = parseFloat(e.target.value)
+    audioCurrentTime.value = audioRef.value.currentTime
+  }
+}
+
+function onAudioEnded() {
+  audioPlaying.value = false
+  audioCurrentTime.value = 0
+}
+
+function formatAudioTime(s) {
+  if (!s || isNaN(s)) return '0:00'
+  const mins = Math.floor(s / 60)
+  const secs = Math.floor(s % 60)
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`
 }
 
 function getListenUrl(r) {
@@ -962,26 +1055,67 @@ tbody tr:hover { background: rgba(255,255,255,.02); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 768px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
 
-/* Inline Audio Player */
-.inline-audio {
-  height: 28px;
-  width: 180px;
-  outline: none;
-  background: var(--bg3);
-  border-radius: 14px;
+/* Inline Custom Dark Player */
+.inline-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 30px;
+  width: 100%;
+  max-width: 220px;
 }
-.btn-close-inline {
+.inline-btn {
   background: transparent;
   border: none;
-  color: var(--text3);
+  color: var(--text);
   cursor: pointer;
-  font-size: 11px;
-  padding: 2px 4px;
+  font-size: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  transition: background 0.15s;
+  padding: 0;
 }
-.btn-close-inline:hover {
-  color: var(--text);
+.inline-btn:hover {
+  background: rgba(255,255,255,0.1);
+}
+.inline-timeline {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  overflow: hidden;
+}
+.inline-time {
+  font-size: 10px;
+  color: var(--text2);
+  font-family: monospace;
+}
+.inline-slider {
+  flex: 1;
+  height: 3px;
+  background: var(--border);
+  border-radius: 1.5px;
+  appearance: none;
+  outline: none;
+  cursor: pointer;
+  min-width: 40px;
+}
+.inline-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  transition: transform 0.1s;
+}
+.inline-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
 }
 </style>

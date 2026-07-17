@@ -235,18 +235,6 @@
                   <td>
                     <div class="rec-cell">
                       <div v-if="activeAudioRowId === r.id" class="inline-player">
-                        <audio 
-                          ref="audioRef" 
-                          :src="getListenUrl(r)" 
-                          autoplay
-                          @play="audioPlaying = true"
-                          @pause="audioPlaying = false"
-                          @timeupdate="onTimeUpdate"
-                          @loadedmetadata="onLoadedMetadata"
-                          @ended="onAudioEnded"
-                          style="display: none;"
-                        ></audio>
-                        
                         <button class="inline-btn play-btn" @click.prevent="togglePlay" type="button">
                           <span v-if="audioPlaying">⏸️</span>
                           <span v-else>▶️</span>
@@ -391,6 +379,8 @@ const audioPlaying = ref(false)
 const audioDuration = ref(0)
 const audioCurrentTime = ref(0)
 
+const activeAudioUrl = ref('')
+
 function playInline(r) {
   if (activeAudioRowId.value === r.id) {
     togglePlay()
@@ -399,7 +389,12 @@ function playInline(r) {
   activeAudioRowId.value = r.id
   audioPlaying.value = false
   audioCurrentTime.value = 0
-  audioDuration.value = 0
+  // Pre-populate duration from database record
+  audioDuration.value = r.duration_seconds || 0
+
+  const token = localStorage.getItem('admin_token') || ''
+  const apiBase = import.meta.env.VITE_API_URL || window.location.origin
+  activeAudioUrl.value = `${apiBase}/api/admin/widgets/${r.widgetId}/recordings/${r.recording_id}/listen?token=${encodeURIComponent(token)}`
 
   nextTick(() => {
     if (audioRef.value) {
@@ -425,6 +420,7 @@ function closeAudio() {
     audioRef.value.pause()
   }
   activeAudioRowId.value = null
+  activeAudioUrl.value = ''
   audioPlaying.value = false
 }
 
@@ -435,7 +431,7 @@ function onTimeUpdate() {
 }
 
 function onLoadedMetadata() {
-  if (audioRef.value) {
+  if (audioRef.value && audioRef.value.duration && !isNaN(audioRef.value.duration) && audioRef.value.duration !== Infinity) {
     audioDuration.value = audioRef.value.duration
   }
 }

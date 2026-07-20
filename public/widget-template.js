@@ -1134,6 +1134,9 @@
       <div class="cx-body" id="cx-form-wrap">
         <form id="cx-form" novalidate>
           ${formHtml}
+          <div style="position: absolute; left: -9999px; top: -9999px; opacity: 0; height: 0; width: 0; overflow: hidden;" aria-hidden="true" tabindex="-1">
+            <input type="text" name="website_hp_confirm" id="cx-hp-field" tabindex="-1" autocomplete="off" value="" />
+          </div>
           <button type="submit" class="cx-btn" id="cx-submit">${actualBtnText}</button>
         </form>
       </div>
@@ -1412,11 +1415,23 @@
     $submit.disabled = true;
     $submit.textContent = OFFICE_CLOSED ? 'Submitting…' : 'Connecting…';
 
+    const $hpInp = document.getElementById('cx-hp-field');
+    const hpVal  = $hpInp ? $hpInp.value : '';
+
     try {
       const res = await fetch(`${SERVER_URL}/api/call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ widgetId: WIDGET_ID, firstName, lastName, email, phone, agentExtension: agentExt, pageUrl: window.location.href }),
+        body: JSON.stringify({
+          widgetId: WIDGET_ID,
+          firstName,
+          lastName,
+          email,
+          phone,
+          agentExtension: agentExt,
+          pageUrl: window.location.href,
+          website_hp_confirm: hpVal
+        }),
       });
       if (res.ok) {
         const d = await res.json().catch(() => ({}));

@@ -1454,7 +1454,27 @@ function isValidPhoneNumber(phone) {
 
 // 2. API to initiate the call
 app.post('/api/call', async (req, res) => {
-  const { widgetId, firstName, lastName, email, phone, agentExtension } = req.body;
+  const { widgetId, firstName, lastName, email, phone, agentExtension, website_hp_confirm, website, fax } = req.body;
+
+  const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || req.ip || '';
+
+  // 1. Honeypot Anti-Bot Protection: Real human visitors cannot see or fill hidden fields
+  const honeypotTriggered = (website_hp_confirm && String(website_hp_confirm).trim() !== '') ||
+                            (website && String(website).trim() !== '') ||
+                            (fax && String(fax).trim() !== '');
+
+  if (honeypotTriggered) {
+    console.warn(`[Security] Spam Bot Honeypot triggered from IP ${clientIp} for Widget ${widgetId}`);
+    // Return fake success response so bot doesn't retry, without creating a call record or touching 3CX
+    return res.json({ success: true, message: 'Call initiated successfully', callId: null });
+  }
+
+  // 2. Spam Pattern Check: Reject inputs with embedded spam website URLs
+  const containsUrlPattern = /(https?:\/\/|www\.|[a-zA-Z0-9-]+\.(com|ru|xyz|top|online|site|info))/i;
+  if (containsUrlPattern.test(firstName) || containsUrlPattern.test(lastName || '') || containsUrlPattern.test(phone)) {
+    console.warn(`[Security] Spam URL detected in form input from IP ${clientIp}`);
+    return res.json({ success: true, message: 'Call initiated successfully', callId: null });
+  }
 
   if (!widgetId || !firstName || !phone) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -1470,7 +1490,6 @@ app.post('/api/call', async (req, res) => {
       return res.status(404).json({ error: 'Widget not found' });
     }
 
-    const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || req.ip || '';
     const pageUrl  = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
 
     // Save call record

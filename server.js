@@ -1482,6 +1482,9 @@ app.post('/api/call', async (req, res) => {
       status: 'Initiated'
     });
 
+    // Immediately trigger webhooks for call initiation event
+    await triggerUserWebhook(callRecord, widget);
+
     // Check office hours: If closed, skip 3CX call control and save as offline lead
     const isClosed = !isOfficeHours(widget);
     if (isClosed) {

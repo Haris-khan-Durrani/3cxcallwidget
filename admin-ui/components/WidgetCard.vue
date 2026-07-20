@@ -27,6 +27,10 @@
           <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="margin-right:3px; vertical-align:middle;"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
           Design
         </router-link>
+        <button class="btn btn-ghost btn-sm btn-action-edit" @click="openEditWidget">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="margin-right:3px; vertical-align:middle;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          Edit
+        </button>
         <a :href="`/preview/${widget.id}`" target="_blank" class="btn btn-ghost btn-sm btn-action-preview">
           <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="margin-right:3px; vertical-align:middle;"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
           Preview
@@ -176,6 +180,60 @@
         </div>
       </transition>
     </teleport>
+
+    <!-- Edit Widget Settings Modal -->
+    <teleport to="body">
+      <transition name="fade">
+        <div v-if="showEditWidgetModal" class="modal-backdrop" @click.self="showEditWidgetModal = false">
+          <div class="modal-box card" @click.stop>
+            <div class="modal-header">
+              <h3>Edit Widget Settings</h3>
+              <button class="btn btn-icon btn-ghost" @click="showEditWidgetModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label">Widget Name *</label>
+                  <input v-model="editWidgetForm.name" type="text" class="input" placeholder="e.g. Main Website" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Location ID (GHL / CRM Location ID)</label>
+                  <input v-model="editWidgetForm.location_id" type="text" class="input" placeholder="e.g. loc_abc12345" />
+                </div>
+              </div>
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label">3CX Server URL (FQDN)</label>
+                  <input v-model="editWidgetForm.fqdn_3cx" type="text" class="input" placeholder="ebmsdxb.3cx.ae:3081" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Client ID</label>
+                  <input v-model="editWidgetForm.client_id_3cx" type="text" class="input" placeholder="your-client-id" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Client Secret</label>
+                <input v-model="editWidgetForm.client_secret_3cx" type="password" class="input" placeholder="••••••••••••" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Fallback Extension / Queue</label>
+                <input v-model="editWidgetForm.agent_extension_3cx" type="text" class="input" placeholder="800" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">n8n / GoHighLevel Webhook URL</label>
+                <input v-model="editWidgetForm.webhook_url_n8n" type="url" class="input" placeholder="https://..." />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-ghost" @click="showEditWidgetModal = false">Cancel</button>
+              <button class="btn btn-primary" :disabled="savingWidget" @click="saveWidgetSettings">
+                {{ savingWidget ? 'Saving...' : 'Save Changes' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </teleport>
   </div>
 </template>
 
@@ -192,6 +250,46 @@ const showAddAgent = ref(false)
 const addingAgent = ref(false)
 const copied = ref(false)
 const cloning = ref(false)
+
+const showEditWidgetModal = ref(false)
+const savingWidget = ref(false)
+const editWidgetForm = reactive({
+  name: '',
+  location_id: '',
+  fqdn_3cx: '',
+  client_id_3cx: '',
+  client_secret_3cx: '',
+  agent_extension_3cx: '',
+  webhook_url_n8n: ''
+})
+
+function openEditWidget() {
+  Object.assign(editWidgetForm, {
+    name: props.widget.name || '',
+    location_id: props.widget.location_id || '',
+    fqdn_3cx: props.widget.fqdn_3cx || '',
+    client_id_3cx: props.widget.client_id_3cx || '',
+    client_secret_3cx: props.widget.client_secret_3cx || '',
+    agent_extension_3cx: props.widget.agent_extension_3cx || '',
+    webhook_url_n8n: props.widget.webhook_url_n8n || ''
+  })
+  showEditWidgetModal.value = true
+}
+
+async function saveWidgetSettings() {
+  if (!editWidgetForm.name) return toast('Widget name is required', 'error')
+  savingWidget.value = true
+  try {
+    await store.update(props.widget.id, { ...editWidgetForm })
+    toast('Widget updated successfully!')
+    showEditWidgetModal.value = false
+    emit('agent-added')
+  } catch {
+    toast('Failed to save widget settings', 'error')
+  } finally {
+    savingWidget.value = false
+  }
+}
 
 const editingAgentId = ref(null)
 const agentForm = reactive({ first_name: '', last_name: '', extension: '', crm_agent_id: '', email: '', avatar_url: '' })

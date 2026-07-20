@@ -448,11 +448,16 @@
 
             <!-- ── CONNECTION ────────────────────────────────────────────── -->
             <template v-if="tab==='connection'">
-              <div class="ps-head">3CX API Connection</div>
+              <div class="ps-head">Widget Details & 3CX API Connection</div>
               <p class="hint" style="margin-bottom:14px">
-                Enter your 3CX server OAuth credentials. These are generated in
-                <strong>Management Console → Users → Administrators → (API user)</strong>.
+                Configure widget name, location tracking ID, and your 3CX server OAuth credentials.
               </p>
+
+              <div class="ps-field">
+                <label>Widget Name *</label>
+                <input v-model="cf.name" class="inp" placeholder="e.g. Main Website Widget"/>
+                <span class="hint">Name displayed in your dashboard widget cards</span>
+              </div>
 
               <div class="ps-field">
                 <label>3CX Server URL (FQDN)</label>
@@ -972,6 +977,8 @@ const unifiedIconSize = computed({
 });
 
 const cf = reactive({
+  name: '',
+  location_id: '',
   fqdn_3cx: '',
   client_id_3cx: '',
   client_secret_3cx: '',
@@ -1024,6 +1031,8 @@ onMounted(async () => {
       'tooltip_autohide','tooltip_autohide_seconds']
     fields.forEach(k => { if (w[k] !== undefined && w[k] !== null) f[k] = w[k] })
     Object.assign(cf, {
+      name:               w.name                || '',
+      location_id:        w.location_id         || '',
       fqdn_3cx:           w.fqdn_3cx            || '',
       client_id_3cx:      w.client_id_3cx       || '',
       client_secret_3cx:  w.client_secret_3cx   || '',

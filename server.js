@@ -79,6 +79,33 @@ function isOfficeHours(widget) {
 }
 
 /**
+ * Safely parses custom webhook headers (stored as JSON string or array) into an object.
+ */
+function parseWebhookHeaders(rawHeaders) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (!rawHeaders) return headers;
+  try {
+    const parsed = typeof rawHeaders === 'string' ? JSON.parse(rawHeaders) : rawHeaders;
+    if (Array.isArray(parsed)) {
+      parsed.forEach(h => {
+        if (h && h.key && String(h.key).trim()) {
+          headers[String(h.key).trim()] = String(h.value || '');
+        }
+      });
+    } else if (typeof parsed === 'object') {
+      Object.keys(parsed).forEach(k => {
+        if (k && k.trim()) {
+          headers[k.trim()] = String(parsed[k]);
+        }
+      });
+    }
+  } catch (err) {
+    console.error('[Webhook] Failed to parse custom headers:', err.message);
+  }
+  return headers;
+}
+
+/**
  * Sends a detailed webhook payload to the configured n8n/GHL URL on call lifecycle changes.
  */
 async function triggerUserWebhook(callRecord, widget) {
@@ -169,9 +196,11 @@ async function triggerUserWebhook(callRecord, widget) {
       timestamp:          new Date()
     };
 
+    const requestHeaders = parseWebhookHeaders(widget.webhook_headers);
+
     for (const url of uniqueUrls) {
       try {
-        await axios.post(url, payload, { timeout: 5000 });
+        await axios.post(url, payload, { headers: requestHeaders, timeout: 5000 });
         console.log(`[Webhook] Sent call lifecycle update for ${callRecord.id} to ${url}`);
       } catch (err) {
         console.error(`[Webhook] Failed to send update to ${url}:`, err.message);
@@ -255,9 +284,11 @@ async function triggerDialerWebhook(record, dialer) {
       timestamp:          new Date()
     };
 
+    const requestHeaders = parseWebhookHeaders(dialer.webhook_headers);
+
     for (const url of uniqueUrls) {
       try {
-        await axios.post(url, payload, { timeout: 5000 });
+        await axios.post(url, payload, { headers: requestHeaders, timeout: 5000 });
         console.log(`[Dialer Webhook] Sent call update for ${record.id} to ${url}`);
       } catch (err) {
         console.error(`[Dialer Webhook] Failed to send update to ${url}:`, err.message);
@@ -1143,17 +1174,10 @@ let lastKnownAppUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
 
 function getAppUrl(req) {
   if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
-    return process.env.APP_URL.replace(/\/$/, '');
+    return process.env.APP_URL.replace(/\/+$/, '');
   }
-  if (req) {
-    const host = req.headers['x-forwarded-host'] || req.headers.host;
-    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
-      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-      return `${proto}://${host}`.replace(/\/$/, '');
-    }
-  }
-  if (lastKnownAppUrl && !lastKnownAppUrl.includes('localhost')) {
-    return lastKnownAppUrl.replace(/\/$/, '');
+  if (detectedHost) {
+    return `${detectedProto}://${detectedHost}`.replace(/\/+$/, '');
   }
   if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost')) {
     return process.env.FRONTEND_URL.replace(/\/$/, '');

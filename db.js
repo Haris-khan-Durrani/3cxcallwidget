@@ -132,6 +132,7 @@ const Widget = sequelize.define('Widget', {
   tooltip_autohide:      { type: DataTypes.BOOLEAN, defaultValue: true },
   tooltip_autohide_seconds: { type: DataTypes.INTEGER, defaultValue: 15 },
   location_id:           { type: DataTypes.STRING, allowNull: true },
+  webhook_headers:       { type: DataTypes.TEXT, allowNull: true },
 });
 
 const CallRecord = sequelize.define('CallRecord', {
@@ -274,6 +275,10 @@ const DialerWidget = sequelize.define('DialerWidget', {
   },
   location_id: {
     type: DataTypes.STRING,
+    allowNull: true,
+  },
+  webhook_headers: {
+    type: DataTypes.TEXT,
     allowNull: true,
   }
 });

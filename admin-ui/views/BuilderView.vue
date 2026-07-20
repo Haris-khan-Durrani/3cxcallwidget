@@ -571,6 +571,25 @@
                 <input v-model="cf.webhook_lead" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent when an offline lead form is submitted</span>
               </div>
+
+              <!-- Custom Webhook Headers -->
+              <div class="ps-field" style="margin-top: 20px;">
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                  <span>Custom HTTP Headers <span class="opt-tag">optional</span></span>
+                  <button type="button" class="btn btn-ghost btn-sm" @click="addHeaderRow" style="padding:2px 8px; font-size:11px;">+ Add Header</button>
+                </label>
+                <span class="hint" style="margin-bottom:8px; display:block;">
+                  Send custom request headers (e.g. <code>x-api-key</code>, <code>x-api</code>, <code>Authorization</code>) with every webhook event.
+                </span>
+                <div v-if="!headersList.length" style="color:var(--text3); font-size:12px; font-style:italic;">No custom headers configured.</div>
+                <div v-else style="display:flex; flex-direction:column; gap:8px;">
+                  <div v-for="(h, idx) in headersList" :key="idx" style="display:flex; gap:8px; align-items:center;">
+                    <input v-model="h.key" class="inp" style="flex:1;" placeholder="Header Name (e.g. x-api-key)" />
+                    <input v-model="h.value" class="inp" style="flex:1;" placeholder="Header Value (e.g. secret123)" />
+                    <button type="button" class="btn btn-danger btn-sm" @click="removeHeaderRow(idx)" style="padding:4px 8px;">✕</button>
+                  </div>
+                </div>
+              </div>
             </template>
 
             <!-- ── OFFICE HOURS ────────────────────────────────────────── -->
@@ -992,6 +1011,28 @@ const cf = reactive({
   webhook_lead: ''
 })
 
+const headersList = ref([])
+
+function addHeaderRow() {
+  headersList.value.push({ key: '', value: '' })
+}
+function removeHeaderRow(idx) {
+  headersList.value.splice(idx, 1)
+}
+function parseHeadersToList(raw) {
+  if (!raw) return []
+  try {
+    const data = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (Array.isArray(data)) return data.map(item => ({ key: item.key || '', value: item.value || '' }))
+    if (typeof data === 'object') return Object.entries(data).map(([key, value]) => ({ key, value }))
+  } catch (e) {}
+  return []
+}
+function stringifyHeadersList(list) {
+  const filtered = list.filter(h => h.key && h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value || '' }))
+  return JSON.stringify(filtered)
+}
+
 // Drag and drop form fields reordering state
 const fieldsList = ref([
   { id: 'first_name', label: 'First Name' },
@@ -1045,6 +1086,7 @@ onMounted(async () => {
       webhook_failed:     w.webhook_failed      || '',
       webhook_lead:       w.webhook_lead        || '',
     })
+    headersList.value = parseHeadersToList(w.webhook_headers)
 
     // Restore sorted fields list order
     if (f.fields_order) {
@@ -1185,7 +1227,8 @@ function themePreviewStyle(val) {
 async function save() {
   saving.value = true
   try {
-    await store.update(route.params.id, { ...f, ...cf })
+    const webhook_headers = stringifyHeadersList(headersList.value)
+    await store.update(route.params.id, { ...f, ...cf, webhook_headers })
     widget.value = store.getById(route.params.id)
     toast('Widget saved!')
   } catch { toast('Save failed', 'error') }

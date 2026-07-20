@@ -220,8 +220,28 @@
                 <input v-model="editWidgetForm.agent_extension_3cx" type="text" class="input" placeholder="800" />
               </div>
               <div class="form-group">
-                <label class="form-label">n8n / GoHighLevel Webhook URL</label>
+                <label class="form-label">n8n / GHL Webhook URL (Global) <span style="color:var(--text3)">(optional)</span></label>
                 <input v-model="editWidgetForm.webhook_url_n8n" type="url" class="input" placeholder="https://..." />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Call Dialing / Initiated Webhook <span style="color:var(--text3)">(optional)</span></label>
+                <input v-model="editWidgetForm.webhook_initiated" type="url" class="input" placeholder="https://..." />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Call Answered Webhook <span style="color:var(--text3)">(optional)</span></label>
+                <input v-model="editWidgetForm.webhook_answered" type="url" class="input" placeholder="https://..." />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Call Completed Webhook <span style="color:var(--text3)">(optional)</span></label>
+                <input v-model="editWidgetForm.webhook_completed" type="url" class="input" placeholder="https://..." />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Call Failed / Busy Webhook <span style="color:var(--text3)">(optional)</span></label>
+                <input v-model="editWidgetForm.webhook_failed" type="url" class="input" placeholder="https://..." />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Offline Lead Webhook <span style="color:var(--text3)">(optional)</span></label>
+                <input v-model="editWidgetForm.webhook_lead" type="url" class="input" placeholder="https://..." />
               </div>
               <!-- Custom Webhook Headers -->
               <div class="form-group" style="margin-top: 14px;">
@@ -281,7 +301,12 @@ const editWidgetForm = reactive({
   client_id_3cx: '',
   client_secret_3cx: '',
   agent_extension_3cx: '',
-  webhook_url_n8n: ''
+  webhook_url_n8n: '',
+  webhook_initiated: '',
+  webhook_answered: '',
+  webhook_completed: '',
+  webhook_failed: '',
+  webhook_lead: ''
 })
 
 function openEditWidget() {
@@ -292,7 +317,12 @@ function openEditWidget() {
     client_id_3cx: props.widget.client_id_3cx || '',
     client_secret_3cx: props.widget.client_secret_3cx || '',
     agent_extension_3cx: props.widget.agent_extension_3cx || '',
-    webhook_url_n8n: props.widget.webhook_url_n8n || ''
+    webhook_url_n8n: props.widget.webhook_url_n8n || '',
+    webhook_initiated: props.widget.webhook_initiated || '',
+    webhook_answered: props.widget.webhook_answered || '',
+    webhook_completed: props.widget.webhook_completed || '',
+    webhook_failed: props.widget.webhook_failed || '',
+    webhook_lead: props.widget.webhook_lead || ''
   })
   if (props.widget.webhook_headers) {
     try {

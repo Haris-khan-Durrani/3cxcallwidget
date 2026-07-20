@@ -82,7 +82,11 @@ function isOfficeHours(widget) {
  * Safely parses custom webhook headers (stored as JSON string or array) into an object.
  */
 function parseWebhookHeaders(rawHeaders) {
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = { 
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'User-Agent': '3CXCallWidget/1.0'
+  };
   if (!rawHeaders) return headers;
   try {
     const parsed = typeof rawHeaders === 'string' ? JSON.parse(rawHeaders) : rawHeaders;

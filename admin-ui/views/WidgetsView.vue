@@ -162,8 +162,28 @@ useEffect(() => {
                   <input v-model="form.agent_extension_3cx" type="text" class="input" placeholder="800" />
                 </div>
                 <div class="form-group">
-                  <label class="form-label">n8n / GoHighLevel Webhook URL <span style="color:var(--text3)">(optional)</span></label>
+                  <label class="form-label">n8n / GHL Webhook URL (Global) <span style="color:var(--text3)">(optional)</span></label>
                   <input v-model="form.webhook_url_n8n" type="url" class="input" placeholder="https://your-n8n.com/webhook/..." />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Call Dialing / Initiated Webhook <span style="color:var(--text3)">(optional)</span></label>
+                  <input v-model="form.webhook_initiated" type="url" class="input" placeholder="https://..." />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Call Answered Webhook <span style="color:var(--text3)">(optional)</span></label>
+                  <input v-model="form.webhook_answered" type="url" class="input" placeholder="https://..." />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Call Completed Webhook <span style="color:var(--text3)">(optional)</span></label>
+                  <input v-model="form.webhook_completed" type="url" class="input" placeholder="https://..." />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Call Failed / Busy Webhook <span style="color:var(--text3)">(optional)</span></label>
+                  <input v-model="form.webhook_failed" type="url" class="input" placeholder="https://..." />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Offline Lead Webhook <span style="color:var(--text3)">(optional)</span></label>
+                  <input v-model="form.webhook_lead" type="url" class="input" placeholder="https://..." />
                 </div>
                 <!-- Custom Webhook Headers -->
                 <div class="form-group" style="margin-top: 14px;">
@@ -221,7 +241,8 @@ function removeHeaderRow(idx) { createHeadersList.value.splice(idx, 1) }
 
 const form = reactive({
   name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '',
-  agent_extension_3cx: '', webhook_url_n8n: ''
+  agent_extension_3cx: '', webhook_url_n8n: '',
+  webhook_initiated: '', webhook_answered: '', webhook_completed: '', webhook_failed: '', webhook_lead: ''
 })
 
 onMounted(() => store.fetch())
@@ -236,7 +257,11 @@ async function create() {
     const webhook_headers = JSON.stringify(filtered)
     await store.create({ ...form, webhook_headers })
     showCreateModal.value = false
-    Object.assign(form, { name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '', agent_extension_3cx: '', webhook_url_n8n: '' })
+    Object.assign(form, {
+      name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '',
+      agent_extension_3cx: '', webhook_url_n8n: '',
+      webhook_initiated: '', webhook_answered: '', webhook_completed: '', webhook_failed: '', webhook_lead: ''
+    })
     createHeadersList.value = []
     toast('Widget created!')
   } catch { toast('Failed to create widget', 'error') }

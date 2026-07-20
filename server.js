@@ -118,18 +118,32 @@ async function triggerUserWebhook(callRecord, widget) {
   const urls = [];
   if (widget.webhook_url_n8n) urls.push(widget.webhook_url_n8n);
 
-  // Add event-specific webhook URLs if configured
-  if (callRecord.status === 'Initiated' || callRecord.status === 'Ringing') {
+  const status = String(callRecord.status || '').toLowerCase();
+  const outcome = String(callRecord.outcome || '').toLowerCase();
+
+  // 1. Initiated / Ringing event
+  if (['initiated', 'ringing'].includes(status) || ['initiated', 'ringing'].includes(outcome)) {
     if (widget.webhook_initiated) urls.push(widget.webhook_initiated);
-  } else if (callRecord.status === 'Answered') {
+  }
+
+  // 2. Answered event
+  if (status === 'answered' || outcome === 'answered') {
     if (widget.webhook_answered) urls.push(widget.webhook_answered);
-  } else if (callRecord.status === 'Completed') {
-    if (callRecord.outcome === 'Lead') {
-      if (widget.webhook_lead) urls.push(widget.webhook_lead);
-    } else {
-      if (widget.webhook_completed) urls.push(widget.webhook_completed);
-    }
-  } else if (['Failed', 'Missed', 'Abandoned'].includes(callRecord.status) || ['Failed', 'Missed', 'Abandoned'].includes(callRecord.outcome)) {
+  }
+
+  // 3. Completed event (successful completed call)
+  if (status === 'completed' || outcome === 'completed') {
+    if (widget.webhook_completed) urls.push(widget.webhook_completed);
+  }
+
+  // 4. Lead event (offline lead submission)
+  if (outcome === 'lead' || status === 'lead') {
+    if (widget.webhook_lead) urls.push(widget.webhook_lead);
+  }
+
+  // 5. Failed / Missed / Abandoned / Busy event
+  if (['failed', 'missed', 'abandoned', 'declined', 'busy'].includes(status) || 
+      ['failed', 'missed', 'abandoned', 'declined', 'busy'].includes(outcome)) {
     if (widget.webhook_failed) urls.push(widget.webhook_failed);
   }
 
@@ -223,15 +237,20 @@ async function triggerDialerWebhook(record, dialer) {
   if (!dialer) return;
 
   const urls = [];
-  if (record.status === 'Initiated') {
+  const status = String(record.status || '').toLowerCase();
+  const outcome = String(record.outcome || '').toLowerCase();
+
+  if (['initiated', 'ringing'].includes(status) || ['initiated', 'ringing'].includes(outcome)) {
     if (dialer.webhook_initiated) urls.push(dialer.webhook_initiated);
-  } else if (record.status === 'Ringing') {
-    // Optionally fire on ringing if configured
-  } else if (record.status === 'Connected') {
+  }
+  if (['connected', 'answered'].includes(status) || ['connected', 'answered'].includes(outcome)) {
     if (dialer.webhook_connected) urls.push(dialer.webhook_connected);
-  } else if (record.status === 'Completed') {
+  }
+  if (status === 'completed' || outcome === 'completed') {
     if (dialer.webhook_completed) urls.push(dialer.webhook_completed);
-  } else if (record.status === 'Failed') {
+  }
+  if (['failed', 'missed', 'abandoned', 'declined', 'busy'].includes(status) || 
+      ['failed', 'missed', 'abandoned', 'declined', 'busy'].includes(outcome)) {
     if (dialer.webhook_failed) urls.push(dialer.webhook_failed);
   }
 

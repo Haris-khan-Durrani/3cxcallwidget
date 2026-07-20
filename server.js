@@ -112,39 +112,57 @@ function parseWebhookHeaders(rawHeaders) {
 /**
  * Sends a detailed webhook payload to the configured n8n/GHL URL on call lifecycle changes.
  */
-async function triggerUserWebhook(callRecord, widget) {
+async function triggerUserWebhook(callRecord, widgetOrId) {
+  let widget = widgetOrId;
+  const wId = (typeof widgetOrId === 'object' && widgetOrId?.id) ? widgetOrId.id : (callRecord.widgetId || widgetOrId);
+  if (wId) {
+    const fresh = await Widget.findByPk(wId);
+    if (fresh) widget = fresh;
+  }
   if (!widget) return;
 
   const urls = [];
-  if (widget.webhook_url_n8n) urls.push(widget.webhook_url_n8n);
+  if (widget.webhook_url_n8n && String(widget.webhook_url_n8n).trim()) {
+    urls.push(String(widget.webhook_url_n8n).trim());
+  }
 
   const status = String(callRecord.status || '').toLowerCase();
   const outcome = String(callRecord.outcome || '').toLowerCase();
 
   // 1. Initiated / Ringing event
   if (['initiated', 'ringing'].includes(status) || ['initiated', 'ringing'].includes(outcome)) {
-    if (widget.webhook_initiated) urls.push(widget.webhook_initiated);
+    if (widget.webhook_initiated && String(widget.webhook_initiated).trim()) {
+      urls.push(String(widget.webhook_initiated).trim());
+    }
   }
 
   // 2. Answered event
   if (status === 'answered' || outcome === 'answered') {
-    if (widget.webhook_answered) urls.push(widget.webhook_answered);
+    if (widget.webhook_answered && String(widget.webhook_answered).trim()) {
+      urls.push(String(widget.webhook_answered).trim());
+    }
   }
 
   // 3. Completed event (successful completed call)
   if (status === 'completed' || outcome === 'completed') {
-    if (widget.webhook_completed) urls.push(widget.webhook_completed);
+    if (widget.webhook_completed && String(widget.webhook_completed).trim()) {
+      urls.push(String(widget.webhook_completed).trim());
+    }
   }
 
   // 4. Lead event (offline lead submission)
   if (outcome === 'lead' || status === 'lead') {
-    if (widget.webhook_lead) urls.push(widget.webhook_lead);
+    if (widget.webhook_lead && String(widget.webhook_lead).trim()) {
+      urls.push(String(widget.webhook_lead).trim());
+    }
   }
 
   // 5. Failed / Missed / Abandoned / Busy event
   if (['failed', 'missed', 'abandoned', 'declined', 'busy'].includes(status) || 
       ['failed', 'missed', 'abandoned', 'declined', 'busy'].includes(outcome)) {
-    if (widget.webhook_failed) urls.push(widget.webhook_failed);
+    if (widget.webhook_failed && String(widget.webhook_failed).trim()) {
+      urls.push(String(widget.webhook_failed).trim());
+    }
   }
 
   if (urls.length === 0) return;

@@ -8,6 +8,7 @@ const dns = require('dns');
 // Force DNS resolution to prefer IPv4 to prevent IPv6 Docker timeouts on dual-stack servers
 dns.setDefaultResultOrder('ipv4first');
 const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent, User, SystemSetting } = require('./db');
+const { DataTypes } = require('sequelize');
 const crypto = require('crypto');
 
 function hashPassword(password) {
@@ -3025,6 +3026,7 @@ app.get('/api/dialer/history', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 async function runAutoMigrations() {
+  const { DataTypes } = require('sequelize');
   const qi = sequelize.getQueryInterface();
   const cols = [
     { table: 'Widgets', name: 'location_id', type: DataTypes.STRING },

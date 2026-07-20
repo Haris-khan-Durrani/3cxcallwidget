@@ -106,7 +106,7 @@ async function triggerUserWebhook(callRecord, widget) {
   const uniqueUrls = [...new Set(urls)];
 
   try {
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const appUrl = getAppUrl();
     let recordingUrl = null;
     let recordingListenUrl = null;
 
@@ -177,7 +177,7 @@ async function triggerDialerWebhook(record, dialer) {
   const uniqueUrls = [...new Set(urls)];
 
   try {
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const appUrl = getAppUrl();
     let recordingUrl = null;
     let recordingListenUrl = null;
 
@@ -1093,10 +1093,41 @@ setInterval(pollActiveDialerCalls, 4000);
 
 
 
+let lastKnownAppUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
+
+function getAppUrl(req) {
+  if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
+    return process.env.APP_URL.replace(/\/$/, '');
+  }
+  if (req) {
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      return `${proto}://${host}`.replace(/\/$/, '');
+    }
+  }
+  if (lastKnownAppUrl && !lastKnownAppUrl.includes('localhost')) {
+    return lastKnownAppUrl.replace(/\/$/, '');
+  }
+  if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost')) {
+    return process.env.FRONTEND_URL.replace(/\/$/, '');
+  }
+  return 'https://3cx.netxsites.com';
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use((req, res, next) => {
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    lastKnownAppUrl = `${proto}://${host}`;
+  }
+  next();
+});
 
 // Serve dialer-embed.js and dialer.html with disabled cache
 app.get('/dialer-embed.js', (req, res) => {

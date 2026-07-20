@@ -85,7 +85,7 @@ function parseWebhookHeaders(rawHeaders) {
   const headers = { 
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'User-Agent': '3CXCallWidget/1.0'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 3CXCallWidget/1.0'
   };
   if (!rawHeaders) return headers;
   try {
@@ -191,6 +191,7 @@ async function triggerUserWebhook(callRecord, widget) {
     }
 
     const payload = {
+      // camelCase fields
       callId:             callRecord.id,
       widgetId:           widget.id,
       widgetName:         widget.name,
@@ -211,7 +212,26 @@ async function triggerUserWebhook(callRecord, widget) {
       recordingListenUrl: recordingListenUrl,
       pageUrl:            callRecord.page_url || '',
       ipAddress:          callRecord.ip_address || '',
-      timestamp:          new Date()
+      timestamp:          new Date(),
+
+      // snake_case aliases (for PHP scripts expecting snake_case)
+      call_id:            callRecord.id,
+      widget_id:          widget.id,
+      widget_name:        widget.name,
+      location_id:        widget.location_id || '',
+      customer_name:      callRecord.customer_name,
+      customer_phone:     callRecord.customer_phone,
+      customer_email:     callRecord.customer_email || '',
+      phone:              callRecord.customer_phone,
+      agent_extension:    targetExt || callRecord.agent_extension || '',
+      agent_id:           agentId,
+      agent_email:        agentEmail,
+      agent_name:         agentName,
+      duration_seconds:   callRecord.duration_seconds || 0,
+      recording_id:       callRecord.recording_id || null,
+      recording_url:      recordingUrl,
+      page_url:           callRecord.page_url || '',
+      ip_address:         callRecord.ip_address || ''
     };
 
     const requestHeaders = parseWebhookHeaders(widget.webhook_headers);

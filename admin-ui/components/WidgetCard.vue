@@ -143,9 +143,19 @@
                   <input v-model="agentForm.last_name" type="text" class="input" placeholder="Doe" />
                 </div>
               </div>
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label">3CX Extension *</label>
+                  <input v-model="agentForm.extension" type="text" class="input" placeholder="e.g. 101" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Agent ID (CRM/GHL ID) *</label>
+                  <input v-model="agentForm.crm_agent_id" type="text" class="input" placeholder="e.g. user_123" />
+                </div>
+              </div>
               <div class="form-group">
-                <label class="form-label">Extension *</label>
-                <input v-model="agentForm.extension" type="text" class="input" placeholder="e.g. 101" />
+                <label class="form-label">Agent Email *</label>
+                <input v-model="agentForm.email" type="email" class="input" placeholder="john@company.com" />
               </div>
               <div class="form-group">
                 <label class="form-label">Avatar URL <span style="color:var(--text3)">(optional)</span></label>
@@ -184,7 +194,7 @@ const copied = ref(false)
 const cloning = ref(false)
 
 const editingAgentId = ref(null)
-const agentForm = reactive({ first_name: '', last_name: '', extension: '', avatar_url: '' })
+const agentForm = reactive({ first_name: '', last_name: '', extension: '', crm_agent_id: '', email: '', avatar_url: '' })
 
 const embedSrc = computed(() => `${window.location.origin}/widget.js?id=${props.widget.id}`)
 
@@ -217,12 +227,14 @@ async function doClone() {
 
 function openAddAgent() {
   editingAgentId.value = null
-  Object.assign(agentForm, { first_name: '', last_name: '', extension: '', avatar_url: '' })
+  Object.assign(agentForm, { first_name: '', last_name: '', extension: '', crm_agent_id: '', email: '', avatar_url: '' })
   showAddAgent.value = true
 }
 
 async function addAgent() {
-  if (!agentForm.first_name || !agentForm.extension) return toast('First name and extension are required', 'error')
+  if (!agentForm.first_name || !agentForm.extension || !agentForm.crm_agent_id || !agentForm.email) {
+    return toast('First name, extension, Agent ID, and email are required', 'error')
+  }
   addingAgent.value = true
   try {
     if (editingAgentId.value) {
@@ -234,7 +246,7 @@ async function addAgent() {
     }
     showAddAgent.value = false
     editingAgentId.value = null
-    Object.assign(agentForm, { first_name: '', last_name: '', extension: '', avatar_url: '' })
+    Object.assign(agentForm, { first_name: '', last_name: '', extension: '', crm_agent_id: '', email: '', avatar_url: '' })
     emit('agent-added')
   } catch { toast('Failed to save agent', 'error') }
   finally { addingAgent.value = false }
@@ -246,6 +258,8 @@ function editAgent(agent) {
     first_name: agent.first_name,
     last_name: agent.last_name || '',
     extension: agent.extension,
+    crm_agent_id: agent.crm_agent_id || '',
+    email: agent.email || '',
     avatar_url: agent.avatar_url || ''
   })
   showAddAgent.value = true

@@ -154,6 +154,10 @@ useEffect(() => {
                   </div>
                 </div>
                 <div class="form-group">
+                  <label class="form-label">Location ID (GHL / CRM Location ID) <span style="color:var(--text3)">(optional)</span></label>
+                  <input v-model="form.location_id" type="text" class="input" placeholder="e.g. loc_abc12345" />
+                </div>
+                <div class="form-group">
                   <label class="form-label">Fallback Extension / Queue <span style="color:var(--text3)">(optional)</span></label>
                   <input v-model="form.agent_extension_3cx" type="text" class="input" placeholder="800" />
                 </div>
@@ -196,7 +200,7 @@ const totalAgents = computed(() => {
 const showNewSecret = ref(false)
 
 const form = reactive({
-  name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '',
+  name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '',
   agent_extension_3cx: '', webhook_url_n8n: ''
 })
 
@@ -204,14 +208,14 @@ onMounted(() => store.fetch())
 
 async function create() {
   if (!form.name || !form.fqdn_3cx || !form.client_id_3cx || !form.client_secret_3cx) {
-    return toast('Widget Name, FQDN, Client ID and Client Secret are required', 'error')
+    return toast('Name, FQDN, Client ID, and Client Secret are required', 'error')
   }
   creating.value = true
   try {
     await store.create({ ...form })
     showCreateModal.value = false
-    Object.assign(form, { name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', agent_extension_3cx: '', webhook_url_n8n: '' })
-    toast('Widget created successfully!')
+    Object.assign(form, { name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '', agent_extension_3cx: '', webhook_url_n8n: '' })
+    toast('Widget created!')
   } catch { toast('Failed to create widget', 'error') }
   finally { creating.value = false }
 }

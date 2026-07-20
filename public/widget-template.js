@@ -1177,6 +1177,13 @@
   let agentExt = null;
   let itiReady = false;
 
+  // Real-time input filtering for phone field
+  if ($phoneInp) {
+    $phoneInp.addEventListener('input', function() {
+      this.value = this.value.replace(/[^\d\+\-\s\(\)\.]/g, '');
+    });
+  }
+
   /* ─── Init intl-tel-input (load JS lazily on first open) ────────── */
   function initITI(done) {
     if (!$phoneInp) { done(); return; }
@@ -1371,15 +1378,30 @@
 
     // Validate phone
     let phone = '';
+    const rawVal = $phoneInp ? $phoneInp.value.trim() : '';
+    const cleanDigits = rawVal.replace(/[\s\-\+\(\)\.]/g, '');
+
+    if (!rawVal || /[a-zA-Z]/.test(rawVal) || !/^\d{7,15}$/.test(cleanDigits)) {
+      if ($phoneErr) {
+        $phoneErr.textContent = 'Please enter a valid phone number (7 to 15 digits).';
+        $phoneErr.style.display = 'block';
+      }
+      if ($phoneInp) $phoneInp.focus();
+      return;
+    }
+
     if (iti && $phoneInp) {
       if (!iti.isValidNumber()) {
-        if ($phoneErr) $phoneErr.style.display = 'block';
+        if ($phoneErr) {
+          $phoneErr.textContent = 'Please enter a valid phone number for the selected country.';
+          $phoneErr.style.display = 'block';
+        }
         $phoneInp.focus();
         return;
       }
       phone = iti.getNumber().replace(/^\+/, '');
     } else if ($phoneInp) {
-      phone = $phoneInp.value.replace(/[\s\-\+\(\)]/g, '');
+      phone = cleanDigits;
     }
 
     if ($form.checkValidity && !$form.checkValidity()) {

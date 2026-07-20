@@ -762,8 +762,9 @@
       separateDialCode: true
     });
 
-    // Auto-detect country as user types
+    // Filter out non-phone characters and auto-detect country as user types
     input.addEventListener('input', () => {
+      input.value = input.value.replace(/[^\d\+\-\s\(\)\.]/g, '');
       const num = iti.getNumber();
       if (num && num.length > 4) {
         try { iti.setNumber(num); } catch(e) {}
@@ -855,9 +856,11 @@
     btnCall.addEventListener("click", async () => {
       if (btnCall.classList.contains("disabled")) return;
       
-      const destination = iti.getNumber();
-      if (!destination || !iti.isValidNumber()) {
-        showError("Please enter a valid phone number.");
+      const rawVal = input.value.trim();
+      const cleanDigits = rawVal.replace(/[\s\-\+\(\)\.]/g, '');
+      const destination = (iti && iti.getNumber) ? iti.getNumber() : cleanDigits;
+      if (!rawVal || /[a-zA-Z]/.test(rawVal) || !/^\d{7,15}$/.test(cleanDigits) || (iti && iti.isValidNumber && !iti.isValidNumber())) {
+        showError("Please enter a valid phone number (7 to 15 digits).");
         return;
       }
       

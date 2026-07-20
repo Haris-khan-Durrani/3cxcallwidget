@@ -1331,12 +1331,25 @@ app.get('/api/widget/:id/available-agents', async (req, res) => {
   }
 });
 
+// Phone Validation Helper: ensures string has 7 to 15 digits and contains no alphabets
+function isValidPhoneNumber(phone) {
+  if (!phone || (typeof phone !== 'string' && typeof phone !== 'number')) return false;
+  const str = String(phone).trim();
+  if (/[a-zA-Z]/.test(str)) return false;
+  const cleanDigits = str.replace(/[\s\-\+\(\)\.]/g, '');
+  return /^\d{7,15}$/.test(cleanDigits);
+}
+
 // 2. API to initiate the call
 app.post('/api/call', async (req, res) => {
   const { widgetId, firstName, lastName, email, phone, agentExtension } = req.body;
 
   if (!widgetId || !firstName || !phone) {
     return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  if (!isValidPhoneNumber(phone)) {
+    return res.status(400).json({ error: 'Invalid phone number. Please enter a valid telephone number with 7 to 15 digits.' });
   }
 
   try {
@@ -2646,6 +2659,10 @@ app.post('/api/dialer/call', async (req, res) => {
     const { dialerId, extension, destination } = req.body;
     if (!dialerId || !extension || !destination) {
       return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    if (!isValidPhoneNumber(destination)) {
+      return res.status(400).json({ error: 'Invalid destination phone number format. Must contain 7 to 15 digits.' });
     }
 
     const dialer = await DialerWidget.findByPk(dialerId);

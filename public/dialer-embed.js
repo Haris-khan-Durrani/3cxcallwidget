@@ -240,8 +240,9 @@
       separateDialCode: true
     });
 
-    // Auto-detect country as user types
+    // Filter out non-phone characters and auto-detect country as user types
     input.addEventListener('input', function () {
+      input.value = input.value.replace(/[^\d\+\-\s\(\)\.]/g, '');
       var num = iti.getNumber();
       if (num && num.length > 4) {
         try { iti.setNumber(num); } catch (e) {}
@@ -352,9 +353,11 @@
 
     btnCall.addEventListener('click', function() {
       if (btnCall.classList.contains('disabled')) return;
-      var destination = iti.getNumber();
-      if (!destination) {
-        showErr('Please enter a valid phone number.');
+      var rawVal = input.value.trim();
+      var cleanDigits = rawVal.replace(/[\s\-\+\(\)\.]/g, '');
+      var destination = (iti && iti.getNumber) ? iti.getNumber() : cleanDigits;
+      if (!rawVal || /[a-zA-Z]/.test(rawVal) || !/^\d{7,15}$/.test(cleanDigits) || (iti && iti.isValidNumber && !iti.isValidNumber())) {
+        showErr('Please enter a valid phone number (7 to 15 digits).');
         return;
       }
 

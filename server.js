@@ -8,7 +8,6 @@ const dns = require('dns');
 // Force DNS resolution to prefer IPv4 to prevent IPv6 Docker timeouts on dual-stack servers
 dns.setDefaultResultOrder('ipv4first');
 const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent, User, SystemSetting } = require('./db');
-const { DataTypes } = require('sequelize');
 const crypto = require('crypto');
 
 function hashPassword(password) {
@@ -80,93 +79,45 @@ function isOfficeHours(widget) {
 }
 
 /**
- * Safely parses custom webhook headers (stored as JSON string or array) into an object.
- */
-function parseWebhookHeaders(rawHeaders) {
-  const headers = { 
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 3CXCallWidget/1.0'
-  };
-  if (!rawHeaders) return headers;
-  try {
-    const parsed = typeof rawHeaders === 'string' ? JSON.parse(rawHeaders) : rawHeaders;
-    if (Array.isArray(parsed)) {
-      parsed.forEach(h => {
-        if (h && h.key && String(h.key).trim()) {
-          headers[String(h.key).trim()] = String(h.value || '');
-        }
-      });
-    } else if (typeof parsed === 'object') {
-      Object.keys(parsed).forEach(k => {
-        if (k && k.trim()) {
-          headers[k.trim()] = String(parsed[k]);
-        }
-      });
-    }
-  } catch (err) {
-    console.error('[Webhook] Failed to parse custom headers:', err.message);
-  }
-  return headers;
-}
-
-/**
  * Sends a detailed webhook payload to the configured n8n/GHL URL on call lifecycle changes.
  */
-async function triggerUserWebhook(callRecord, widgetOrId) {
-  let widget = widgetOrId;
-  const wId = (typeof widgetOrId === 'object' && widgetOrId?.id) ? widgetOrId.id : (callRecord.widgetId || widgetOrId);
-  if (wId) {
-    const fresh = await Widget.findByPk(wId);
-    if (fresh) widget = fresh;
+async function triggerUserWebhook(callRecord, widget) {
+  if (!widget) {
+    console.warn(`[Webhook] triggerUserWebhook called with null widget for call ${callRecord?.id}`);
+    return;
   }
-  if (!widget) return;
+
+  // Re-fetch the widget fresh from DB to ensure we have latest webhook URLs
+  let freshWidget = widget;
+  try {
+    const fetched = await Widget.findByPk(widget.id || widget.dataValues?.id);
+    if (fetched) freshWidget = fetched;
+  } catch (e) { /* use passed widget if refetch fails */ }
 
   const urls = [];
-  if (widget.webhook_url_n8n && String(widget.webhook_url_n8n).trim()) {
-    urls.push(String(widget.webhook_url_n8n).trim());
-  }
+  if (freshWidget.webhook_url_n8n) urls.push(freshWidget.webhook_url_n8n);
 
-  const status = String(callRecord.status || '').toLowerCase();
-  const outcome = String(callRecord.outcome || '').toLowerCase();
-
-  // 1. Initiated / Ringing event
-  if (['initiated', 'ringing'].includes(status) || ['initiated', 'ringing'].includes(outcome)) {
-    if (widget.webhook_initiated && String(widget.webhook_initiated).trim()) {
-      urls.push(String(widget.webhook_initiated).trim());
+  // Add event-specific webhook URLs if configured
+  if (callRecord.status === 'Initiated' || callRecord.status === 'Ringing') {
+    if (freshWidget.webhook_initiated) urls.push(freshWidget.webhook_initiated);
+  } else if (callRecord.status === 'Answered') {
+    if (freshWidget.webhook_answered) urls.push(freshWidget.webhook_answered);
+  } else if (callRecord.status === 'Completed') {
+    if (callRecord.outcome === 'Lead') {
+      if (freshWidget.webhook_lead) urls.push(freshWidget.webhook_lead);
+    } else {
+      if (freshWidget.webhook_completed) urls.push(freshWidget.webhook_completed);
     }
+  } else if (['Failed', 'Missed', 'Abandoned'].includes(callRecord.status) || ['Failed', 'Missed', 'Abandoned'].includes(callRecord.outcome)) {
+    if (freshWidget.webhook_failed) urls.push(freshWidget.webhook_failed);
   }
 
-  // 2. Answered event
-  if (status === 'answered' || outcome === 'answered') {
-    if (widget.webhook_answered && String(widget.webhook_answered).trim()) {
-      urls.push(String(widget.webhook_answered).trim());
-    }
-  }
+  console.log(`[Webhook] triggerUserWebhook called | call=${callRecord.id} | status=${callRecord.status} | outcome=${callRecord.outcome} | widgetId=${freshWidget.id} | webhook_url_n8n=${freshWidget.webhook_url_n8n || 'none'} | webhook_initiated=${freshWidget.webhook_initiated || 'none'} | webhook_answered=${freshWidget.webhook_answered || 'none'} | webhook_completed=${freshWidget.webhook_completed || 'none'} | webhook_failed=${freshWidget.webhook_failed || 'none'} | urls_found=${urls.length}`);
 
-  // 3. Completed event (successful completed call)
-  if (status === 'completed' || outcome === 'completed') {
-    if (widget.webhook_completed && String(widget.webhook_completed).trim()) {
-      urls.push(String(widget.webhook_completed).trim());
-    }
+  if (urls.length === 0) {
+    console.warn(`[Webhook] No webhook URLs configured for widget ${freshWidget.id} (status: ${callRecord.status}). Nothing to send.`);
+    return;
   }
-
-  // 4. Lead event (offline lead submission)
-  if (outcome === 'lead' || status === 'lead') {
-    if (widget.webhook_lead && String(widget.webhook_lead).trim()) {
-      urls.push(String(widget.webhook_lead).trim());
-    }
-  }
-
-  // 5. Failed / Missed / Abandoned / Busy event
-  if (['failed', 'missed', 'abandoned', 'declined', 'busy'].includes(status) || 
-      ['failed', 'missed', 'abandoned', 'declined', 'busy'].includes(outcome)) {
-    if (widget.webhook_failed && String(widget.webhook_failed).trim()) {
-      urls.push(String(widget.webhook_failed).trim());
-    }
-  }
-
-  if (urls.length === 0) return;
   const uniqueUrls = [...new Set(urls)];
 
   try {
@@ -210,7 +161,6 @@ async function triggerUserWebhook(callRecord, widgetOrId) {
     }
 
     const payload = {
-      // camelCase fields
       callId:             callRecord.id,
       widgetId:           widget.id,
       widgetName:         widget.name,
@@ -231,37 +181,15 @@ async function triggerUserWebhook(callRecord, widgetOrId) {
       recordingListenUrl: recordingListenUrl,
       pageUrl:            callRecord.page_url || '',
       ipAddress:          callRecord.ip_address || '',
-      timestamp:          new Date(),
-
-      // snake_case aliases (for PHP scripts expecting snake_case)
-      call_id:            callRecord.id,
-      widget_id:          widget.id,
-      widget_name:        widget.name,
-      location_id:        widget.location_id || '',
-      customer_name:      callRecord.customer_name,
-      customer_phone:     callRecord.customer_phone,
-      customer_email:     callRecord.customer_email || '',
-      phone:              callRecord.customer_phone,
-      agent_extension:    targetExt || callRecord.agent_extension || '',
-      agent_id:           agentId,
-      agent_email:        agentEmail,
-      agent_name:         agentName,
-      duration_seconds:   callRecord.duration_seconds || 0,
-      recording_id:       callRecord.recording_id || null,
-      recording_url:      recordingUrl,
-      page_url:           callRecord.page_url || '',
-      ip_address:         callRecord.ip_address || ''
+      timestamp:          new Date()
     };
-
-    const requestHeaders = parseWebhookHeaders(widget.webhook_headers);
 
     for (const url of uniqueUrls) {
       try {
-        console.log(`[Webhook] Dispatching event (${callRecord.status}) for call ${callRecord.id} to: ${url}`);
-        const resp = await axios.post(url, payload, { headers: requestHeaders, timeout: 8000 });
-        console.log(`[Webhook] Delivered successfully (${resp.status}) to ${url}`);
+        await axios.post(url, payload, { timeout: 5000 });
+        console.log(`[Webhook] Sent call lifecycle update for ${callRecord.id} to ${url}`);
       } catch (err) {
-        console.error(`[Webhook] Failed to send update to ${url}:`, err.response?.status || err.message);
+        console.error(`[Webhook] Failed to send update to ${url}:`, err.message);
       }
     }
   } catch (err) {
@@ -273,27 +201,37 @@ async function triggerUserWebhook(callRecord, widgetOrId) {
  * Sends a detailed webhook payload to configured dialer webhook URLs on call lifecycle changes.
  */
 async function triggerDialerWebhook(record, dialer) {
-  if (!dialer) return;
+  if (!dialer) {
+    console.warn(`[Dialer Webhook] triggerDialerWebhook called with null dialer for call ${record?.id}`);
+    return;
+  }
+
+  // Re-fetch dialer fresh from DB to ensure we have latest webhook URLs
+  let freshDialer = dialer;
+  try {
+    const fetched = await DialerWidget.findByPk(dialer.id || dialer.dataValues?.id);
+    if (fetched) freshDialer = fetched;
+  } catch (e) { /* use passed dialer if refetch fails */ }
 
   const urls = [];
-  const status = String(record.status || '').toLowerCase();
-  const outcome = String(record.outcome || '').toLowerCase();
-
-  if (['initiated', 'ringing'].includes(status) || ['initiated', 'ringing'].includes(outcome)) {
-    if (dialer.webhook_initiated) urls.push(dialer.webhook_initiated);
-  }
-  if (['connected', 'answered'].includes(status) || ['connected', 'answered'].includes(outcome)) {
-    if (dialer.webhook_connected) urls.push(dialer.webhook_connected);
-  }
-  if (status === 'completed' || outcome === 'completed') {
-    if (dialer.webhook_completed) urls.push(dialer.webhook_completed);
-  }
-  if (['failed', 'missed', 'abandoned', 'declined', 'busy'].includes(status) || 
-      ['failed', 'missed', 'abandoned', 'declined', 'busy'].includes(outcome)) {
-    if (dialer.webhook_failed) urls.push(dialer.webhook_failed);
+  if (record.status === 'Initiated') {
+    if (freshDialer.webhook_initiated) urls.push(freshDialer.webhook_initiated);
+  } else if (record.status === 'Ringing') {
+    // Optionally fire on ringing if configured
+  } else if (record.status === 'Connected') {
+    if (freshDialer.webhook_connected) urls.push(freshDialer.webhook_connected);
+  } else if (record.status === 'Completed') {
+    if (freshDialer.webhook_completed) urls.push(freshDialer.webhook_completed);
+  } else if (record.status === 'Failed') {
+    if (freshDialer.webhook_failed) urls.push(freshDialer.webhook_failed);
   }
 
-  if (urls.length === 0) return;
+  console.log(`[Dialer Webhook] triggerDialerWebhook called | call=${record.id} | status=${record.status} | dialerId=${freshDialer.id} | webhook_initiated=${freshDialer.webhook_initiated || 'none'} | webhook_completed=${freshDialer.webhook_completed || 'none'} | webhook_failed=${freshDialer.webhook_failed || 'none'} | urls_found=${urls.length}`);
+
+  if (urls.length === 0) {
+    console.warn(`[Dialer Webhook] No webhook URLs configured for dialer ${freshDialer.id} (status: ${record.status}). Nothing to send.`);
+    return;
+  }
   const uniqueUrls = [...new Set(urls)];
 
   try {
@@ -318,7 +256,7 @@ async function triggerDialerWebhook(record, dialer) {
 
     if (record.agent_extension) {
       const extStr = String(record.agent_extension).trim();
-      const matchedAgent = await DialerAgent.findOne({ where: { dialerId: dialer.id, extension: extStr } });
+      const matchedAgent = await DialerAgent.findOne({ where: { dialerId: freshDialer.id, extension: extStr } });
       if (matchedAgent) {
         agentId = matchedAgent.crm_user_id || matchedAgent.id;
         agentEmail = matchedAgent.email || '';
@@ -328,9 +266,9 @@ async function triggerDialerWebhook(record, dialer) {
 
     const payload = {
       callId:             record.id,
-      dialerId:           dialer.id,
-      dialerName:         dialer.name,
-      locationId:         dialer.location_id || '',
+      dialerId:           freshDialer.id,
+      dialerName:         freshDialer.name,
+      locationId:         freshDialer.location_id || '',
       agentExtension:     record.agent_extension || '',
       agentId:            agentId,
       agentEmail:         agentEmail,
@@ -347,11 +285,9 @@ async function triggerDialerWebhook(record, dialer) {
       timestamp:          new Date()
     };
 
-    const requestHeaders = parseWebhookHeaders(dialer.webhook_headers);
-
     for (const url of uniqueUrls) {
       try {
-        await axios.post(url, payload, { headers: requestHeaders, timeout: 5000 });
+        await axios.post(url, payload, { timeout: 5000 });
         console.log(`[Dialer Webhook] Sent call update for ${record.id} to ${url}`);
       } catch (err) {
         console.error(`[Dialer Webhook] Failed to send update to ${url}:`, err.message);
@@ -1237,10 +1173,17 @@ let lastKnownAppUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
 
 function getAppUrl(req) {
   if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
-    return process.env.APP_URL.replace(/\/+$/, '');
+    return process.env.APP_URL.replace(/\/$/, '');
   }
-  if (detectedHost) {
-    return `${detectedProto}://${detectedHost}`.replace(/\/+$/, '');
+  if (req) {
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      return `${proto}://${host}`.replace(/\/$/, '');
+    }
+  }
+  if (lastKnownAppUrl && !lastKnownAppUrl.includes('localhost')) {
+    return lastKnownAppUrl.replace(/\/$/, '');
   }
   if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost')) {
     return process.env.FRONTEND_URL.replace(/\/$/, '');
@@ -1540,9 +1483,6 @@ app.post('/api/call', async (req, res) => {
       status: 'Initiated'
     });
 
-    // Immediately trigger webhooks for call initiation event
-    await triggerUserWebhook(callRecord, widget);
-
     // Check office hours: If closed, skip 3CX call control and save as offline lead
     const isClosed = !isOfficeHours(widget);
     if (isClosed) {
@@ -1565,7 +1505,6 @@ app.post('/api/call', async (req, res) => {
       callRecord.status = 'Failed';
       callRecord.outcome = 'Failed';
       await callRecord.save();
-      await triggerUserWebhook(callRecord, widget);
       return res.status(400).json({ error: 'No agent extension configured for this widget.' });
     }
 
@@ -2310,47 +2249,6 @@ app.post('/api/admin/widgets/:id/test-connection', authenticateToken, async (req
   }
 });
 
-// Test Webhook URL endpoint
-app.post('/api/admin/test-webhook', authenticateToken, async (req, res) => {
-  try {
-    const { webhook_url, webhook_headers, event_type } = req.body;
-    if (!webhook_url) return res.status(400).json({ ok: false, error: 'Webhook URL is required' });
-
-    const requestHeaders = parseWebhookHeaders(webhook_headers);
-    const testPayload = {
-      event: 'test_webhook',
-      message: 'This is a test webhook payload from 3CX Call Connect Platform',
-      eventType: event_type || 'Initiated',
-      test: true,
-      callId: 'test_call_' + Date.now(),
-      widgetName: 'Test Widget',
-      locationId: 'loc_test123',
-      customerName: 'John Test',
-      customerPhone: '+1234567890',
-      customerEmail: 'test@example.com',
-      agentExtension: '101',
-      agentId: 'agent_test_101',
-      agentEmail: 'agent@example.com',
-      agentName: 'Test Agent',
-      status: event_type || 'Initiated',
-      outcome: 'Answered',
-      durationSeconds: 30,
-      timestamp: new Date()
-    };
-
-    console.log(`[Test Webhook] Sending test payload to: ${webhook_url}`);
-    const resp = await axios.post(webhook_url, testPayload, { headers: requestHeaders, timeout: 8000 });
-    return res.json({ ok: true, status: resp.status, message: `Webhook test delivered successfully! Status code ${resp.status}` });
-  } catch (err) {
-    console.error('[Test Webhook Error]', err.response?.data || err.message);
-    return res.json({ 
-      ok: false, 
-      status: err.response?.status || 500,
-      error: err.response?.data ? (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)) : err.message 
-    });
-  }
-});
-
 // Update widget settings (also invalidates token cache when credentials change)
 app.put('/api/admin/widgets/:id', authenticateToken, async (req, res) => {
   try {
@@ -3025,36 +2923,7 @@ app.get('/api/dialer/history', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-async function runAutoMigrations() {
-  const { DataTypes } = require('sequelize');
-  const qi = sequelize.getQueryInterface();
-  const cols = [
-    { table: 'Widgets', name: 'location_id', type: DataTypes.STRING },
-    { table: 'Widgets', name: 'webhook_headers', type: DataTypes.TEXT },
-    { table: 'Widgets', name: 'webhook_initiated', type: DataTypes.STRING },
-    { table: 'Widgets', name: 'webhook_answered', type: DataTypes.STRING },
-    { table: 'Widgets', name: 'webhook_completed', type: DataTypes.STRING },
-    { table: 'Widgets', name: 'webhook_failed', type: DataTypes.STRING },
-    { table: 'Widgets', name: 'webhook_lead', type: DataTypes.STRING },
-    { table: 'DialerWidgets', name: 'location_id', type: DataTypes.STRING },
-    { table: 'DialerWidgets', name: 'webhook_headers', type: DataTypes.TEXT },
-    { table: 'DialerWidgets', name: 'webhook_initiated', type: DataTypes.STRING },
-    { table: 'DialerWidgets', name: 'webhook_connected', type: DataTypes.STRING },
-    { table: 'DialerWidgets', name: 'webhook_completed', type: DataTypes.STRING },
-    { table: 'DialerWidgets', name: 'webhook_failed', type: DataTypes.STRING }
-  ];
-
-  for (const c of cols) {
-    try {
-      await qi.addColumn(c.table, c.name, { type: c.type, allowNull: true });
-      console.log(`[DB Migration] Added column ${c.name} to ${c.table}`);
-    } catch (e) {
-      // Column already exists
-    }
-  }
-}
-
-runAutoMigrations().then(() => sequelize.sync({ alter: true })).then(async () => {
+sequelize.sync({ alter: true }).then(async () => {
   console.log('Database synced');
   
   // Seed default admin user if none exists

@@ -218,6 +218,7 @@ useEffect(() => {
 
 <script setup>
 import { ref, reactive, computed, onMounted, inject } from 'vue'
+import axios from 'axios'
 import AppLayout from '../components/AppLayout.vue'
 import WidgetCard from '../components/WidgetCard.vue'
 import { useWidgetStore } from '../stores'

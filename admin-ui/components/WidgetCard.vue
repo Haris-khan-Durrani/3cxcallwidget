@@ -275,12 +275,37 @@
 
 <script setup>
 import { ref, reactive, computed, inject } from 'vue'
+import axios from 'axios'
 import { useWidgetStore } from '../stores'
 
 const props = defineProps({ widget: Object })
 const emit = defineEmits(['deleted', 'agent-added', 'agent-deleted'])
 const store = useWidgetStore()
 const toast = inject('toast')
+
+async function testWebhookUrl(url, eventType = 'Initiated') {
+  if (!url) return toast('Please enter a webhook URL first', 'error')
+  try {
+    toast('Sending test payload…')
+    const token = localStorage.getItem('admin_token')
+    const filtered = editHeadersList.value.filter(h => h.key && h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value || '' }))
+    const headers = JSON.stringify(filtered)
+    const res = await axios.post('/api/admin/test-webhook', {
+      webhook_url: url,
+      webhook_headers: headers,
+      event_type: eventType
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (res.data.ok) {
+      toast(`✅ ${res.data.message}`)
+    } else {
+      toast(`❌ Test failed: ${res.data.error}`, 'error')
+    }
+  } catch (err) {
+    toast(`❌ Test failed: ${err.message}`, 'error')
+  }
+}
 
 const showAddAgent = ref(false)
 const addingAgent = ref(false)

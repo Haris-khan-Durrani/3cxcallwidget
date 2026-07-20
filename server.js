@@ -3024,7 +3024,35 @@ app.get('/api/dialer/history', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-sequelize.sync({ alter: true }).then(async () => {
+async function runAutoMigrations() {
+  const qi = sequelize.getQueryInterface();
+  const cols = [
+    { table: 'Widgets', name: 'location_id', type: DataTypes.STRING },
+    { table: 'Widgets', name: 'webhook_headers', type: DataTypes.TEXT },
+    { table: 'Widgets', name: 'webhook_initiated', type: DataTypes.STRING },
+    { table: 'Widgets', name: 'webhook_answered', type: DataTypes.STRING },
+    { table: 'Widgets', name: 'webhook_completed', type: DataTypes.STRING },
+    { table: 'Widgets', name: 'webhook_failed', type: DataTypes.STRING },
+    { table: 'Widgets', name: 'webhook_lead', type: DataTypes.STRING },
+    { table: 'DialerWidgets', name: 'location_id', type: DataTypes.STRING },
+    { table: 'DialerWidgets', name: 'webhook_headers', type: DataTypes.TEXT },
+    { table: 'DialerWidgets', name: 'webhook_initiated', type: DataTypes.STRING },
+    { table: 'DialerWidgets', name: 'webhook_connected', type: DataTypes.STRING },
+    { table: 'DialerWidgets', name: 'webhook_completed', type: DataTypes.STRING },
+    { table: 'DialerWidgets', name: 'webhook_failed', type: DataTypes.STRING }
+  ];
+
+  for (const c of cols) {
+    try {
+      await qi.addColumn(c.table, c.name, { type: c.type, allowNull: true });
+      console.log(`[DB Migration] Added column ${c.name} to ${c.table}`);
+    } catch (e) {
+      // Column already exists
+    }
+  }
+}
+
+runAutoMigrations().then(() => sequelize.sync({ alter: true })).then(async () => {
   console.log('Database synced');
   
   // Seed default admin user if none exists

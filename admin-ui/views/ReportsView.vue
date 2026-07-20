@@ -186,7 +186,7 @@
           <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);">
             <h3>Call Log</h3>
             <div class="search-wrap">
-              <input v-model="search" type="text" class="input" placeholder="Search by name or phone..." style="width:260px;" />
+              <input v-model="search" type="text" class="input" placeholder="Search by name, phone, URL or IP..." style="width:280px;" />
             </div>
           </div>
 
@@ -201,8 +201,8 @@
                 <tr>
                   <th @click="sortBy('customer_name')" class="sortable">Name <span class="sort-icon">{{ sortKey === 'customer_name' ? (sortDir === 'asc' ? '↑' : '↓') : '⇅' }}</span></th>
                   <th>Phone</th>
-                  <th>Page URL</th>
-                  <th>IP Address</th>
+                  <th>Ref URL</th>
+                  <th>IP</th>
                   <th>Agent Call Flow (Attempts)</th>
                   <th @click="sortBy('duration_seconds')" class="sortable">Duration <span class="sort-icon">{{ sortKey === 'duration_seconds' ? (sortDir === 'asc' ? '↑' : '↓') : '⇅' }}</span></th>
                   <th @click="sortBy('status')" class="sortable">Status <span class="sort-icon">{{ sortKey === 'status' ? (sortDir === 'asc' ? '↑' : '↓') : '⇅' }}</span></th>
@@ -215,13 +215,13 @@
                   <td><strong>{{ r.customer_name }}</strong></td>
                   <td><code style="font-size:12px;">{{ r.customer_phone }}</code></td>
                   <td>
-                    <a v-if="r.page_url" :href="r.page_url" target="_blank" rel="noopener" class="url-link" :title="r.page_url" style="font-size:11px;max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--accent);">
-                      {{ cleanUrl(r.page_url) }}
+                    <a v-if="r.page_url" :href="r.page_url" target="_blank" rel="noopener" class="url-link" :title="r.page_url" style="font-size:11px;max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--accent);text-decoration:underline;">
+                      {{ cleanUrl(r.page_url) }} ↗
                     </a>
                     <span v-else style="color:var(--text3)">—</span>
                   </td>
                   <td>
-                    <code v-if="r.ip_address" style="font-size:11px;">{{ r.ip_address }}</code>
+                    <code v-if="r.ip_address" style="font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:4px;border:1px solid var(--border);">{{ r.ip_address }}</code>
                     <span v-else style="color:var(--text3)">—</span>
                   </td>
                   <td>
@@ -548,7 +548,9 @@ const filteredRecords = computed(() => {
     r = r.filter(x => 
       x.customer_name?.toLowerCase().includes(q) || 
       x.customer_phone?.includes(q) || 
-      x.agent_extension?.includes(q)
+      x.agent_extension?.includes(q) ||
+      x.page_url?.toLowerCase().includes(q) ||
+      x.ip_address?.includes(q)
     )
   }
 
@@ -736,7 +738,7 @@ function cleanUrl(url) {
 function downloadCSV() {
   if (!filteredRecords.value.length) return
   const rows = [
-    ['Name', 'Phone', 'Page URL', 'IP Address', 'Agent Call Flow', 'Duration', 'Status', 'Date & Time']
+    ['Name', 'Phone', 'Ref URL', 'IP', 'Agent Call Flow', 'Duration', 'Status', 'Date & Time']
   ]
   filteredRecords.value.forEach(r => {
     let flowStr = ''

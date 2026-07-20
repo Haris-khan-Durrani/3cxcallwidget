@@ -274,6 +274,7 @@ async function triggerDialerWebhook(record, dialer) {
       agentEmail:         agentEmail,
       agentName:          agentName,
       destination:        record.destination,
+      contactId:          record.contact_id || '',
       status:             record.status,
       durationSeconds:    record.duration_seconds || 0,
       recordingId:        record.recording_id || null,
@@ -2808,6 +2809,7 @@ app.post('/api/dialer/call', async (req, res) => {
 
     const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || req.ip || '';
     const pageUrl  = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
+    const contactId = req.body.contactId || '';
 
     // Create Call Record
     const record = await DialerCallRecord.create({
@@ -2816,6 +2818,7 @@ app.post('/api/dialer/call', async (req, res) => {
       destination: String(destination),
       page_url: pageUrl,
       ip_address: clientIp,
+      contact_id: contactId,
       status: 'Initiated'
     });
 

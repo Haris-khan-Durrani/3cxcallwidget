@@ -142,23 +142,6 @@
                   <input v-model="form.webhook_failed" type="text" class="input" placeholder="e.g. https://webhook.site/..." />
                   <p class="help-text" style="margin-top: 4px; font-size: 11px;">Fires if the call is missed, rejected, busy, or fails to connect.</p>
                 </div>
-
-                <!-- Custom Webhook Headers -->
-                <div class="form-group" style="margin-top: 14px;">
-                  <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
-                    <span>Custom HTTP Headers <span style="color:var(--text3)">(optional)</span></span>
-                    <button type="button" class="btn btn-ghost btn-sm" @click="addDialerHeaderRow" style="padding:2px 8px; font-size:11px;">+ Add Header</button>
-                  </label>
-                  <p class="help-text" style="margin-bottom:8px;">Send custom HTTP headers (e.g. <code>x-api-key</code>, <code>Authorization</code>) with dialer webhooks.</p>
-                  <div v-if="!dialerHeadersList.length" style="color:var(--text3); font-size:12px; font-style:italic;">No custom headers configured.</div>
-                  <div v-else style="display:flex; flex-direction:column; gap:8px;">
-                    <div v-for="(h, idx) in dialerHeadersList" :key="idx" style="display:flex; gap:8px; align-items:center;">
-                      <input v-model="h.key" class="input" style="flex:1;" placeholder="Header Name (e.g. x-api-key)" />
-                      <input v-model="h.value" class="input" style="flex:1;" placeholder="Header Value (e.g. secret123)" />
-                      <button type="button" class="btn btn-danger btn-sm" @click="removeDialerHeaderRow(idx)" style="padding:4px 8px;">✕</button>
-                    </div>
-                  </div>
-                </div>
               </div>
               <div class="modal-footer">
                 <button class="btn btn-ghost" @click="showModal = false">Cancel</button>
@@ -297,15 +280,10 @@ function setEmbedTab(id, tab) { embedTab.value = { ...embedTab.value, [id]: tab 
 
 onMounted(() => store.fetch())
 
-const dialerHeadersList = ref([])
-function addDialerHeaderRow() { dialerHeadersList.value.push({ key: '', value: '' }) }
-function removeDialerHeaderRow(idx) { dialerHeadersList.value.splice(idx, 1) }
-
 function openCreate() {
   editMode.value = false
   editingId.value = null
   activeWebhookTab.value = 'initiated'
-  dialerHeadersList.value = []
   Object.assign(form, { 
     name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '',
     webhook_initiated: '', webhook_connected: '', webhook_completed: '', webhook_failed: ''
@@ -328,15 +306,6 @@ function openEdit(dialer) {
     webhook_completed: dialer.webhook_completed || '',
     webhook_failed: dialer.webhook_failed || ''
   })
-  if (dialer.webhook_headers) {
-    try {
-      const data = typeof dialer.webhook_headers === 'string' ? JSON.parse(dialer.webhook_headers) : dialer.webhook_headers
-      if (Array.isArray(data)) dialerHeadersList.value = data.map(i => ({ key: i.key || '', value: i.value || '' }))
-      else if (typeof data === 'object') dialerHeadersList.value = Object.entries(data).map(([key, value]) => ({ key, value }))
-    } catch { dialerHeadersList.value = [] }
-  } else {
-    dialerHeadersList.value = []
-  }
   showModal.value = true
 }
 
@@ -346,13 +315,11 @@ async function save() {
   }
   saving.value = true
   try {
-    const filtered = dialerHeadersList.value.filter(h => h.key && h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value || '' }))
-    const webhook_headers = JSON.stringify(filtered)
     if (editMode.value) {
-      await store.update(editingId.value, { ...form, webhook_headers })
+      await store.update(editingId.value, { ...form })
       toast('Dialer updated successfully!')
     } else {
-      await store.create({ ...form, webhook_headers })
+      await store.create({ ...form })
       toast('Dialer created successfully!')
     }
     showModal.value = false

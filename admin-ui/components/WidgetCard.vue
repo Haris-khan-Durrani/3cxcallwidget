@@ -220,44 +220,8 @@
                 <input v-model="editWidgetForm.agent_extension_3cx" type="text" class="input" placeholder="800" />
               </div>
               <div class="form-group">
-                <label class="form-label">n8n / GHL Webhook URL (Global) <span style="color:var(--text3)">(optional)</span></label>
+                <label class="form-label">n8n / GoHighLevel Webhook URL</label>
                 <input v-model="editWidgetForm.webhook_url_n8n" type="url" class="input" placeholder="https://..." />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Call Dialing / Initiated Webhook <span style="color:var(--text3)">(optional)</span></label>
-                <input v-model="editWidgetForm.webhook_initiated" type="url" class="input" placeholder="https://..." />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Call Answered Webhook <span style="color:var(--text3)">(optional)</span></label>
-                <input v-model="editWidgetForm.webhook_answered" type="url" class="input" placeholder="https://..." />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Call Completed Webhook <span style="color:var(--text3)">(optional)</span></label>
-                <input v-model="editWidgetForm.webhook_completed" type="url" class="input" placeholder="https://..." />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Call Failed / Busy Webhook <span style="color:var(--text3)">(optional)</span></label>
-                <input v-model="editWidgetForm.webhook_failed" type="url" class="input" placeholder="https://..." />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Offline Lead Webhook <span style="color:var(--text3)">(optional)</span></label>
-                <input v-model="editWidgetForm.webhook_lead" type="url" class="input" placeholder="https://..." />
-              </div>
-              <!-- Custom Webhook Headers -->
-              <div class="form-group" style="margin-top: 14px;">
-                <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
-                  <span>Custom HTTP Headers <span style="color:var(--text3)">(optional)</span></span>
-                  <button type="button" class="btn btn-ghost btn-sm" @click="addHeaderRow" style="padding:2px 8px; font-size:11px;">+ Add Header</button>
-                </label>
-                <p class="help-text" style="margin-bottom:8px;">Send custom HTTP headers (e.g. <code>x-api-key</code>, <code>Authorization</code>) with webhook events.</p>
-                <div v-if="!editHeadersList.length" style="color:var(--text3); font-size:12px; font-style:italic;">No custom headers configured.</div>
-                <div v-else style="display:flex; flex-direction:column; gap:8px;">
-                  <div v-for="(h, idx) in editHeadersList" :key="idx" style="display:flex; gap:8px; align-items:center;">
-                    <input v-model="h.key" class="input" style="flex:1;" placeholder="Header Name (e.g. x-api-key)" />
-                    <input v-model="h.value" class="input" style="flex:1;" placeholder="Header Value (e.g. secret123)" />
-                    <button type="button" class="btn btn-danger btn-sm" @click="removeHeaderRow(idx)" style="padding:4px 8px;">✕</button>
-                  </div>
-                </div>
               </div>
             </div>
             <div class="modal-footer">
@@ -275,37 +239,12 @@
 
 <script setup>
 import { ref, reactive, computed, inject } from 'vue'
-import axios from 'axios'
 import { useWidgetStore } from '../stores'
 
 const props = defineProps({ widget: Object })
 const emit = defineEmits(['deleted', 'agent-added', 'agent-deleted'])
 const store = useWidgetStore()
 const toast = inject('toast')
-
-async function testWebhookUrl(url, eventType = 'Initiated') {
-  if (!url) return toast('Please enter a webhook URL first', 'error')
-  try {
-    toast('Sending test payload…')
-    const token = localStorage.getItem('admin_token')
-    const filtered = editHeadersList.value.filter(h => h.key && h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value || '' }))
-    const headers = JSON.stringify(filtered)
-    const res = await axios.post('/api/admin/test-webhook', {
-      webhook_url: url,
-      webhook_headers: headers,
-      event_type: eventType
-    }, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    if (res.data.ok) {
-      toast(`✅ ${res.data.message}`)
-    } else {
-      toast(`❌ Test failed: ${res.data.error}`, 'error')
-    }
-  } catch (err) {
-    toast(`❌ Test failed: ${err.message}`, 'error')
-  }
-}
 
 const showAddAgent = ref(false)
 const addingAgent = ref(false)
@@ -314,11 +253,6 @@ const cloning = ref(false)
 
 const showEditWidgetModal = ref(false)
 const savingWidget = ref(false)
-const editHeadersList = ref([])
-
-function addHeaderRow() { editHeadersList.value.push({ key: '', value: '' }) }
-function removeHeaderRow(idx) { editHeadersList.value.splice(idx, 1) }
-
 const editWidgetForm = reactive({
   name: '',
   location_id: '',
@@ -326,12 +260,7 @@ const editWidgetForm = reactive({
   client_id_3cx: '',
   client_secret_3cx: '',
   agent_extension_3cx: '',
-  webhook_url_n8n: '',
-  webhook_initiated: '',
-  webhook_answered: '',
-  webhook_completed: '',
-  webhook_failed: '',
-  webhook_lead: ''
+  webhook_url_n8n: ''
 })
 
 function openEditWidget() {
@@ -342,22 +271,8 @@ function openEditWidget() {
     client_id_3cx: props.widget.client_id_3cx || '',
     client_secret_3cx: props.widget.client_secret_3cx || '',
     agent_extension_3cx: props.widget.agent_extension_3cx || '',
-    webhook_url_n8n: props.widget.webhook_url_n8n || '',
-    webhook_initiated: props.widget.webhook_initiated || '',
-    webhook_answered: props.widget.webhook_answered || '',
-    webhook_completed: props.widget.webhook_completed || '',
-    webhook_failed: props.widget.webhook_failed || '',
-    webhook_lead: props.widget.webhook_lead || ''
+    webhook_url_n8n: props.widget.webhook_url_n8n || ''
   })
-  if (props.widget.webhook_headers) {
-    try {
-      const data = typeof props.widget.webhook_headers === 'string' ? JSON.parse(props.widget.webhook_headers) : props.widget.webhook_headers
-      if (Array.isArray(data)) editHeadersList.value = data.map(i => ({ key: i.key || '', value: i.value || '' }))
-      else if (typeof data === 'object') editHeadersList.value = Object.entries(data).map(([key, value]) => ({ key, value }))
-    } catch { editHeadersList.value = [] }
-  } else {
-    editHeadersList.value = []
-  }
   showEditWidgetModal.value = true
 }
 
@@ -365,9 +280,7 @@ async function saveWidgetSettings() {
   if (!editWidgetForm.name) return toast('Widget name is required', 'error')
   savingWidget.value = true
   try {
-    const filtered = editHeadersList.value.filter(h => h.key && h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value || '' }))
-    const webhook_headers = JSON.stringify(filtered)
-    await store.update(props.widget.id, { ...editWidgetForm, webhook_headers })
+    await store.update(props.widget.id, { ...editWidgetForm })
     toast('Widget updated successfully!')
     showEditWidgetModal.value = false
     emit('agent-added')

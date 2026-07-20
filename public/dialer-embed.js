@@ -276,6 +276,80 @@
       }
     });
 
+    // ── GHL Auto-detect: phone + contactId from page URL/DOM ──────────────────
+    var ghlContactId = '';
+
+    function extractGhlContactId() {
+      // Matches: /contacts/detail/<id> anywhere in the URL
+      var m = window.location.href.match(/\/contacts\/detail\/([A-Za-z0-9_-]+)/);
+      return m ? m[1] : '';
+    }
+
+    function readGhlPhone() {
+      // GoHighLevel renders the phone in: input[id="contact.phone"] or .hr-input-phone
+      var el = document.querySelector('input[id="contact.phone"], input.hr-input-phone[type="tel"]');
+      return el ? (el.value || '').trim() : '';
+    }
+
+    function applyGhlAutoDetect() {
+      var newContactId = extractGhlContactId();
+      if (newContactId) ghlContactId = newContactId;
+
+      // Only auto-fill phone when on a contact detail page
+      if (!newContactId) return;
+
+      // Wait briefly for the SPA to render the input
+      var attempts = 0;
+      var tryFill = function () {
+        var phone = readGhlPhone();
+        if (phone) {
+          try { iti.setNumber(phone); } catch (e) {}
+          // Show a subtle "auto-filled" badge on FAB for 2s
+          var fab = document.getElementById('_3cx_fab');
+          if (fab) {
+            var span = fab.querySelector('span');
+            if (span) {
+              var orig = span.textContent;
+              span.textContent = 'Ready ✓';
+              setTimeout(function () { span.textContent = orig; }, 2000);
+            }
+          }
+        } else if (attempts < 20) {
+          attempts++;
+          setTimeout(tryFill, 250);
+        }
+      };
+      tryFill();
+    }
+
+    // Run on load
+    applyGhlAutoDetect();
+
+    // Observe SPA navigation via URL polling (GHL uses History API)
+    var _ghlLastHref = window.location.href;
+    setInterval(function () {
+      if (window.location.href !== _ghlLastHref) {
+        _ghlLastHref = window.location.href;
+        // Small delay to let SPA render the new page
+        setTimeout(applyGhlAutoDetect, 600);
+      }
+    }, 500);
+
+    // Also watch DOM for the phone input being added/changed (handles in-page re-renders)
+    var _ghlObserver = new MutationObserver(function () {
+      if (extractGhlContactId()) {
+        var phone = readGhlPhone();
+        if (phone) {
+          var cur = '';
+          try { cur = iti.getNumber(); } catch (e) {}
+          if (!cur || cur.replace(/[^\d]/g, '').length < 4) {
+            try { iti.setNumber(phone); } catch (e) {}
+          }
+        }
+      }
+    });
+    _ghlObserver.observe(document.body, { childList: true, subtree: true });
+
     // ── Tabs ─────────────────────────────────────────────────────────────────
     var tabBtns = document.querySelectorAll('#_3cx_popup ._3cx_tab');
     var tabContents = document.querySelectorAll('#_3cx_popup ._3cx_tc');
@@ -366,7 +440,7 @@
       fetch(apiBase + '/api/dialer/call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dialerId: DIALER_ID, extension: extension, destination: destination, pageUrl: window.location.href || document.referrer })
+        body: JSON.stringify({ dialerId: DIALER_ID, extension: extension, destination: destination, pageUrl: window.location.href || document.referrer, contactId: ghlContactId || '' })
       })
       .then(function(r){ return r.json(); })
       .then(function(d){

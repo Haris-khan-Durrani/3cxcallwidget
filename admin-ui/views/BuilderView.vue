@@ -537,76 +537,39 @@
               <div class="ps-divider"></div>
               <div class="ps-head">Webhook Settings</div>
               <div class="ps-field">
-                <label style="display:flex; justify-content:space-between; align-items:center;">
-                  <span>n8n / GHL Webhook URL (Global) <span class="opt-tag">optional</span></span>
-                  <button v-if="cf.webhook_url_n8n" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_url_n8n, 'Global')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
-                </label>
+                <label>n8n / GHL Webhook URL (Global) <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_url_n8n" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent on every status update/change</span>
               </div>
 
               <div class="ps-field">
-                <label style="display:flex; justify-content:space-between; align-items:center;">
-                  <span>Call Dialing / Initiated Webhook <span class="opt-tag">optional</span></span>
-                  <button v-if="cf.webhook_initiated" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_initiated, 'Initiated')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
-                </label>
+                <label>Call Dialing / Initiated Webhook <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_initiated" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent when the call starts dialing/ringing</span>
               </div>
 
               <div class="ps-field">
-                <label style="display:flex; justify-content:space-between; align-items:center;">
-                  <span>Call Answered Webhook <span class="opt-tag">optional</span></span>
-                  <button v-if="cf.webhook_answered" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_answered, 'Answered')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
-                </label>
+                <label>Call Answered Webhook <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_answered" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent when the agent answers the call</span>
               </div>
 
               <div class="ps-field">
-                <label style="display:flex; justify-content:space-between; align-items:center;">
-                  <span>Call Completed Webhook <span class="opt-tag">optional</span></span>
-                  <button v-if="cf.webhook_completed" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_completed, 'Completed')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
-                </label>
+                <label>Call Completed Webhook <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_completed" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent when call connects and finishes talking successfully</span>
               </div>
 
               <div class="ps-field">
-                <label style="display:flex; justify-content:space-between; align-items:center;">
-                  <span>Call Failed / Busy Webhook <span class="opt-tag">optional</span></span>
-                  <button v-if="cf.webhook_failed" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_failed, 'Failed')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
-                </label>
+                <label>Call Failed / Busy Webhook <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_failed" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent if the call goes unanswered, busy, or fails</span>
               </div>
 
               <div class="ps-field">
-                <label style="display:flex; justify-content:space-between; align-items:center;">
-                  <span>Offline Lead Webhook <span class="opt-tag">optional</span></span>
-                  <button v-if="cf.webhook_lead" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_lead, 'Lead')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
-                </label>
+                <label>Offline Lead Webhook <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_lead" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent when an offline lead form is submitted</span>
-              </div>
-
-              <!-- Custom Webhook Headers -->
-              <div class="ps-field" style="margin-top: 20px;">
-                <label style="display:flex; justify-content:space-between; align-items:center;">
-                  <span>Custom HTTP Headers <span class="opt-tag">optional</span></span>
-                  <button type="button" class="btn btn-ghost btn-sm" @click="addHeaderRow" style="padding:2px 8px; font-size:11px;">+ Add Header</button>
-                </label>
-                <span class="hint" style="margin-bottom:8px; display:block;">
-                  Send custom request headers (e.g. <code>x-api-key</code>, <code>x-api</code>, <code>Authorization</code>) with every webhook event.
-                </span>
-                <div v-if="!headersList.length" style="color:var(--text3); font-size:12px; font-style:italic;">No custom headers configured.</div>
-                <div v-else style="display:flex; flex-direction:column; gap:8px;">
-                  <div v-for="(h, idx) in headersList" :key="idx" style="display:flex; gap:8px; align-items:center;">
-                    <input v-model="h.key" class="inp" style="flex:1;" placeholder="Header Name (e.g. x-api-key)" />
-                    <input v-model="h.value" class="inp" style="flex:1;" placeholder="Header Value (e.g. secret123)" />
-                    <button type="button" class="btn btn-danger btn-sm" @click="removeHeaderRow(idx)" style="padding:4px 8px;">✕</button>
-                  </div>
-                </div>
               </div>
             </template>
 
@@ -849,7 +812,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { useRoute } from 'vue-router'
-import axios from 'axios'
 import AppLayout from '../components/AppLayout.vue'
 import ModalContents from '../components/ModalContents.vue'
 import { useWidgetStore } from '../stores'
@@ -1030,51 +992,6 @@ const cf = reactive({
   webhook_lead: ''
 })
 
-const headersList = ref([])
-
-function addHeaderRow() {
-  headersList.value.push({ key: '', value: '' })
-}
-function removeHeaderRow(idx) {
-  headersList.value.splice(idx, 1)
-}
-function parseHeadersToList(raw) {
-  if (!raw) return []
-  try {
-    const data = typeof raw === 'string' ? JSON.parse(raw) : raw
-    if (Array.isArray(data)) return data.map(item => ({ key: item.key || '', value: item.value || '' }))
-    if (typeof data === 'object') return Object.entries(data).map(([key, value]) => ({ key, value }))
-  } catch (e) {}
-  return []
-}
-function stringifyHeadersList(list) {
-  const filtered = list.filter(h => h.key && h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value || '' }))
-  return JSON.stringify(filtered)
-}
-
-async function testWebhookUrl(url, eventType = 'Initiated') {
-  if (!url) return toast('Please enter a webhook URL first', 'error')
-  try {
-    toast('Sending test payload…')
-    const token = localStorage.getItem('admin_token')
-    const headers = stringifyHeadersList(headersList.value)
-    const res = await axios.post('/api/admin/test-webhook', {
-      webhook_url: url,
-      webhook_headers: headers,
-      event_type: eventType
-    }, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    if (res.data.ok) {
-      toast(`✅ ${res.data.message}`)
-    } else {
-      toast(`❌ Test failed: ${res.data.error}`, 'error')
-    }
-  } catch (err) {
-    toast(`❌ Test failed: ${err.message}`, 'error')
-  }
-}
-
 // Drag and drop form fields reordering state
 const fieldsList = ref([
   { id: 'first_name', label: 'First Name' },
@@ -1128,7 +1045,6 @@ onMounted(async () => {
       webhook_failed:     w.webhook_failed      || '',
       webhook_lead:       w.webhook_lead        || '',
     })
-    headersList.value = parseHeadersToList(w.webhook_headers)
 
     // Restore sorted fields list order
     if (f.fields_order) {
@@ -1269,8 +1185,7 @@ function themePreviewStyle(val) {
 async function save() {
   saving.value = true
   try {
-    const webhook_headers = stringifyHeadersList(headersList.value)
-    await store.update(route.params.id, { ...f, ...cf, webhook_headers })
+    await store.update(route.params.id, { ...f, ...cf })
     widget.value = store.getById(route.params.id)
     toast('Widget saved!')
   } catch { toast('Save failed', 'error') }

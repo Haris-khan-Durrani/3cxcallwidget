@@ -100,6 +100,11 @@
                   <label class="form-label">Client Secret</label>
                   <input v-model="form.client_secret_3cx" type="password" class="input" placeholder="3CX System Owner Client Secret" />
                 </div>
+                <div class="form-group">
+                  <label class="form-label">Location ID (GHL / CRM Location ID)</label>
+                  <input v-model="form.location_id" type="text" class="input" placeholder="e.g. loc_abc12345" />
+                  <p class="help-text" style="margin-top: 4px; font-size: 11px;">Location ID included in all dialer event webhooks.</p>
+                </div>
                 
                 <div class="divider" style="margin: 16px 0; border-top: 1px solid rgba(128,128,128,0.2);"></div>
                 <h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600;">Webhook Event Notifications (Optional)</h4>
@@ -165,16 +170,32 @@
               </div>
               <div class="modal-body">
                 <!-- Add Agent Form -->
-                <form class="agent-form" @submit.prevent="addAgent">
-                  <div class="form-group" style="flex: 2;">
-                    <label class="form-label">CRM User ID</label>
-                    <input v-model="newAgent.crm_user_id" type="text" class="input" placeholder="e.g. user_abc123" required />
+                <form class="agent-form" @submit.prevent="addAgent" style="display:flex; flex-direction:column; gap:12px;">
+                  <div style="display:flex; gap:12px;">
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">First Name</label>
+                      <input v-model="newAgent.first_name" type="text" class="input" placeholder="e.g. Haris" />
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">Last Name</label>
+                      <input v-model="newAgent.last_name" type="text" class="input" placeholder="e.g. Khan" />
+                    </div>
                   </div>
-                  <div class="form-group" style="flex: 1;">
-                    <label class="form-label">3CX Extension</label>
-                    <input v-model="newAgent.extension" type="text" class="input" placeholder="e.g. 750" required />
+                  <div style="display:flex; gap:12px;">
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">Agent ID (CRM User ID) *</label>
+                      <input v-model="newAgent.crm_user_id" type="text" class="input" placeholder="e.g. user_abc123" required />
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">Agent Email *</label>
+                      <input v-model="newAgent.email" type="email" class="input" placeholder="e.g. haris@company.com" required />
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">3CX Extension *</label>
+                      <input v-model="newAgent.extension" type="text" class="input" placeholder="e.g. 750" required />
+                    </div>
                   </div>
-                  <div class="form-group" style="align-self: flex-end;">
+                  <div style="align-self: flex-end;">
                     <button type="submit" class="btn btn-primary" :disabled="addingAgent" style="height: 38px;">
                       {{ addingAgent ? 'Adding...' : 'Add Mapping' }}
                     </button>
@@ -194,14 +215,18 @@
                   <table class="table">
                     <thead>
                       <tr>
-                        <th>CRM User ID</th>
+                        <th>Agent Name</th>
+                        <th>Agent ID</th>
+                        <th>Email</th>
                         <th>3CX Extension</th>
                         <th style="width: 80px; text-align: right;">Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr v-for="a in agents" :key="a.id">
+                        <td><strong>{{ a.first_name }} {{ a.last_name || '' }}</strong></td>
                         <td><code>{{ a.crm_user_id }}</code></td>
+                        <td>{{ a.email || '-' }}</td>
                         <td><span class="badge badge-green">{{ a.extension }}</span></td>
                         <td style="text-align: right;">
                           <button class="btn btn-danger btn-sm" @click="deleteAgent(a.id)" title="Delete">✕</button>
@@ -237,7 +262,7 @@ const editingId = ref(null)
 const activeWebhookTab = ref('initiated')
 
 const form = reactive({
-  name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '',
+  name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '',
   webhook_initiated: '', webhook_connected: '', webhook_completed: '', webhook_failed: ''
 })
 
@@ -247,7 +272,7 @@ const currentDialerId = ref(null)
 const agents = ref([])
 const loadingAgents = ref(false)
 const addingAgent = ref(false)
-const newAgent = reactive({ crm_user_id: '', extension: '' })
+const newAgent = reactive({ crm_user_id: '', extension: '', email: '', first_name: '', last_name: '' })
 
 // Embed tab state per dialer — use ref + spread so Vue always detects the change
 const embedTab = ref({})
@@ -260,7 +285,7 @@ function openCreate() {
   editingId.value = null
   activeWebhookTab.value = 'initiated'
   Object.assign(form, { 
-    name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '',
+    name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '',
     webhook_initiated: '', webhook_connected: '', webhook_completed: '', webhook_failed: ''
   })
   showModal.value = true
@@ -275,6 +300,7 @@ function openEdit(dialer) {
     fqdn_3cx: dialer.fqdn_3cx, 
     client_id_3cx: dialer.client_id_3cx, 
     client_secret_3cx: dialer.client_secret_3cx,
+    location_id: dialer.location_id || '',
     webhook_initiated: dialer.webhook_initiated || '',
     webhook_connected: dialer.webhook_connected || '',
     webhook_completed: dialer.webhook_completed || '',
@@ -345,13 +371,14 @@ async function fetchAgents() {
 }
 
 async function addAgent() {
-  if (!newAgent.crm_user_id || !newAgent.extension) return
+  if (!newAgent.crm_user_id || !newAgent.extension || !newAgent.email) {
+    return toast('CRM User ID, extension, and email are required', 'error')
+  }
   addingAgent.value = true
   try {
     await axios.post(`/api/admin/dialer-widgets/${currentDialerId.value}/agents`, { ...newAgent })
     toast('Mapping added')
-    newAgent.crm_user_id = ''
-    newAgent.extension = ''
+    Object.assign(newAgent, { crm_user_id: '', extension: '', email: '', first_name: '', last_name: '' })
     fetchAgents()
   } catch (err) {
     toast('Failed to add mapping', 'error')

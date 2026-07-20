@@ -422,7 +422,11 @@
                           <div class="ps-field"><label>First Name *</label><input v-model="agForm.first_name" class="inp" placeholder="John"/></div>
                           <div class="ps-field"><label>Last Name</label><input v-model="agForm.last_name" class="inp" placeholder="Doe"/></div>
                         </div>
-                        <div class="ps-field"><label>Extension *</label><input v-model="agForm.extension" class="inp" placeholder="101"/></div>
+                        <div class="ps-row-2">
+                          <div class="ps-field"><label>3CX Extension *</label><input v-model="agForm.extension" class="inp" placeholder="101"/></div>
+                          <div class="ps-field"><label>Agent ID (CRM/GHL ID) *</label><input v-model="agForm.crm_agent_id" class="inp" placeholder="user_123"/></div>
+                        </div>
+                        <div class="ps-field"><label>Agent Email *</label><input v-model="agForm.email" type="email" class="inp" placeholder="john@company.com"/></div>
                         <div class="ps-field">
                           <label>Avatar URL <span class="opt-tag">optional</span></label>
                           <input v-model="agForm.avatar_url" class="inp" type="url" placeholder="https://…"/>
@@ -491,6 +495,12 @@
                 <select v-model="cf.grant_type_3cx" class="sel">
                   <option value="client_credentials">client_credentials (server-to-server)</option>
                 </select>
+              </div>
+
+              <div class="ps-field">
+                <label>Location ID (GHL / CRM Location ID) <span class="opt-tag">optional</span></label>
+                <input v-model="cf.location_id" class="inp" placeholder="e.g. loc_abc12345"/>
+                <span class="hint">Location ID included in all event webhooks for CRM tracking</span>
               </div>
 
               <div class="ps-field">
@@ -820,7 +830,7 @@ const showSecret  = ref(false)
 const testingConn = ref(false)
 const testResult  = ref(null)
 
-const agForm = reactive({ first_name:'', last_name:'', extension:'', avatar_url:'' })
+const agForm = reactive({ first_name:'', last_name:'', extension:'', crm_agent_id:'', email:'', avatar_url:'' })
 const isClosedPreview = computed(() => f.office_hours_enabled && tab.value === 'office_hours')
 
 const tabs = [
@@ -1175,12 +1185,12 @@ async function save() {
 
 function openAddAgent() {
   editingAgentId.value = null
-  Object.assign(agForm, { first_name:'', last_name:'', extension:'', avatar_url:'' })
+  Object.assign(agForm, { first_name:'', last_name:'', extension:'', crm_agent_id:'', email:'', avatar_url:'' })
   showAddAgent.value = true
 }
 
 async function addAgent() {
-  if (!agForm.first_name || !agForm.extension) return toast('First name and extension required', 'error')
+  if (!agForm.first_name || !agForm.extension || !agForm.crm_agent_id || !agForm.email) return toast('First name, extension, Agent ID, and Email required', 'error')
   addingAgent.value = true
   try {
     if (editingAgentId.value) {
@@ -1194,7 +1204,7 @@ async function addAgent() {
     widget.value = store.getById(route.params.id)
     showAddAgent.value = false
     editingAgentId.value = null
-    Object.assign(agForm, { first_name:'', last_name:'', extension:'', avatar_url:'' })
+    Object.assign(agForm, { first_name:'', last_name:'', extension:'', crm_agent_id:'', email:'', avatar_url:'' })
   } catch { toast('Failed', 'error') }
   finally { addingAgent.value = false }
 }
@@ -1205,6 +1215,8 @@ function editAgent(ag) {
     first_name: ag.first_name,
     last_name: ag.last_name || '',
     extension: ag.extension,
+    crm_agent_id: ag.crm_agent_id || '',
+    email: ag.email || '',
     avatar_url: ag.avatar_url || ''
   })
   showAddAgent.value = true

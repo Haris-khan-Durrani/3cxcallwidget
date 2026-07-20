@@ -121,14 +121,42 @@ async function triggerUserWebhook(callRecord, widget) {
       recordingListenUrl = `${appUrl}/recordings/${callRecord.recording_token}/listen`;
     }
 
+    let targetExt = '';
+    let agentId = '';
+    let agentEmail = '';
+    let agentName = '';
+
+    if (callRecord.agent_extension) {
+      const parts = callRecord.agent_extension.split(',');
+      let matchedExt = parts.find(p => p.includes(':answered') || p.includes(':completed'));
+      if (matchedExt) {
+        targetExt = matchedExt.split(':')[0].trim();
+      } else {
+        targetExt = parts[parts.length - 1].split(':')[0].trim();
+      }
+
+      if (targetExt) {
+        const matchedAgent = await Agent.findOne({ where: { widgetId: widget.id, extension: targetExt } });
+        if (matchedAgent) {
+          agentId = matchedAgent.crm_agent_id || matchedAgent.id;
+          agentEmail = matchedAgent.email || '';
+          agentName = `${matchedAgent.first_name} ${matchedAgent.last_name || ''}`.trim();
+        }
+      }
+    }
+
     const payload = {
       callId:             callRecord.id,
       widgetId:           widget.id,
       widgetName:         widget.name,
+      locationId:         widget.location_id || '',
       customerName:       callRecord.customer_name,
       customerPhone:      callRecord.customer_phone,
       customerEmail:      callRecord.customer_email || '',
-      agentExtension:     callRecord.agent_extension,
+      agentExtension:     targetExt || callRecord.agent_extension || '',
+      agentId:            agentId,
+      agentEmail:         agentEmail,
+      agentName:          agentName,
       status:             callRecord.status,
       outcome:            callRecord.outcome || callRecord.status,
       durationSeconds:    callRecord.duration_seconds || 0,
@@ -192,11 +220,29 @@ async function triggerDialerWebhook(record, dialer) {
       recordingListenUrl = `${appUrl}/recordings/${record.recording_token}/listen`;
     }
 
+    let agentId = '';
+    let agentEmail = '';
+    let agentName = '';
+
+    if (record.agent_extension) {
+      const extStr = String(record.agent_extension).trim();
+      const matchedAgent = await DialerAgent.findOne({ where: { dialerId: dialer.id, extension: extStr } });
+      if (matchedAgent) {
+        agentId = matchedAgent.crm_user_id || matchedAgent.id;
+        agentEmail = matchedAgent.email || '';
+        agentName = `${matchedAgent.first_name || ''} ${matchedAgent.last_name || ''}`.trim();
+      }
+    }
+
     const payload = {
       callId:             record.id,
       dialerId:           dialer.id,
       dialerName:         dialer.name,
-      agentExtension:     record.agent_extension,
+      locationId:         dialer.location_id || '',
+      agentExtension:     record.agent_extension || '',
+      agentId:            agentId,
+      agentEmail:         agentEmail,
+      agentName:          agentName,
       destination:        record.destination,
       status:             record.status,
       durationSeconds:    record.duration_seconds || 0,
@@ -2098,6 +2144,10 @@ app.delete('/api/admin/widgets/:id', authenticateToken, async (req, res) => {
 // Add Agent to Widget
 app.post('/api/admin/widgets/:id/agents', authenticateToken, async (req, res) => {
   try {
+    const { extension, first_name, crm_agent_id, email } = req.body;
+    if (!extension || !first_name || !crm_agent_id || !email) {
+      return res.status(400).json({ error: 'Missing required agent fields (Extension, First Name, Agent ID, Email)' });
+    }
     const agent = await Agent.create({ ...req.body, widgetId: req.params.id });
     res.json(agent);
   } catch (err) {
@@ -2294,12 +2344,15 @@ app.get('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, r
 
 app.post('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, res) => {
   try {
-    const { crm_user_id, extension } = req.body;
-    if (!crm_user_id || !extension) return res.status(400).json({ error: 'Missing crm_user_id or extension' });
+    const { crm_user_id, extension, email, first_name, last_name } = req.body;
+    if (!crm_user_id || !extension || !email) return res.status(400).json({ error: 'Missing required fields (crm_user_id, extension, email)' });
     const agent = await DialerAgent.create({
       dialerId: req.params.id,
       crm_user_id,
-      extension
+      extension,
+      email,
+      first_name: first_name || '',
+      last_name: last_name || ''
     });
     res.json(agent);
   } catch (err) {

@@ -131,6 +131,7 @@ const Widget = sequelize.define('Widget', {
   agent_rotation_enabled:{ type: DataTypes.BOOLEAN, defaultValue: true },
   tooltip_autohide:      { type: DataTypes.BOOLEAN, defaultValue: true },
   tooltip_autohide_seconds: { type: DataTypes.INTEGER, defaultValue: 15 },
+  location_id:           { type: DataTypes.STRING, allowNull: true },
 });
 
 const CallRecord = sequelize.define('CallRecord', {
@@ -222,6 +223,14 @@ const Agent = sequelize.define('Agent', {
   avatar_url: {
     type: DataTypes.STRING,
     allowNull: true,
+  },
+  crm_agent_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: true,
   }
 });
 
@@ -260,6 +269,10 @@ const DialerWidget = sequelize.define('DialerWidget', {
     allowNull: true,
   },
   webhook_failed: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  location_id: {
     type: DataTypes.STRING,
     allowNull: true,
   }
@@ -322,6 +335,18 @@ const DialerAgent = sequelize.define('DialerAgent', {
   extension: {
     type: DataTypes.STRING,
     allowNull: false,
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  first_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  last_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
   }
 });
 

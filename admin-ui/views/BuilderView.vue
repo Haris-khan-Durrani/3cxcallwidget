@@ -537,37 +537,55 @@
               <div class="ps-divider"></div>
               <div class="ps-head">Webhook Settings</div>
               <div class="ps-field">
-                <label>n8n / GHL Webhook URL (Global) <span class="opt-tag">optional</span></label>
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                  <span>n8n / GHL Webhook URL (Global) <span class="opt-tag">optional</span></span>
+                  <button v-if="cf.webhook_url_n8n" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_url_n8n, 'Global')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
+                </label>
                 <input v-model="cf.webhook_url_n8n" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent on every status update/change</span>
               </div>
 
               <div class="ps-field">
-                <label>Call Dialing / Initiated Webhook <span class="opt-tag">optional</span></label>
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                  <span>Call Dialing / Initiated Webhook <span class="opt-tag">optional</span></span>
+                  <button v-if="cf.webhook_initiated" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_initiated, 'Initiated')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
+                </label>
                 <input v-model="cf.webhook_initiated" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent when the call starts dialing/ringing</span>
               </div>
 
               <div class="ps-field">
-                <label>Call Answered Webhook <span class="opt-tag">optional</span></label>
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                  <span>Call Answered Webhook <span class="opt-tag">optional</span></span>
+                  <button v-if="cf.webhook_answered" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_answered, 'Answered')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
+                </label>
                 <input v-model="cf.webhook_answered" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent when the agent answers the call</span>
               </div>
 
               <div class="ps-field">
-                <label>Call Completed Webhook <span class="opt-tag">optional</span></label>
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                  <span>Call Completed Webhook <span class="opt-tag">optional</span></span>
+                  <button v-if="cf.webhook_completed" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_completed, 'Completed')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
+                </label>
                 <input v-model="cf.webhook_completed" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent when call connects and finishes talking successfully</span>
               </div>
 
               <div class="ps-field">
-                <label>Call Failed / Busy Webhook <span class="opt-tag">optional</span></label>
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                  <span>Call Failed / Busy Webhook <span class="opt-tag">optional</span></span>
+                  <button v-if="cf.webhook_failed" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_failed, 'Failed')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
+                </label>
                 <input v-model="cf.webhook_failed" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent if the call goes unanswered, busy, or fails</span>
               </div>
 
               <div class="ps-field">
-                <label>Offline Lead Webhook <span class="opt-tag">optional</span></label>
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                  <span>Offline Lead Webhook <span class="opt-tag">optional</span></span>
+                  <button v-if="cf.webhook_lead" type="button" class="btn btn-ghost btn-sm" @click="testWebhookUrl(cf.webhook_lead, 'Lead')" style="padding:2px 8px; font-size:11px;">⚡ Test Webhook</button>
+                </label>
                 <input v-model="cf.webhook_lead" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent when an offline lead form is submitted</span>
               </div>
@@ -1031,6 +1049,29 @@ function parseHeadersToList(raw) {
 function stringifyHeadersList(list) {
   const filtered = list.filter(h => h.key && h.key.trim()).map(h => ({ key: h.key.trim(), value: h.value || '' }))
   return JSON.stringify(filtered)
+}
+
+async function testWebhookUrl(url, eventType = 'Initiated') {
+  if (!url) return toast('Please enter a webhook URL first', 'error')
+  try {
+    toast('Sending test payload…')
+    const token = localStorage.getItem('admin_token')
+    const headers = stringifyHeadersList(headersList.value)
+    const res = await axios.post('/api/admin/test-webhook', {
+      webhook_url: url,
+      webhook_headers: headers,
+      event_type: eventType
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (res.data.ok) {
+      toast(`✅ ${res.data.message}`)
+    } else {
+      toast(`❌ Test failed: ${res.data.error}`, 'error')
+    }
+  } catch (err) {
+    toast(`❌ Test failed: ${err.message}`, 'error')
+  }
 }
 
 // Drag and drop form fields reordering state

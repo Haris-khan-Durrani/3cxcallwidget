@@ -204,10 +204,11 @@ async function triggerUserWebhook(callRecord, widget) {
 
     for (const url of uniqueUrls) {
       try {
-        await axios.post(url, payload, { headers: requestHeaders, timeout: 5000 });
-        console.log(`[Webhook] Sent call lifecycle update for ${callRecord.id} to ${url}`);
+        console.log(`[Webhook] Dispatching event (${callRecord.status}) for call ${callRecord.id} to: ${url}`);
+        const resp = await axios.post(url, payload, { headers: requestHeaders, timeout: 8000 });
+        console.log(`[Webhook] Delivered successfully (${resp.status}) to ${url}`);
       } catch (err) {
-        console.error(`[Webhook] Failed to send update to ${url}:`, err.message);
+        console.error(`[Webhook] Failed to send update to ${url}:`, err.response?.status || err.message);
       }
     }
   } catch (err) {
@@ -1503,6 +1504,7 @@ app.post('/api/call', async (req, res) => {
       callRecord.status = 'Failed';
       callRecord.outcome = 'Failed';
       await callRecord.save();
+      await triggerUserWebhook(callRecord, widget);
       return res.status(400).json({ error: 'No agent extension configured for this widget.' });
     }
 
@@ -2244,6 +2246,47 @@ app.post('/api/admin/widgets/:id/test-connection', authenticateToken, async (req
   } catch (err) {
     console.error('[test-connection]', err);
     res.status(500).json({ ok: false, error: 'Internal server error' });
+  }
+});
+
+// Test Webhook URL endpoint
+app.post('/api/admin/test-webhook', authenticateToken, async (req, res) => {
+  try {
+    const { webhook_url, webhook_headers, event_type } = req.body;
+    if (!webhook_url) return res.status(400).json({ ok: false, error: 'Webhook URL is required' });
+
+    const requestHeaders = parseWebhookHeaders(webhook_headers);
+    const testPayload = {
+      event: 'test_webhook',
+      message: 'This is a test webhook payload from 3CX Call Connect Platform',
+      eventType: event_type || 'Initiated',
+      test: true,
+      callId: 'test_call_' + Date.now(),
+      widgetName: 'Test Widget',
+      locationId: 'loc_test123',
+      customerName: 'John Test',
+      customerPhone: '+1234567890',
+      customerEmail: 'test@example.com',
+      agentExtension: '101',
+      agentId: 'agent_test_101',
+      agentEmail: 'agent@example.com',
+      agentName: 'Test Agent',
+      status: event_type || 'Initiated',
+      outcome: 'Answered',
+      durationSeconds: 30,
+      timestamp: new Date()
+    };
+
+    console.log(`[Test Webhook] Sending test payload to: ${webhook_url}`);
+    const resp = await axios.post(webhook_url, testPayload, { headers: requestHeaders, timeout: 8000 });
+    return res.json({ ok: true, status: resp.status, message: `Webhook test delivered successfully! Status code ${resp.status}` });
+  } catch (err) {
+    console.error('[Test Webhook Error]', err.response?.data || err.message);
+    return res.json({ 
+      ok: false, 
+      status: err.response?.status || 500,
+      error: err.response?.data ? (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)) : err.message 
+    });
   }
 });
 

@@ -136,6 +136,8 @@ async function triggerUserWebhook(callRecord, widget) {
       recordingId:        callRecord.recording_id || null,
       recordingUrl:       recordingUrl,
       recordingListenUrl: recordingListenUrl,
+      pageUrl:            callRecord.page_url || '',
+      ipAddress:          callRecord.ip_address || '',
       timestamp:          new Date()
     };
 
@@ -201,6 +203,8 @@ async function triggerDialerWebhook(record, dialer) {
       recordingId:        record.recording_id || null,
       recordingUrl:       recordingUrl,
       recordingListenUrl: recordingListenUrl,
+      pageUrl:            record.page_url || '',
+      ipAddress:          record.ip_address || '',
       endedAt:            record.ended_at || null,
       timestamp:          new Date()
     };
@@ -1358,12 +1362,17 @@ app.post('/api/call', async (req, res) => {
       return res.status(404).json({ error: 'Widget not found' });
     }
 
+    const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || req.ip || '';
+    const pageUrl  = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
+
     // Save call record
     const callRecord = await CallRecord.create({
       widgetId: widget.id,
       customer_name: `${firstName} ${lastName || ''}`.trim(),
       customer_email: email || '',
       customer_phone: phone,
+      page_url: pageUrl,
+      ip_address: clientIp,
       status: 'Initiated'
     });
 
@@ -2683,11 +2692,16 @@ app.post('/api/dialer/call', async (req, res) => {
       }
     });
 
+    const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || req.ip || '';
+    const pageUrl  = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
+
     // Create Call Record
     const record = await DialerCallRecord.create({
       dialerId,
       agent_extension: extension,
       destination: String(destination),
+      page_url: pageUrl,
+      ip_address: clientIp,
       status: 'Initiated'
     });
 

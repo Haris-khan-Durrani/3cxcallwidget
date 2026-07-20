@@ -201,6 +201,8 @@
                 <tr>
                   <th @click="sortBy('customer_name')" class="sortable">Name <span class="sort-icon">{{ sortKey === 'customer_name' ? (sortDir === 'asc' ? '↑' : '↓') : '⇅' }}</span></th>
                   <th>Phone</th>
+                  <th>Page URL</th>
+                  <th>IP Address</th>
                   <th>Agent Call Flow (Attempts)</th>
                   <th @click="sortBy('duration_seconds')" class="sortable">Duration <span class="sort-icon">{{ sortKey === 'duration_seconds' ? (sortDir === 'asc' ? '↑' : '↓') : '⇅' }}</span></th>
                   <th @click="sortBy('status')" class="sortable">Status <span class="sort-icon">{{ sortKey === 'status' ? (sortDir === 'asc' ? '↑' : '↓') : '⇅' }}</span></th>
@@ -212,6 +214,16 @@
                 <tr v-for="r in paginatedRecords" :key="r.id">
                   <td><strong>{{ r.customer_name }}</strong></td>
                   <td><code style="font-size:12px;">{{ r.customer_phone }}</code></td>
+                  <td>
+                    <a v-if="r.page_url" :href="r.page_url" target="_blank" rel="noopener" class="url-link" :title="r.page_url" style="font-size:11px;max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--accent);">
+                      {{ cleanUrl(r.page_url) }}
+                    </a>
+                    <span v-else style="color:var(--text3)">—</span>
+                  </td>
+                  <td>
+                    <code v-if="r.ip_address" style="font-size:11px;">{{ r.ip_address }}</code>
+                    <span v-else style="color:var(--text3)">—</span>
+                  </td>
                   <td>
                     <div v-if="r.agent_extension" class="call-flow-container">
                       <div v-for="(step, idx) in parseCallFlow(r.agent_extension, r.status)" :key="idx" class="call-flow-step">
@@ -711,10 +723,20 @@ const agentPerformanceStats = computed(() => {
 // Pagination logic
 const totalPages = computed(() => Math.ceil(filteredRecords.value.length / perPage))
 
+function cleanUrl(url) {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname + (parsed.pathname !== '/' ? parsed.pathname : '');
+  } catch (e) {
+    return url;
+  }
+}
+
 function downloadCSV() {
   if (!filteredRecords.value.length) return
   const rows = [
-    ['Name', 'Phone', 'Agent Call Flow', 'Duration', 'Status', 'Date & Time']
+    ['Name', 'Phone', 'Page URL', 'IP Address', 'Agent Call Flow', 'Duration', 'Status', 'Date & Time']
   ]
   filteredRecords.value.forEach(r => {
     let flowStr = ''
@@ -725,6 +747,8 @@ function downloadCSV() {
     rows.push([
       r.customer_name || '-',
       r.customer_phone || '-',
+      r.page_url || '-',
+      r.ip_address || '-',
       flowStr || '-',
       r.duration_seconds || '0s',
       r.status || 'Unknown',

@@ -366,7 +366,7 @@
       fetch(apiBase + '/api/dialer/call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dialerId: DIALER_ID, extension: extension, destination: destination })
+        body: JSON.stringify({ dialerId: DIALER_ID, extension: extension, destination: destination, pageUrl: window.location.href || document.referrer })
       })
       .then(function(r){ return r.json(); })
       .then(function(d){

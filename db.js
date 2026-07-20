@@ -190,6 +190,14 @@ const CallRecord = sequelize.define('CallRecord', {
     type: DataTypes.STRING,
     allowNull: true,   // Opaque sharing/listen token (lifetime validity)
   },
+  page_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  ip_address: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
 });
 
 
@@ -290,7 +298,15 @@ const DialerCallRecord = sequelize.define('DialerCallRecord', {
   recording_token: {
     type: DataTypes.STRING,
     allowNull: true,   // Opaque sharing/listen token (lifetime validity)
-  }
+  },
+  page_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  ip_address: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
 });
 
 const DialerAgent = sequelize.define('DialerAgent', {

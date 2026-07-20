@@ -1416,7 +1416,7 @@
       const res = await fetch(`${SERVER_URL}/api/call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ widgetId: WIDGET_ID, firstName, lastName, email, phone, agentExtension: agentExt }),
+        body: JSON.stringify({ widgetId: WIDGET_ID, firstName, lastName, email, phone, agentExtension: agentExt, pageUrl: window.location.href }),
       });
       if (res.ok) {
         const d = await res.json().catch(() => ({}));

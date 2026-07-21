@@ -1452,13 +1452,69 @@ function isValidPhoneNumber(phone) {
   return /^\d{7,15}$/.test(cleanDigits);
 }
 
+// In-Memory IP Rate Limiter for /api/call
+const callIpRateMap = new Map();
+setInterval(() => {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  for (const [ip, timestamps] of callIpRateMap.entries()) {
+    const valid = timestamps.filter(ts => now - ts < windowMs);
+    if (valid.length === 0) {
+      callIpRateMap.delete(ip);
+    } else {
+      callIpRateMap.set(ip, valid);
+    }
+  }
+}, 15 * 60 * 1000);
+
+function isIpRateLimited(clientIp, limit = 5, windowMs = 15 * 60 * 1000) {
+  const now = Date.now();
+  const timestamps = callIpRateMap.get(clientIp) || [];
+  const validTimestamps = timestamps.filter(ts => now - ts < windowMs);
+  
+  if (validTimestamps.length >= limit) {
+    return true; // Rate limited
+  }
+  
+  validTimestamps.push(now);
+  callIpRateMap.set(clientIp, validTimestamps);
+  return false;
+}
+
 // 2. API to initiate the call
 app.post('/api/call', async (req, res) => {
   const { widgetId, firstName, lastName, email, phone, agentExtension, website_hp_confirm, website, fax } = req.body;
 
   const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || req.ip || '';
+  const userAgent = req.get('user-agent') || '';
+  const origin = req.get('origin') || '';
+  const referer = req.get('referer') || '';
 
-  // 1. Honeypot Anti-Bot Protection: Real human visitors cannot see or fill hidden fields
+  // 1. Anti-Postman & API Tool Detection
+  const isApiClient = /PostmanRuntime|Insomnia|curl|PyHTTP|python-requests|Go-http-client|axios|HttpClient|Wget/i.test(userAgent);
+  if (isApiClient) {
+    console.warn(`[Security] API Client tool detected (${userAgent}) from IP ${clientIp}. Blocking Postman request.`);
+    return res.status(403).json({ error: 'Access denied. Calls must be initiated from the official web widget.' });
+  }
+
+  // 2. Origin & Referer Verification: Real browser fetch POST requests always send Origin or Referer
+  if (!origin && !referer) {
+    console.warn(`[Security] Direct request missing Origin and Referer from IP ${clientIp}. Blocking request.`);
+    return res.status(403).json({ error: 'Access denied. Direct API requests are not allowed.' });
+  }
+
+  if (origin.startsWith('chrome-extension://') || origin.toLowerCase().includes('postman')) {
+    console.warn(`[Security] Postman extension origin (${origin}) from IP ${clientIp}. Blocking request.`);
+    return res.status(403).json({ error: 'Access denied. Unauthorized origin.' });
+  }
+
+  // 3. IP Rate Limiting: Max 5 call requests per 15 minutes per IP
+  if (isIpRateLimited(clientIp, 5, 15 * 60 * 1000)) {
+    console.warn(`[Security] IP Rate limit exceeded for IP ${clientIp}`);
+    return res.status(429).json({ error: 'Too many call attempts from this IP. Please try again in 15 minutes.' });
+  }
+
+  // 4. Honeypot Anti-Bot Protection: Real human visitors cannot see or fill hidden fields
   const honeypotTriggered = (website_hp_confirm && String(website_hp_confirm).trim() !== '') ||
                             (website && String(website).trim() !== '') ||
                             (fax && String(fax).trim() !== '');
@@ -1469,7 +1525,7 @@ app.post('/api/call', async (req, res) => {
     return res.json({ success: true, message: 'Call initiated successfully', callId: null });
   }
 
-  // 2. Spam Pattern Check: Reject inputs with embedded spam website URLs
+  // 5. Spam Pattern Check: Reject inputs with embedded spam website URLs
   const containsUrlPattern = /(https?:\/\/|www\.|[a-zA-Z0-9-]+\.(com|ru|xyz|top|online|site|info))/i;
   if (containsUrlPattern.test(firstName) || containsUrlPattern.test(lastName || '') || containsUrlPattern.test(phone)) {
     console.warn(`[Security] Spam URL detected in form input from IP ${clientIp}`);

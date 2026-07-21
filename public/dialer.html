@@ -45,7 +45,7 @@
       border-radius: 19px;
       background: linear-gradient(135deg, #2563eb, #1d4ed8);
       color: #fff;
-      display: flex;
+      display: none;
       align-items: center;
       gap: 7px;
       font-size: 12px;
@@ -72,7 +72,7 @@
       background: #fff;
       border-radius: 18px;
       box-shadow: 0 12px 48px rgba(0,0,0,0.18);
-      display: flex;
+      display: none;
       flex-direction: column;
       overflow: hidden;
       border: 1px solid rgba(0,0,0,0.07);
@@ -544,9 +544,9 @@
     const userid = urlParams.get('userid');
     let initialPhone = urlParams.get('phone');
     
-    // Clean GHL placeholders if they weren't replaced
-    if (extension && extension.includes('{{')) extension = '';
-    if (initialPhone && initialPhone.includes('{{')) initialPhone = '';
+    const isTemplate = (v) => !v || !v.trim() || v === 'undefined' || v === 'null' || v.includes('{{') || v.includes('}}');
+    if (isTemplate(extension)) extension = '';
+    if (isTemplate(initialPhone)) initialPhone = '';
     
     const input = document.querySelector("#phone-input");
     const btnDel = document.getElementById("btn-del");
@@ -556,21 +556,37 @@
     
     // Resolve userid to extension if provided
     async function initDialer() {
-      if (userid && !userid.includes('{{')) {
+      if (userid && !isTemplate(userid)) {
         try {
-          const res = await fetch(`/api/dialer/resolve-agent?dialerId=${dialerId}&userid=${userid}`);
-          const data = await res.json();
-          if (data.extension) extension = data.extension;
-        } catch (e) { console.error("Agent resolution failed", e); }
+          const res = await fetch(`/api/dialer/resolve-agent?dialerId=${encodeURIComponent(dialerId || '')}&userid=${encodeURIComponent(userid)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.extension && !isTemplate(data.extension)) {
+              extension = data.extension;
+            } else {
+              extension = '';
+            }
+          } else {
+            extension = '';
+          }
+        } catch (e) {
+          console.error("Agent resolution failed", e);
+          extension = '';
+        }
+      } else if (extension && !isTemplate(extension)) {
+        // valid extension directly supplied
+      } else {
+        extension = '';
       }
       
-      if (!extension || !dialerId) {
+      if (!extension || isTemplate(extension) || !dialerId) {
         document.getElementById("fab").style.display = "none";
         document.getElementById("popup").style.display = "none";
         return;
       }
 
-      // Phone initial config is handled in initDialer  }
+      document.getElementById("fab").style.display = "flex";
+      document.getElementById("popup").style.display = "flex";
     }
     
     // FAB Logic (Drag + Toggle)

@@ -17,7 +17,7 @@
   var PHONE     = params.get('phone')    || '';
 
   // Don't load if no dialer id or both userid/ext are template tags (un-replaced)
-  var isTemplate = function(v) { return !v || v.startsWith('{{'); };
+  var isTemplate = function(v) { return !v || !v.trim() || v === 'undefined' || v === 'null' || v.includes('{{') || v.includes('}}'); };
   if (!DIALER_ID || (isTemplate(USERID) && isTemplate(EXT))) return;
 
   var NS = '__3cxDialer__';
@@ -36,8 +36,8 @@
   // ── 3. Inject widget CSS ──────────────────────────────────────────────────
   var style = document.createElement('style');
   style.textContent = [
-    '#_3cx_fab{position:fixed;bottom:20px;right:20px;height:38px;padding:0 14px;border-radius:19px;',
-    'background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;display:flex;align-items:center;',
+    '#_3cx_fab{display:none;position:fixed;bottom:20px;right:20px;height:38px;padding:0 14px;border-radius:19px;',
+    'background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;align-items:center;',
     'gap:7px;font-size:12px;font-weight:600;font-family:Inter,sans-serif;border:none;outline:none;',
     'cursor:grab;user-select:none;box-shadow:0 4px 14px rgba(37,99,235,.45);z-index:2147483646;',
     'transition:box-shadow .2s;}',
@@ -45,9 +45,9 @@
     '#_3cx_fab:active{cursor:grabbing;}',
     '#_3cx_fab svg{width:16px;height:16px;}',
 
-    '#_3cx_popup{position:fixed;bottom:66px;right:20px;width:220px;height:380px;',
+    '#_3cx_popup{display:none;position:fixed;bottom:66px;right:20px;width:220px;height:380px;',
     'background:#fff;border-radius:18px;box-shadow:0 12px 48px rgba(0,0,0,.18);',
-    'display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,0,0,.07);',
+    'flex-direction:column;overflow:hidden;border:1px solid rgba(0,0,0,.07);',
     'z-index:2147483645;opacity:0;transform:translateY(10px) scale(.96);pointer-events:none;',
     'transition:opacity .22s ease,transform .22s cubic-bezier(.16,1,.3,1);font-family:Inter,sans-serif;}',
     '#_3cx_popup._3cx_active{opacity:1;transform:translateY(0) scale(1);pointer-events:all;}',
@@ -250,16 +250,33 @@
     });
 
     // ── Resolve extension via API ────────────────────────────────────────────
-    var extension = EXT;
+    var extension = '';
     var apiBase   = ORIGIN;
 
     function resolveAgent() {
-      if (extension && !isTemplate(extension)) return Promise.resolve();
-      if (!USERID || isTemplate(USERID)) return Promise.resolve();
-      return fetch(apiBase + '/api/dialer/resolve-agent?dialerId=' + DIALER_ID + '&userid=' + encodeURIComponent(USERID))
-        .then(function(r){ return r.json(); })
-        .then(function(d){ if (d.extension) extension = d.extension; })
-        .catch(function(){});
+      if (USERID && !isTemplate(USERID)) {
+        return fetch(apiBase + '/api/dialer/resolve-agent?dialerId=' + DIALER_ID + '&userid=' + encodeURIComponent(USERID))
+          .then(function(r){
+            if (!r.ok) return null;
+            return r.json();
+          })
+          .then(function(d){
+            if (d && d.extension && !isTemplate(d.extension)) {
+              extension = d.extension;
+            } else {
+              extension = '';
+            }
+          })
+          .catch(function(){
+            extension = '';
+          });
+      }
+      if (EXT && !isTemplate(EXT)) {
+        extension = EXT;
+        return Promise.resolve();
+      }
+      extension = '';
+      return Promise.resolve();
     }
 
     resolveAgent().then(function () {
@@ -268,6 +285,8 @@
         popup.style.display = 'none';
         return;
       }
+      fab.style.display   = 'flex';
+      popup.style.display = 'flex';
       document.getElementById('_3cx_ext_txt').textContent = 'Agent Extension: ' + extension;
 
       // pre-fill phone

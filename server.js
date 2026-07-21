@@ -2843,8 +2843,8 @@ app.get('/api/dialer/resolve-agent', async (req, res) => {
     if (!dialerId || !userid) return res.status(400).json({ error: 'Missing parameters' });
     
     const agent = await DialerAgent.findOne({ where: { dialerId, crm_user_id: userid } });
-    if (agent) {
-      return res.json({ extension: agent.extension });
+    if (agent && agent.extension && agent.extension.trim()) {
+      return res.json({ extension: agent.extension.trim() });
     } else {
       return res.status(404).json({ error: 'Mapping not found' });
     }

@@ -100,6 +100,28 @@
                   <label class="form-label">Client Secret</label>
                   <input v-model="form.client_secret_3cx" type="password" class="input" placeholder="3CX System Owner Client Secret" />
                 </div>
+
+                <!-- Test 3CX Connection Button & Result -->
+                <div style="margin-top: 6px;">
+                  <button 
+                    type="button" 
+                    class="btn btn-ghost" 
+                    :disabled="testingConn || !form.fqdn_3cx || !form.client_id_3cx || !form.client_secret_3cx" 
+                    @click="testConnection"
+                    style="width: 100%; justify-content: center; height: 38px; font-weight: 600;"
+                  >
+                    <span v-if="testingConn">⏳ Testing Connection...</span>
+                    <span v-else>🔌 Test 3CX Connection</span>
+                  </button>
+
+                  <div v-if="testResult" :class="['conn-result', testResult.ok ? 'ok' : 'err']" style="margin-top: 10px;">
+                    <span>{{ testResult.ok ? '✅' : '❌' }} {{ testResult.message }}</span>
+                    <div v-if="testResult.ok && testResult.extensions?.length" class="ext-chips" style="margin-top: 6px;">
+                      <span v-for="e in testResult.extensions.slice(0,10)" :key="e" class="ext-chip">{{ e }}</span>
+                      <span v-if="testResult.extensions.length > 10" class="ext-chip" style="opacity:.6">+{{ testResult.extensions.length - 10 }} more</span>
+                    </div>
+                  </div>
+                </div>
                 
                 <div class="divider" style="margin: 16px 0; border-top: 1px solid rgba(128,128,128,0.2);"></div>
                 <h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600;">Webhook Event Notifications (Optional)</h4>
@@ -289,6 +311,8 @@ const saving = ref(false)
 const editMode = ref(false)
 const editingId = ref(null)
 const activeWebhookTab = ref('initiated')
+const testingConn = ref(false)
+const testResult = ref(null)
 
 const form = reactive({
   name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '',
@@ -328,6 +352,8 @@ function openCreate() {
   editMode.value = false
   editingId.value = null
   activeWebhookTab.value = 'initiated'
+  testResult.value = null
+  testingConn.value = false
   Object.assign(form, { 
     name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '',
     webhook_initiated: '', webhook_connected: '', webhook_completed: '', webhook_failed: ''
@@ -339,6 +365,8 @@ function openEdit(dialer) {
   editMode.value = true
   editingId.value = dialer.id
   activeWebhookTab.value = 'initiated'
+  testResult.value = null
+  testingConn.value = false
   Object.assign(form, { 
     name: dialer.name, 
     fqdn_3cx: dialer.fqdn_3cx, 
@@ -351,6 +379,41 @@ function openEdit(dialer) {
     webhook_failed: dialer.webhook_failed || ''
   })
   showModal.value = true
+}
+
+async function testConnection() {
+  if (!form.fqdn_3cx || !form.client_id_3cx || !form.client_secret_3cx) {
+    return toast('3CX FQDN, Client ID, and Client Secret are required', 'error')
+  }
+  testResult.value = null
+  testingConn.value = true
+  try {
+    const res = await axios.post('/api/admin/dialers/test-connection', {
+      dialerId: editingId.value,
+      fqdn_3cx: form.fqdn_3cx,
+      client_id_3cx: form.client_id_3cx,
+      client_secret_3cx: form.client_secret_3cx
+    })
+    if (res.data.ok) {
+      testResult.value = {
+        ok: true,
+        message: res.data.message || 'Connected successfully',
+        extensions: res.data.extensions || []
+      }
+    } else {
+      testResult.value = {
+        ok: false,
+        message: res.data.error || 'Connection failed'
+      }
+    }
+  } catch (err) {
+    testResult.value = {
+      ok: false,
+      message: err.response?.data?.error || err.message || 'Failed to test connection'
+    }
+  } finally {
+    testingConn.value = false
+  }
 }
 
 async function save() {
@@ -573,4 +636,11 @@ async function deleteAgent(agentId) {
 .search-clear-btn { position: absolute; right: 10px; background: none; border: none; color: var(--text3); font-size: 13px; cursor: pointer; padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
 .search-clear-btn:hover { color: var(--text); background: rgba(255,255,255,0.1); }
 .search-count-tag { font-size: 12px; color: var(--text3); white-space: nowrap; font-weight: 500; }
+
+/* Test Connection Result Box */
+.conn-result { padding: 10px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5; }
+.conn-result.ok { background: rgba(5,150,105,.12); border: 1px solid rgba(5,150,105,.3); color: #059669; }
+.conn-result.err { background: rgba(220,38,38,.1); border: 1px solid rgba(220,38,38,.25); color: #dc2626; }
+.ext-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.ext-chip { background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 12px; font-size: 11px; color: var(--text2); font-family: monospace; }
 </style>

@@ -2941,6 +2941,63 @@ app.delete('/api/admin/dialers/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Test 3CX connection for Dialer Widgets
+app.post('/api/admin/dialers/test-connection', authenticateToken, async (req, res) => {
+  try {
+    const { fqdn_3cx, client_id_3cx, client_secret_3cx, dialerId } = req.body;
+
+    if (!fqdn_3cx || !client_id_3cx || !client_secret_3cx) {
+      return res.json({ ok: false, error: '3CX FQDN, Client ID, and Client Secret are required.' });
+    }
+
+    const testWidget = {
+      id: dialerId || 'test-dialer',
+      fqdn_3cx,
+      client_id_3cx,
+      client_secret_3cx,
+      grant_type_3cx: 'client_credentials'
+    };
+
+    // Force clear cached token to validate fresh credentials
+    invalidate3cxToken(testWidget.id);
+
+    let token;
+    try {
+      token = await get3cxToken(testWidget);
+    } catch (tokenErr) {
+      return res.json({
+        ok: false,
+        error: `Authentication failed: ${tokenErr.response?.data?.error_description || tokenErr.message}`
+      });
+    }
+
+    // Ping XAPI to retrieve extensions list
+    try {
+      const dnList = await fetch3cxDnList(testWidget);
+      const extensions = dnList
+        .map(d => (d.Number || d.DN || d.Extension || d.number || '').toString())
+        .filter(Boolean)
+        .slice(0, 50);
+
+      return res.json({
+        ok: true,
+        message: `Connected successfully! (Found ${dnList.length} extensions)`,
+        extensionCount: dnList.length,
+        extensions
+      });
+    } catch (apiErr) {
+      return res.json({
+        ok: true,
+        message: '3CX OAuth Token generated successfully!',
+        extensions: []
+      });
+    }
+  } catch (err) {
+    console.error('[dialer-test-connection]', err);
+    res.status(500).json({ ok: false, error: 'Internal server error' });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DIALER PUBLIC ROUTE (CLICK TO CALL)
 // ─────────────────────────────────────────────────────────────────────────────

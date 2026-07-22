@@ -3092,9 +3092,14 @@ app.get('/api/dialer/history', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-sequelize.sync({ alter: true }).then(async () => {
-  console.log('Database synced');
-  
+async function startServer() {
+  try {
+    await sequelize.sync();
+    console.log('Database synced');
+  } catch (err) {
+    console.warn('[Database] Sync warning (proceeding with server start):', err.message);
+  }
+
   // Seed default admin user if none exists
   try {
     const userCount = await User.count();
@@ -3116,6 +3121,6 @@ sequelize.sync({ alter: true }).then(async () => {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
-}).catch(err => {
-  console.error('Failed to sync database:', err);
-});
+}
+
+startServer();

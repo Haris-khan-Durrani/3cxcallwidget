@@ -198,6 +198,51 @@ async function triggerUserWebhook(callRecord, widget) {
 }
 
 /**
+ * Helper to parse GoHighLevel Location ID, Contact ID, and Query Parameters from a page URL.
+ */
+function parsePageUrlInfo(pageUrl) {
+  const result = {
+    locationId: '',
+    contactId: '',
+    queryParams: {}
+  };
+  
+  if (!pageUrl) return result;
+  
+  try {
+    // 1. Extract locationId and contactId via regex matching path segments
+    const locMatch = pageUrl.match(/\/location\/([A-Za-z0-9_-]+)/);
+    if (locMatch) result.locationId = locMatch[1];
+    
+    const contactMatch = pageUrl.match(/\/contacts\/detail\/([A-Za-z0-9_-]+)/);
+    if (contactMatch) result.contactId = contactMatch[1];
+    
+    // 2. Parse query parameters
+    const urlObj = new URL(pageUrl);
+    for (const [key, value] of urlObj.searchParams.entries()) {
+      result.queryParams[key] = value;
+    }
+  } catch (err) {
+    // Fallback manual query parser if URL construction fails (e.g. invalid relative URL)
+    try {
+      const qIndex = pageUrl.indexOf('?');
+      if (qIndex !== -1) {
+        const queryStr = pageUrl.substring(qIndex + 1);
+        const pairs = queryStr.split('&');
+        for (const pair of pairs) {
+          const [k, v] = pair.split('=');
+          if (k) {
+            result.queryParams[decodeURIComponent(k)] = decodeURIComponent(v || '');
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  
+  return result;
+}
+
+/**
  * Sends a detailed webhook payload to configured dialer webhook URLs on call lifecycle changes.
  */
 async function triggerDialerWebhook(record, dialer) {
@@ -266,17 +311,21 @@ async function triggerDialerWebhook(record, dialer) {
       }
     }
 
+    const urlInfo = parsePageUrlInfo(record.page_url);
+    const resolvedLocationId = urlInfo.locationId || agentLocationId || freshDialer.location_id || '';
+    const resolvedContactId = record.contact_id || urlInfo.contactId || '';
+
     const payload = {
       callId:             record.id,
       dialerId:           freshDialer.id,
       dialerName:         freshDialer.name,
-      locationId:         agentLocationId || freshDialer.location_id || '',
+      locationId:         resolvedLocationId,
       agentExtension:     record.agent_extension || '',
       agentId:            agentId,
       agentEmail:         agentEmail,
       agentName:          agentName,
       destination:        record.destination,
-      contactId:          record.contact_id || '',
+      contactId:          resolvedContactId,
       status:             record.status,
       durationSeconds:    record.duration_seconds || 0,
       recordingId:        record.recording_id || null,
@@ -285,7 +334,10 @@ async function triggerDialerWebhook(record, dialer) {
       pageUrl:            record.page_url || '',
       ipAddress:          record.ip_address || '',
       endedAt:            record.ended_at || null,
-      timestamp:          new Date()
+      timestamp:          new Date(),
+      urlLocationId:      urlInfo.locationId,
+      urlContactId:       urlInfo.contactId,
+      urlQueryParams:     urlInfo.queryParams
     };
 
     for (const url of uniqueUrls) {

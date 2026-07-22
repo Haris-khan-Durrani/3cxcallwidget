@@ -100,11 +100,6 @@
                   <label class="form-label">Client Secret</label>
                   <input v-model="form.client_secret_3cx" type="password" class="input" placeholder="3CX System Owner Client Secret" />
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Location ID (GHL / CRM Location ID)</label>
-                  <input v-model="form.location_id" type="text" class="input" placeholder="e.g. loc_abc12345" />
-                  <p class="help-text" style="margin-top: 4px; font-size: 11px;">Location ID included in all dialer event webhooks.</p>
-                </div>
                 
                 <div class="divider" style="margin: 16px 0; border-top: 1px solid rgba(128,128,128,0.2);"></div>
                 <h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600;">Webhook Event Notifications (Optional)</h4>
@@ -164,13 +159,13 @@
               <div class="modal-header">
                 <div>
                   <h3>Agent Mappings</h3>
-                  <p class="help-text" style="margin: 4px 0 0 0;">Map CRM User IDs to 3CX Extensions for this dialer.</p>
+                  <p class="help-text" style="margin: 4px 0 0 0;">Map CRM User IDs to 3CX Extensions and Location IDs for this dialer.</p>
                 </div>
                 <button class="btn btn-icon btn-ghost" @click="showAgentsModal = false">✕</button>
               </div>
               <div class="modal-body">
                 <!-- Add Agent Form -->
-                <form class="agent-form" @submit.prevent="addAgent" style="display:flex; flex-direction:column; gap:12px;">
+                <form class="agent-form" @submit.prevent="addAgent">
                   <div style="display:flex; gap:12px;">
                     <div class="form-group" style="flex: 1;">
                       <label class="form-label">First Name</label>
@@ -179,6 +174,10 @@
                     <div class="form-group" style="flex: 1;">
                       <label class="form-label">Last Name</label>
                       <input v-model="newAgent.last_name" type="text" class="input" placeholder="e.g. Khan" />
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">Location ID</label>
+                      <input v-model="newAgent.location_id" type="text" class="input" placeholder="e.g. loc_abc12345" />
                     </div>
                   </div>
                   <div style="display:flex; gap:12px;">
@@ -195,9 +194,12 @@
                       <input v-model="newAgent.extension" type="text" class="input" placeholder="e.g. 750" required />
                     </div>
                   </div>
-                  <div style="align-self: flex-end;">
+                  <div style="align-self: flex-end; display: flex; gap: 8px;">
+                    <button v-if="editingAgentId" type="button" class="btn btn-ghost" @click="cancelEditAgent" style="height: 38px;">
+                      Cancel
+                    </button>
                     <button type="submit" class="btn btn-primary" :disabled="addingAgent" style="height: 38px;">
-                      {{ addingAgent ? 'Adding...' : 'Add Mapping' }}
+                      {{ addingAgent ? 'Saving...' : (editingAgentId ? 'Save Changes' : 'Add Mapping') }}
                     </button>
                   </div>
                 </form>
@@ -219,7 +221,8 @@
                         <th>Agent ID</th>
                         <th>Email</th>
                         <th>3CX Extension</th>
-                        <th style="width: 80px; text-align: right;">Action</th>
+                        <th>Location ID</th>
+                        <th style="width: 120px; text-align: right;">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -228,7 +231,9 @@
                         <td><code>{{ a.crm_user_id }}</code></td>
                         <td>{{ a.email || '-' }}</td>
                         <td><span class="badge badge-green">{{ a.extension }}</span></td>
-                        <td style="text-align: right;">
+                        <td><code>{{ a.location_id || '-' }}</code></td>
+                        <td style="text-align: right; white-space: nowrap;">
+                          <button class="btn btn-ghost btn-sm" @click="startEditAgent(a)" title="Edit" style="margin-right: 4px;">Edit</button>
                           <button class="btn btn-danger btn-sm" @click="deleteAgent(a.id)" title="Delete">✕</button>
                         </td>
                       </tr>
@@ -272,7 +277,8 @@ const currentDialerId = ref(null)
 const agents = ref([])
 const loadingAgents = ref(false)
 const addingAgent = ref(false)
-const newAgent = reactive({ crm_user_id: '', extension: '', email: '', first_name: '', last_name: '' })
+const newAgent = reactive({ crm_user_id: '', extension: '', email: '', first_name: '', last_name: '', location_id: '' })
+const editingAgentId = ref(null)
 
 // Embed tab state per dialer — use ref + spread so Vue always detects the change
 const embedTab = ref({})
@@ -354,6 +360,7 @@ function copy(text) {
 // -- Agents Mapping Logic -- //
 async function openAgents(dialer) {
   currentDialerId.value = dialer.id
+  cancelEditAgent()
   showAgentsModal.value = true
   await fetchAgents()
 }
@@ -376,15 +383,37 @@ async function addAgent() {
   }
   addingAgent.value = true
   try {
-    await axios.post(`/api/admin/dialer-widgets/${currentDialerId.value}/agents`, { ...newAgent })
-    toast('Mapping added')
-    Object.assign(newAgent, { crm_user_id: '', extension: '', email: '', first_name: '', last_name: '' })
+    if (editingAgentId.value) {
+      await axios.put(`/api/admin/dialer-widgets/${currentDialerId.value}/agents/${editingAgentId.value}`, { ...newAgent })
+      toast('Mapping updated')
+    } else {
+      await axios.post(`/api/admin/dialer-widgets/${currentDialerId.value}/agents`, { ...newAgent })
+      toast('Mapping added')
+    }
+    cancelEditAgent()
     fetchAgents()
   } catch (err) {
-    toast('Failed to add mapping', 'error')
+    toast(editingAgentId.value ? 'Failed to update mapping' : 'Failed to add mapping', 'error')
   } finally {
     addingAgent.value = false
   }
+}
+
+function startEditAgent(a) {
+  editingAgentId.value = a.id
+  Object.assign(newAgent, {
+    crm_user_id: a.crm_user_id,
+    extension: a.extension,
+    email: a.email || '',
+    first_name: a.first_name || '',
+    last_name: a.last_name || '',
+    location_id: a.location_id || ''
+  })
+}
+
+function cancelEditAgent() {
+  editingAgentId.value = null
+  Object.assign(newAgent, { crm_user_id: '', extension: '', email: '', first_name: '', last_name: '', location_id: '' })
 }
 
 async function deleteAgent(agentId) {
@@ -392,6 +421,9 @@ async function deleteAgent(agentId) {
   try {
     await axios.delete(`/api/admin/dialer-widgets/${currentDialerId.value}/agents/${agentId}`)
     toast('Mapping removed')
+    if (editingAgentId.value === agentId) {
+      cancelEditAgent()
+    }
     fetchAgents()
   } catch (err) {
     toast('Failed to remove mapping', 'error')
@@ -423,13 +455,13 @@ async function deleteAgent(agentId) {
 /* Modal */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(10, 12, 16, 0.6); backdrop-filter: blur(12px) saturate(180%); -webkit-backdrop-filter: blur(12px) saturate(180%); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .modal-box { width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; background: linear-gradient(135deg, var(--bg2), var(--bg3)); border: 1px solid rgba(128,128,128,0.2); box-shadow: 0 24px 60px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.04); border-radius: var(--radius-lg); }
-.modal-box-lg { max-width: 600px; }
+.modal-box-lg { max-width: 850px; }
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 24px 24px 8px; flex-shrink: 0; }
 .modal-header h3 { font-size: 18px; font-weight: 700; margin: 0; }
 .modal-body { padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px 24px; border-top: 1px solid rgba(128,128,128,0.1); }
 
-.agent-form { display: flex; gap: 12px; align-items: flex-start; }
+.agent-form { display: flex; flex-direction: column; gap: 12px; width: 100%; }
 .table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
 .table th { padding: 10px 14px; background: var(--bg); color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); }

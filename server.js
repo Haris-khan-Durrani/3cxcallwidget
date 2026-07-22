@@ -253,6 +253,7 @@ async function triggerDialerWebhook(record, dialer) {
     let agentId = '';
     let agentEmail = '';
     let agentName = '';
+    let agentLocationId = '';
 
     if (record.agent_extension) {
       const extStr = String(record.agent_extension).trim();
@@ -261,6 +262,7 @@ async function triggerDialerWebhook(record, dialer) {
         agentId = matchedAgent.crm_user_id || matchedAgent.id;
         agentEmail = matchedAgent.email || '';
         agentName = `${matchedAgent.first_name || ''} ${matchedAgent.last_name || ''}`.trim();
+        agentLocationId = matchedAgent.location_id || '';
       }
     }
 
@@ -268,7 +270,7 @@ async function triggerDialerWebhook(record, dialer) {
       callId:             record.id,
       dialerId:           freshDialer.id,
       dialerName:         freshDialer.name,
-      locationId:         freshDialer.location_id || '',
+      locationId:         agentLocationId || freshDialer.location_id || '',
       agentExtension:     record.agent_extension || '',
       agentId:            agentId,
       agentEmail:         agentEmail,
@@ -2450,7 +2452,7 @@ app.get('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, r
 
 app.post('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, res) => {
   try {
-    const { crm_user_id, extension, email, first_name, last_name } = req.body;
+    const { crm_user_id, extension, email, first_name, last_name, location_id } = req.body;
     if (!crm_user_id || !extension || !email) return res.status(400).json({ error: 'Missing required fields (crm_user_id, extension, email)' });
     const agent = await DialerAgent.create({
       dialerId: req.params.id,
@@ -2458,7 +2460,29 @@ app.post('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, 
       extension,
       email,
       first_name: first_name || '',
-      last_name: last_name || ''
+      last_name: last_name || '',
+      location_id: location_id || ''
+    });
+    res.json(agent);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/dialer-widgets/:id/agents/:agentId', authenticateToken, async (req, res) => {
+  try {
+    const { crm_user_id, extension, email, first_name, last_name, location_id } = req.body;
+    if (!crm_user_id || !extension || !email) return res.status(400).json({ error: 'Missing required fields (crm_user_id, extension, email)' });
+    const agent = await DialerAgent.findOne({ where: { id: req.params.agentId, dialerId: req.params.id } });
+    if (!agent) return res.status(404).json({ error: 'Agent mapping not found' });
+    
+    await agent.update({
+      crm_user_id,
+      extension,
+      email,
+      first_name: first_name || '',
+      last_name: last_name || '',
+      location_id: location_id || ''
     });
     res.json(agent);
   } catch (err) {

@@ -351,6 +351,10 @@ const DialerAgent = sequelize.define('DialerAgent', {
   last_name: {
     type: DataTypes.STRING,
     allowNull: true,
+  },
+  location_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
   }
 });
 

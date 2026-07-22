@@ -594,6 +594,50 @@ function invalidate3cxToken(widgetId) {
 }
 
 /**
+ * Helper to execute 3CX Call Control makecall with automatic 401 retry & token cache invalidation
+ */
+async function execute3cxMakeCall(widgetOrDialer, extension, destination) {
+  const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
+  const callUrl = `https://${fqdn}/callcontrol/${encodeURIComponent(extension)}/makecall`;
+  const payload = { destination: String(destination) };
+
+  let token = await get3cxToken(widgetOrDialer);
+
+  try {
+    const res = await axios.post(callUrl, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      timeout: 8000
+    });
+    return res.data;
+  } catch (err) {
+    if (err.response?.status === 401) {
+      console.warn(`[3CX CallControl] 401 Unauthorized for Ext ${extension}. Clearing token cache & retrying...`);
+      invalidate3cxToken(widgetOrDialer.id);
+      token = await get3cxToken(widgetOrDialer);
+      try {
+        const resRetry = await axios.post(callUrl, payload, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          timeout: 8000
+        });
+        return resRetry.data;
+      } catch (retryErr) {
+        if (retryErr.response?.status === 401) {
+          console.error(`[3CX 401 Unauthorized Error] 3CX rejected API token for extension ${extension}. Verify that Client ID/Secret has 'System Owner' permissions in 3CX and extension ${extension} is valid.`);
+        }
+        throw retryErr;
+      }
+    }
+    throw err;
+  }
+}
+
+/**
  * Fetches the list of Directory Numbers / Users from 3CX.
  * Tries the modern v20 /xapi/v1/Users endpoint first, then falls back to /xapi/v1/dnlist.
  */
@@ -753,17 +797,9 @@ async function triggerFailoverCall(callRecord, widget) {
     const oldExt = triedExtensions[triedExtensions.length - 1] || 'default';
     console.log(`[3CX] Call ${callRecord.id} missed/declined by Ext ${oldExt}. Auto-retrying with ${newAgent.first_name} (Ext ${newAgent.extension})...`);
 
-    const token = await get3cxToken(widget);
-    const callUrl = `https://${sanitizeFqdn(widget.fqdn_3cx)}/callcontrol/${encodeURIComponent(newAgent.extension)}/makecall`;
-    const response = await axios.post(callUrl, { destination: callRecord.customer_phone }, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 8000,
-    });
+    const responseData = await execute3cxMakeCall(widget, newAgent.extension, callRecord.customer_phone);
 
-    const newCallId = response.data?.result?.callid || response.data?.result?.id || response.data?.callid;
+    const newCallId = responseData?.result?.callid || responseData?.result?.id || responseData?.callid;
 
     // Append extension to tracking field, update call ID and increment retry count
     callRecord.agent_extension = `${callRecord.agent_extension || ''}, ${newAgent.extension}`.trim().replace(/^,/, '');
@@ -1639,22 +1675,12 @@ app.post('/api/call', async (req, res) => {
     }
 
     try {
-      const token       = await get3cxToken(widget);
-      const callUrl     = `https://${sanitizeFqdn(widget.fqdn_3cx)}/callcontrol/${encodeURIComponent(ext)}/makecall`;
-      const callPayload = { destination: phone };
+      const responseData = await execute3cxMakeCall(widget, ext, phone);
 
-      const response = await axios.post(callUrl, callPayload, {
-        headers: {
-          Authorization:  `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 8000,
-      });
-
-      console.log('[3CX] Call initiated:', response.data);
+      console.log('[3CX] Call initiated:', responseData);
 
       // Save initial tracking info to the call record
-      const cxCallId = response.data?.result?.callid || response.data?.result?.id || response.data?.callid;
+      const cxCallId = responseData?.result?.callid || responseData?.result?.id || responseData?.callid;
       callRecord.cx_call_id = cxCallId ? String(cxCallId) : null;
       callRecord.agent_extension = ext;
       callRecord.status = 'Ringing';
@@ -2943,20 +2969,9 @@ app.post('/api/dialer/call', async (req, res) => {
     const dialer = await DialerWidget.findByPk(dialerId);
     if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
 
-    // Ensure we have a valid 3CX token using the same function for inbound widgets
-    const token = await get3cxToken(dialer);
+    console.log(`[3CX Dialer] Dialing ${destination} from extension ${extension} via https://${sanitizeFqdn(dialer.fqdn_3cx)}/callcontrol/${encodeURIComponent(extension)}/makecall`);
 
-    const callUrl = `https://${sanitizeFqdn(dialer.fqdn_3cx)}/callcontrol/${encodeURIComponent(extension)}/makecall`;
-    const payload = { destination: String(destination) };
-
-    console.log(`[3CX Dialer] Dialing ${destination} from extension ${extension} via ${callUrl}`);
-
-    const callRes = await axios.post(callUrl, payload, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    });
+    await execute3cxMakeCall(dialer, extension, destination);
 
     const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || req.ip || '';
     const pageUrl  = req.body.pageUrl || req.get('referer') || req.get('origin') || '';

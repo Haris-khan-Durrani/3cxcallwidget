@@ -206,12 +206,36 @@
 
                 <div class="divider"></div>
 
+                <!-- Agent Search Filter -->
+                <div v-if="agents.length > 0 || agentSearchQuery" class="agent-search-bar">
+                  <div class="search-input-wrap">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input 
+                      v-model="agentSearchQuery" 
+                      type="text" 
+                      class="input search-input" 
+                      placeholder="Search mappings by name, agent ID, email, extension, or location ID..." 
+                    />
+                    <button v-if="agentSearchQuery" type="button" class="search-clear-btn" @click="agentSearchQuery = ''" title="Clear search">✕</button>
+                  </div>
+                  <span v-if="agentSearchQuery" class="search-count-tag">
+                    Showing {{ filteredAgents.length }} of {{ agents.length }}
+                  </span>
+                </div>
+
                 <!-- Agents List -->
                 <div v-if="loadingAgents" style="text-align:center; padding: 20px;">
                   <div class="spinner"></div>
                 </div>
                 <div v-else-if="agents.length === 0" class="empty-state">
                   <p>No agent mappings found for this dialer.</p>
+                </div>
+                <div v-else-if="filteredAgents.length === 0" class="empty-state">
+                  <p>No agent mappings match "{{ agentSearchQuery }}".</p>
+                  <button type="button" class="btn btn-ghost btn-sm" style="margin-top: 8px;" @click="agentSearchQuery = ''">Clear Search</button>
                 </div>
                 <div v-else class="table-wrap">
                   <table class="table">
@@ -226,7 +250,7 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="a in agents" :key="a.id">
+                      <tr v-for="a in filteredAgents" :key="a.id">
                         <td><strong>{{ a.first_name }} {{ a.last_name || '' }}</strong></td>
                         <td><code>{{ a.crm_user_id }}</code></td>
                         <td>{{ a.email || '-' }}</td>
@@ -251,7 +275,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, inject } from 'vue'
+import { ref, reactive, computed, onMounted, inject } from 'vue'
 import axios from 'axios'
 import AppLayout from '../components/AppLayout.vue'
 import { useDialerStore } from '../stores'
@@ -275,10 +299,24 @@ const form = reactive({
 const showAgentsModal = ref(false)
 const currentDialerId = ref(null)
 const agents = ref([])
+const agentSearchQuery = ref('')
 const loadingAgents = ref(false)
 const addingAgent = ref(false)
 const newAgent = reactive({ crm_user_id: '', extension: '', email: '', first_name: '', last_name: '', location_id: '' })
 const editingAgentId = ref(null)
+
+const filteredAgents = computed(() => {
+  if (!agentSearchQuery.value.trim()) return agents.value
+  const q = agentSearchQuery.value.toLowerCase().trim()
+  return agents.value.filter(a => {
+    const fullName = `${a.first_name || ''} ${a.last_name || ''}`.toLowerCase()
+    const crmId = (a.crm_user_id || '').toLowerCase()
+    const email = (a.email || '').toLowerCase()
+    const ext = String(a.extension || '').toLowerCase()
+    const locId = (a.location_id || '').toLowerCase()
+    return fullName.includes(q) || crmId.includes(q) || email.includes(q) || ext.includes(q) || locId.includes(q)
+  })
+})
 
 // Embed tab state per dialer — use ref + spread so Vue always detects the change
 const embedTab = ref({})
@@ -360,6 +398,7 @@ function copy(text) {
 // -- Agents Mapping Logic -- //
 async function openAgents(dialer) {
   currentDialerId.value = dialer.id
+  agentSearchQuery.value = ''
   cancelEditAgent()
   showAgentsModal.value = true
   await fetchAgents()
@@ -525,4 +564,13 @@ async function deleteAgent(agentId) {
   border-color: rgba(31,111,235,0.2);
   background: rgba(31,111,235,0.1);
 }
+
+/* Agent Search Bar */
+.agent-search-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
+.search-input-wrap { position: relative; flex: 1; display: flex; align-items: center; }
+.search-icon { position: absolute; left: 12px; color: var(--text3); pointer-events: none; }
+.search-input { padding-left: 36px; padding-right: 32px; height: 38px; width: 100%; }
+.search-clear-btn { position: absolute; right: 10px; background: none; border: none; color: var(--text3); font-size: 13px; cursor: pointer; padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+.search-clear-btn:hover { color: var(--text); background: rgba(255,255,255,0.1); }
+.search-count-tag { font-size: 12px; color: var(--text3); white-space: nowrap; font-weight: 500; }
 </style>

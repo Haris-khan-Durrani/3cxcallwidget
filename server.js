@@ -613,7 +613,13 @@ async function execute3cxMakeCall(widgetOrDialer, extension, destination) {
     });
     return res.data;
   } catch (err) {
-    if (err.response?.status === 401) {
+    if (err.response?.status === 403) {
+      console.error(`[3CX 403 Forbidden Error] 3CX denied permission to place call from Extension ${extension}.`, err.response?.data || '');
+      console.error(`[3CX Fix Instruction] To resolve 403 Forbidden:\n` +
+                    ` 1. In 3CX Console, go to Admin -> Integrations / System API Credentials.\n` +
+                    ` 2. Ensure the Client ID is assigned 'System Owner' or 'System Administrator' role.\n` +
+                    ` 3. In Users -> Ext ${extension} -> Rights, ensure Call Control / CTI operations are allowed.`);
+    } else if (err.response?.status === 401) {
       console.warn(`[3CX CallControl] 401 Unauthorized for Ext ${extension}. Clearing token cache & retrying...`);
       invalidate3cxToken(widgetOrDialer.id);
       token = await get3cxToken(widgetOrDialer);

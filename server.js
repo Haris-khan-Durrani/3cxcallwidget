@@ -3056,8 +3056,13 @@ app.post('/api/dialer/call', async (req, res) => {
 
     res.json({ success: true, message: 'Call initiated', callId: record.id });
   } catch (err) {
-    console.error('[3CX Dialer Error]', err.response?.data || err.message);
-    res.status(500).json({ error: 'Failed to initiate call on 3CX' });
+    const errorData = err.response?.data;
+    const detailMsg = typeof errorData === 'object' 
+      ? (errorData.message || errorData.error_description || errorData.error || JSON.stringify(errorData))
+      : (errorData || err.message);
+    const statusMsg = err.response?.status ? `3CX returned ${err.response.status}: ${detailMsg}` : detailMsg;
+    console.error('[3CX Dialer Error]', statusMsg);
+    res.status(500).json({ error: statusMsg || 'Failed to initiate call on 3CX' });
   }
 });
 

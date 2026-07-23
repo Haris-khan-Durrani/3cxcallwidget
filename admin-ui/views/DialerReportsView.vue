@@ -189,6 +189,193 @@
           </div>
         </div>
 
+        <!-- ── Charts Grid ── -->
+        <div class="dr-charts-row animate-fade-in" style="margin-bottom: 24px;">
+          <!-- Chart 1: Call Volume Trend -->
+          <div class="dr-chart-card card">
+            <div class="dr-chart-header">
+              <div class="dr-chart-header-left">
+                <span class="dr-chart-icon dr-kpi-icon-blue" style="font-size: 14px;">📈</span>
+                <div>
+                  <h4 class="dr-chart-title">Call Volume Trend</h4>
+                  <p class="dr-chart-subtitle">Total calls per hour/day</p>
+                </div>
+              </div>
+            </div>
+            <div class="dr-chart-body">
+              <svg :viewBox="`0 0 ${chartData.width} ${chartData.height}`" class="dr-chart-svg">
+                <defs>
+                  <linearGradient id="vol-area-gradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.25"/>
+                    <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <line 
+                  v-for="idx in 4" :key="idx" 
+                  :x1="chartData.paddingX" :y1="chartData.paddingY + (idx - 1) * ((chartData.height - 2*chartData.paddingY) / 3)" 
+                  :x2="chartData.width - chartData.paddingX" :y2="chartData.paddingY + (idx - 1) * ((chartData.height - 2*chartData.paddingY) / 3)" 
+                  stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3"
+                />
+                <path v-if="chartData.volumeAreaPath" :d="chartData.volumeAreaPath" fill="url(#vol-area-gradient)"/>
+                <path v-if="chartData.volumePath" :d="chartData.volumePath" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+                <g v-for="(p, idx) in chartData.volumePoints" :key="idx">
+                  <circle v-if="p.count > 0" :cx="p.x" :cy="p.y" r="4" fill="var(--bg2)" stroke="var(--accent)" stroke-width="2.5"/>
+                  <text v-if="p.count > 0 && chartData.volumePoints.length <= 15" :x="p.x" :y="p.y - 8" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text)">
+                    {{ p.count }}
+                  </text>
+                  <text v-if="p.showLabel" :x="p.x" :y="chartData.height - 6" text-anchor="middle" font-size="9" font-weight="500" fill="var(--text3)">
+                    {{ p.label }}
+                  </text>
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Chart 2: Call Duration Trend (Total Talk Time) -->
+          <div class="dr-chart-card card">
+            <div class="dr-chart-header">
+              <div class="dr-chart-header-left">
+                <span class="dr-chart-icon dr-kpi-icon-purple" style="font-size: 14px;">⏱️</span>
+                <div>
+                  <h4 class="dr-chart-title">Total Talk Time (min)</h4>
+                  <p class="dr-chart-subtitle">Sum of connected call durations in minutes</p>
+                </div>
+              </div>
+            </div>
+            <div class="dr-chart-body">
+              <svg :viewBox="`0 0 ${chartData.width} ${chartData.height}`" class="dr-chart-svg">
+                <defs>
+                  <linearGradient id="dur-area-gradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--purple)" stop-opacity="0.25"/>
+                    <stop offset="100%" stop-color="var(--purple)" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <line 
+                  v-for="idx in 4" :key="idx" 
+                  :x1="chartData.paddingX" :y1="chartData.paddingY + (idx - 1) * ((chartData.height - 2*chartData.paddingY) / 3)" 
+                  :x2="chartData.width - chartData.paddingX" :y2="chartData.paddingY + (idx - 1) * ((chartData.height - 2*chartData.paddingY) / 3)" 
+                  stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3"
+                />
+                <path v-if="chartData.durationAreaPath" :d="chartData.durationAreaPath" fill="url(#dur-area-gradient)"/>
+                <path v-if="chartData.durationPath" :d="chartData.durationPath" fill="none" stroke="var(--purple)" stroke-width="2.5" stroke-linecap="round"/>
+                <g v-for="(p, idx) in chartData.durationPoints" :key="idx">
+                  <circle v-if="p.duration > 0" :cx="p.x" :cy="p.y" r="4" fill="var(--bg2)" stroke="var(--purple)" stroke-width="2.5"/>
+                  <text v-if="p.duration > 0 && chartData.durationPoints.length <= 15" :x="p.x" :y="p.y - 8" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text)">
+                    {{ p.duration }}m
+                  </text>
+                  <text v-if="p.showLabel" :x="p.x" :y="chartData.height - 6" text-anchor="middle" font-size="9" font-weight="500" fill="var(--text3)">
+                    {{ p.label }}
+                  </text>
+                </g>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: Status Breakdown and Agent metrics -->
+        <div class="dr-charts-row dr-charts-row-split" style="margin-bottom: 24px;">
+          <!-- Chart 3: Status Breakdown Donut -->
+          <div class="dr-chart-card card">
+            <div class="dr-chart-header">
+              <h4 class="dr-chart-title">Call Status Breakdown</h4>
+              <p class="dr-chart-subtitle">Distribution of outbound call outcomes</p>
+            </div>
+            <div class="dr-donut-wrapper">
+              <div class="dr-donut-chart">
+                <svg viewBox="0 0 100 100" class="dr-donut-svg">
+                  <circle cx="50" cy="50" r="38" stroke="var(--border)" stroke-width="7" fill="transparent"/>
+                  <circle 
+                    v-if="chartData.statusBreakdown.total > 0"
+                    cx="50" cy="50" r="38" 
+                    stroke="var(--green)" stroke-width="7.5" fill="transparent"
+                    stroke-dasharray="238.76"
+                    :stroke-dashoffset="238.76 * (1 - chartData.statusBreakdown.completed / chartData.statusBreakdown.total)"
+                    stroke-linecap="round"
+                    transform="rotate(-90 50 50)"
+                  />
+                  <circle 
+                    v-if="chartData.statusBreakdown.total > 0"
+                    cx="50" cy="50" r="38" 
+                    stroke="var(--red)" stroke-width="7.5" fill="transparent"
+                    stroke-dasharray="238.76"
+                    :stroke-dashoffset="238.76 * (1 - chartData.statusBreakdown.failed / chartData.statusBreakdown.total)"
+                    stroke-linecap="round"
+                    :transform="`rotate(${-90 + 360 * (chartData.statusBreakdown.completed / chartData.statusBreakdown.total)} 50 50)`"
+                  />
+                  <circle 
+                    v-if="chartData.statusBreakdown.total > 0"
+                    cx="50" cy="50" r="38" 
+                    stroke="var(--orange)" stroke-width="7.5" fill="transparent"
+                    stroke-dasharray="238.76"
+                    :stroke-dashoffset="238.76 * (1 - chartData.statusBreakdown.initiated / chartData.statusBreakdown.total)"
+                    stroke-linecap="round"
+                    :transform="`rotate(${-90 + 360 * ((chartData.statusBreakdown.completed + chartData.statusBreakdown.failed) / chartData.statusBreakdown.total)} 50 50)`"
+                  />
+                  <text x="50" y="47" text-anchor="middle" font-size="13" font-weight="800" fill="var(--text)">
+                    {{ chartData.statusBreakdown.total }}
+                  </text>
+                  <text x="50" y="60" text-anchor="middle" font-size="8" font-weight="600" fill="var(--text3)" style="text-transform:uppercase; letter-spacing:0.5px;">
+                    Total Calls
+                  </text>
+                </svg>
+              </div>
+              <div class="dr-donut-legend">
+                <div class="legend-item">
+                  <span class="legend-color" style="background:var(--green)"></span>
+                  <span class="legend-label">Connected</span>
+                  <span class="legend-value">{{ chartData.statusBreakdown.completed }}</span>
+                  <span class="legend-pct">{{ chartData.statusBreakdown.total ? Math.round((chartData.statusBreakdown.completed / chartData.statusBreakdown.total)*100) : 0 }}%</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-color" style="background:var(--orange)"></span>
+                  <span class="legend-label">Ringing</span>
+                  <span class="legend-value">{{ chartData.statusBreakdown.initiated }}</span>
+                  <span class="legend-pct">{{ chartData.statusBreakdown.total ? Math.round((chartData.statusBreakdown.initiated / chartData.statusBreakdown.total)*100) : 0 }}%</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-color" style="background:var(--red)"></span>
+                  <span class="legend-label">Failed / Missed</span>
+                  <span class="legend-value">{{ chartData.statusBreakdown.failed }}</span>
+                  <span class="legend-pct">{{ chartData.statusBreakdown.total ? Math.round((chartData.statusBreakdown.failed / chartData.statusBreakdown.total)*100) : 0 }}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart 4: Agent Call Volume & Talk Time -->
+          <div class="dr-chart-card card">
+            <div class="dr-chart-header">
+              <h4 class="dr-chart-title">Agent Call Volume & Talk Time</h4>
+              <p class="dr-chart-subtitle">Top extensions by outbound attempts</p>
+            </div>
+            <div class="dr-agent-bars-wrapper">
+              <div v-if="chartData.agentPerformance.length === 0" class="dr-empty-chart-text">
+                No agent data for this period
+              </div>
+              <div v-else class="dr-agent-bar-list">
+                <div v-for="agent in chartData.agentPerformance" :key="agent.extension" class="dr-agent-bar-row">
+                  <div class="dr-agent-bar-info">
+                    <span class="dr-agent-bar-name">📞 Extension {{ agent.extension }}</span>
+                    <span class="dr-agent-bar-stats">
+                      <strong>{{ agent.totalCalls }}</strong> call{{ agent.totalCalls !== 1 ? 's' : '' }} 
+                      <span class="divider-dot">•</span> 
+                      <strong>{{ agent.durationMinutes }}m</strong> talk time
+                    </span>
+                  </div>
+                  <div class="dr-agent-bar-track-container">
+                    <div class="dr-agent-bar-track" style="margin-bottom: 2px;" title="Calls Volume">
+                      <div class="dr-agent-bar-fill fill-blue" :style="`width:${(agent.totalCalls / Math.max(1, ...chartData.agentPerformance.map(x => x.totalCalls))) * 100}%`"></div>
+                    </div>
+                    <div class="dr-agent-bar-track" title="Talk Time">
+                      <div class="dr-agent-bar-fill fill-purple" :style="`width:${(agent.durationMinutes / Math.max(1, ...chartData.agentPerformance.map(x => x.durationMinutes))) * 100}%`"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Results count -->
         <div class="dr-table-header">
           <div class="dr-results-label">
@@ -458,6 +645,207 @@ const filteredRecords = computed(() => {
     recs = recs.filter(r => (r.agent_extension || '').toLowerCase().includes(term))
   }
   return recs
+})
+
+const chartData = computed(() => {
+  const recs = filteredRecords.value
+  if (!recs || recs.length === 0) {
+    return {
+      volumePoints: [],
+      durationPoints: [],
+      volumePath: '',
+      volumeAreaPath: '',
+      durationPath: '',
+      durationAreaPath: '',
+      statusBreakdown: { completed: 0, initiated: 0, failed: 0, total: 0 },
+      agentPerformance: [],
+      width: 500,
+      height: 150,
+      paddingX: 40,
+      paddingY: 25,
+      maxCount: 5,
+      maxDuration: 5
+    }
+  }
+
+  let intervals = []
+  let groupType = 'day'
+  const now = new Date()
+  
+  if (dateFilter.value === 'today') {
+    groupType = 'hour'
+    for (let h = 0; h <= 23; h += 2) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, 0, 0)
+      intervals.push({
+        label: `${h.toString().padStart(2, '0')}:00`,
+        start: d.getTime(),
+        end: d.getTime() + 2 * 60 * 60 * 1000
+      })
+    }
+  } else if (dateFilter.value === '7days') {
+    groupType = 'day'
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(now.getDate() - i)
+      const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      intervals.push({
+        label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        start: dayStart,
+        end: dayStart + 24 * 60 * 60 * 1000
+      })
+    }
+  } else if (dateFilter.value === '30days') {
+    groupType = 'day'
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(now.getDate() - i)
+      const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      intervals.push({
+        label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        start: dayStart,
+        end: dayStart + 24 * 60 * 60 * 1000,
+        showLabel: i % 5 === 0
+      })
+    }
+  } else {
+    const timestamps = recs.map(r => new Date(r.createdAt).getTime())
+    const minTs = Math.min(...timestamps)
+    const maxTs = Math.max(...timestamps)
+    const diffDays = Math.ceil((maxTs - minTs) / (24 * 60 * 60 * 1000))
+    
+    if (diffDays <= 1) {
+      groupType = 'hour'
+      const startDay = new Date(minTs)
+      for (let h = 0; h <= 23; h += 2) {
+        const d = new Date(startDay.getFullYear(), startDay.getMonth(), startDay.getDate(), h, 0, 0)
+        intervals.push({
+          label: `${h.toString().padStart(2, '0')}:00`,
+          start: d.getTime(),
+          end: d.getTime() + 2 * 60 * 60 * 1000
+        })
+      }
+    } else {
+      groupType = 'day'
+      const startDay = new Date(minTs)
+      startDay.setHours(0,0,0,0)
+      const endDay = new Date(maxTs)
+      endDay.setHours(23,59,59,999)
+      
+      const numDays = Math.ceil((endDay.getTime() - startDay.getTime()) / (24 * 60 * 60 * 1000))
+      const labelInterval = numDays <= 7 ? 1 : numDays <= 30 ? 5 : Math.ceil(numDays / 7)
+      
+      for (let i = 0; i < numDays; i++) {
+        const d = new Date(startDay.getTime() + i * 24 * 60 * 60 * 1000)
+        const dayStart = d.getTime()
+        intervals.push({
+          label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+          start: dayStart,
+          end: dayStart + 24 * 60 * 60 * 1000,
+          showLabel: i % labelInterval === 0
+        })
+      }
+    }
+  }
+
+  const data = intervals.map(interval => {
+    const periodRecs = recs.filter(r => {
+      const ts = new Date(r.createdAt).getTime()
+      return ts >= interval.start && ts < interval.end
+    })
+    const count = periodRecs.length
+    const totalDurationSeconds = periodRecs.reduce((acc, r) => acc + (r.duration_seconds || 0), 0)
+    const durationMinutes = Math.round((totalDurationSeconds / 60) * 10) / 10
+    return {
+      label: interval.label,
+      showLabel: interval.showLabel !== false,
+      count,
+      duration: durationMinutes
+    }
+  })
+
+  const width = 500
+  const height = 150
+  const paddingX = 40
+  const paddingY = 25
+  const maxCount = Math.max(5, ...data.map(x => x.count))
+  const maxDuration = Math.max(5, ...data.map(x => x.duration))
+  
+  const volumePoints = data.map((item, idx) => {
+    const x = paddingX + (idx / (data.length - 1 || 1)) * (width - 2 * paddingX)
+    const y = height - paddingY - (item.count / maxCount) * (height - 2 * paddingY - 10)
+    return { x, y, count: item.count, label: item.label, showLabel: item.showLabel }
+  })
+  const durationPoints = data.map((item, idx) => {
+    const x = paddingX + (idx / (data.length - 1 || 1)) * (width - 2 * paddingX)
+    const y = height - paddingY - (item.duration / maxDuration) * (height - 2 * paddingY - 10)
+    return { x, y, duration: item.duration, label: item.label, showLabel: item.showLabel }
+  })
+  
+  const getPaths = (pts) => {
+    let linePath = ''
+    let areaPath = ''
+    if (pts.length > 0) {
+      linePath = `M ${pts[0].x} ${pts[0].y}`
+      for (let i = 1; i < pts.length; i++) {
+        linePath += ` L ${pts[i].x} ${pts[i].y}`
+      }
+      areaPath = `${linePath} L ${pts[pts.length - 1].x} ${height - paddingY} L ${pts[0].x} ${height - paddingY} Z`
+    }
+    return { linePath, areaPath }
+  }
+  
+  const volPaths = getPaths(volumePoints)
+  const durPaths = getPaths(durationPoints)
+  
+  let completed = 0
+  let initiated = 0
+  let failed = 0
+  recs.forEach(r => {
+    const lower = (r.status || '').toLowerCase()
+    if (['completed', 'connected', 'answered'].includes(lower)) completed++
+    else if (['initiated', 'ringing'].includes(lower)) initiated++
+    else if (['failed', 'missed', 'cancelled'].includes(lower)) failed++
+  })
+  
+  const agentMap = {}
+  recs.forEach(r => {
+    const ext = r.agent_extension || '—'
+    if (!agentMap[ext]) {
+      agentMap[ext] = { extension: ext, totalCalls: 0, connectedCalls: 0, totalDuration: 0 }
+    }
+    agentMap[ext].totalCalls++
+    const lower = (r.status || '').toLowerCase()
+    if (['completed', 'connected', 'answered'].includes(lower)) {
+      agentMap[ext].connectedCalls++
+      agentMap[ext].totalDuration += (r.duration_seconds || 0)
+    }
+  })
+  
+  const agentPerformance = Object.values(agentMap)
+    .map(a => ({
+      ...a,
+      durationMinutes: Math.round((a.totalDuration / 60) * 10) / 10,
+      connectRate: a.totalCalls ? Math.round((a.connectedCalls / a.totalCalls) * 100) : 0
+    }))
+    .sort((a, b) => b.totalCalls - a.totalCalls)
+    .slice(0, 5)
+
+  return {
+    volumePoints,
+    durationPoints,
+    volumePath: volPaths.linePath,
+    volumeAreaPath: volPaths.areaPath,
+    durationPath: durPaths.linePath,
+    durationAreaPath: durPaths.areaPath,
+    statusBreakdown: { completed, initiated, failed, total: recs.length },
+    agentPerformance,
+    width,
+    height,
+    paddingX,
+    paddingY,
+    maxCount,
+    maxDuration
+  }
 })
 
 function statusClass(s) {
@@ -927,5 +1315,202 @@ select.dr-select option {
 }
 .inline-slider::-webkit-slider-thumb:hover {
   transform: scale(1.3);
+}
+
+/* ─── Charts Row ─── */
+.dr-charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.dr-charts-row-split {
+  grid-template-columns: 1fr 1.3fr;
+}
+@media (max-width: 950px) {
+  .dr-charts-row, .dr-charts-row-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dr-chart-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.dr-chart-card:hover {
+  border-color: var(--bg4);
+  box-shadow: 0 4px 20px rgba(0,0,0,.2);
+}
+
+.dr-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.dr-chart-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dr-chart-icon {
+  font-size: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dr-chart-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.dr-chart-subtitle {
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.dr-chart-body {
+  position: relative;
+  width: 100%;
+}
+.dr-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Donut Chart styles */
+.dr-donut-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 16px;
+  flex: 1;
+}
+@media (max-width: 500px) {
+  .dr-donut-wrapper {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+.dr-donut-chart {
+  width: 120px;
+  height: 120px;
+  position: relative;
+  flex-shrink: 0;
+}
+.dr-donut-svg {
+  width: 100%;
+  height: 100%;
+}
+.dr-donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+.legend-item {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+.legend-color {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.legend-label {
+  color: var(--text2);
+  font-weight: 500;
+}
+.legend-value {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.legend-pct {
+  color: var(--text3);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: right;
+  min-width: 32px;
+}
+
+/* Agent Horizontal Bar chart styles */
+.dr-agent-bars-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  justify-content: center;
+}
+.dr-agent-bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dr-agent-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dr-agent-bar-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+.dr-agent-bar-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.dr-agent-bar-stats {
+  color: var(--text2);
+  font-size: 11px;
+}
+.divider-dot {
+  color: var(--text3);
+  margin: 0 4px;
+}
+.dr-agent-bar-track-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+}
+.dr-agent-bar-track {
+  height: 5px;
+  background: var(--bg3);
+  border-radius: 3px;
+  overflow: hidden;
+  width: 100%;
+}
+.dr-agent-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fill-blue {
+  background: linear-gradient(90deg, #1f6feb, var(--accent));
+}
+.fill-purple {
+  background: linear-gradient(90deg, #8250df, var(--purple));
+}
+.dr-empty-chart-text {
+  text-align: center;
+  color: var(--text3);
+  font-size: 13px;
+  padding: 30px 0;
 }
 </style>

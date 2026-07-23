@@ -404,7 +404,7 @@ function formatAudioTime(s) {
 
 onMounted(async () => {
   if (store.dialers.length === 0) {
-    await store.fetchDialers()
+    await store.fetch()
   }
 })
 

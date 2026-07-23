@@ -275,7 +275,7 @@
                 <!-- Dots + Labels -->
                 <g v-for="(p,i) in cd.volPts" :key="i">
                   <circle v-if="p.v > 0" :cx="p.x" :cy="p.y" r="3.5" fill="var(--bg2)" stroke="var(--accent)" stroke-width="2"/>
-                  <text v-if="p.v > 0 && cd.volPts.length <= 14" :x="p.x" :y="p.y - 7" text-anchor="middle" font-size="9" font-weight="700" fill="var(--text)">{{ p.v }}</text>
+                  <text v-if="p.v > 0" :x="p.x" :y="Math.max(14, p.y - 7)" text-anchor="middle" font-size="9" font-weight="700" fill="var(--accent)">{{ p.v }}</text>
                   <text v-if="p.lbl" :x="p.x" :y="cd.h - 3" text-anchor="middle" font-size="8.5" fill="var(--text3)">{{ p.lbl }}</text>
                 </g>
               </svg>
@@ -312,7 +312,7 @@
                 <path v-if="cd.durPath" :d="cd.durPath" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <g v-for="(p,i) in cd.durPts" :key="i">
                   <circle v-if="p.v > 0" :cx="p.x" :cy="p.y" r="3.5" fill="var(--bg2)" stroke="var(--purple)" stroke-width="2"/>
-                  <text v-if="p.v > 0 && cd.durPts.length <= 14" :x="p.x" :y="p.y - 7" text-anchor="middle" font-size="9" font-weight="700" fill="var(--text)">{{ p.v }}m</text>
+                  <text v-if="p.v > 0" :x="p.x" :y="Math.max(14, p.y - 7)" text-anchor="middle" font-size="9" font-weight="700" fill="var(--purple)">{{ p.v }}m</text>
                   <text v-if="p.lbl" :x="p.x" :y="cd.h - 3" text-anchor="middle" font-size="8.5" fill="var(--text3)">{{ p.lbl }}</text>
                 </g>
               </svg>

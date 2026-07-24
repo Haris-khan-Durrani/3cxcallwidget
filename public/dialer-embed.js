@@ -129,19 +129,33 @@
     '#_3cx_sdesc{font-size:11px;color:#6b7280;text-align:center;padding:0 20px;line-height:1.5;}',
     '#_3cx_timer{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;color:#22c55e;margin-top:10px;}',
 
-    '._3cx_hl{list-style:none;padding:0;margin:0;}',
-    '._3cx_hi{display:flex;align-items:center;justify-content:space-between;',
-    'padding:10px 10px;border-bottom:1px solid #e5e7eb;transition:background .15s;}',
-    '._3cx_hi:hover{background:#f9fafb;}',
-    '._3cx_hin{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;margin-right:4px;}',
-    '._3cx_hnum{font-size:13px;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
-    '._3cx_hm{display:flex;align-items:center;gap:3px;font-size:9.5px;color:#6b7280;white-space:nowrap;overflow:hidden;}',
-    '._3cx_hs{font-weight:600;}._3cx_hs._3cx_conn{color:#22c55e;}._3cx_hs._3cx_miss{color:#ef4444;}',
-    '._3cx_rd{background:rgba(37,99,235,.08);color:#2563eb;border:none;width:30px;height:30px;',
-    'border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;',
-    'flex-shrink:0;transition:background .15s;}',
-    '._3cx_rd:hover{background:rgba(37,99,235,.16);}',
-    '._3cx_rd svg{width:14px;height:14px;}',
+    '._3cx_hl{list-style:none;padding:8px 10px;margin:0;display:flex;flex-direction:column;gap:8px;}',
+    '._3cx_hi{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,0.03);transition:all .15s ease;}',
+    '._3cx_hi:hover{border-color:#cbd5e1;box-shadow:0 3px 8px rgba(0,0,0,0.06);background:#f8fafc;}',
+    '._3cx_hi_main{display:flex;align-items:center;justify-content:space-between;gap:8px;}',
+    '._3cx_hin{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;}',
+    '._3cx_hnum{font-size:13px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+    '._3cx_hm{display:flex;align-items:center;gap:6px;font-size:10px;color:#64748b;}',
+    '._3cx_hs{font-weight:600;font-size:9.5px;padding:2px 7px;border-radius:12px;display:inline-flex;align-items:center;line-height:1;}',
+    '._3cx_hs._3cx_conn{background:#dcfce7;color:#15803d;}',
+    '._3cx_hs._3cx_miss{background:#fee2e2;color:#b91c1c;}',
+    '._3cx_actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}',
+    '._3cx_rd,._3cx_rec_btn{border:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s ease;}',
+    '._3cx_rd{background:rgba(37,99,235,.08);color:#2563eb;}',
+    '._3cx_rd:hover{background:#2563eb;color:#fff;transform:scale(1.06);}',
+    '._3cx_rec_btn{background:rgba(124,58,237,.1);color:#7c3aed;}',
+    '._3cx_rec_btn:hover{background:#7c3aed;color:#fff;transform:scale(1.06);}',
+    '._3cx_rec_btn._3cx_playing{background:#7c3aed;color:#fff;box-shadow:0 0 0 3px rgba(124,58,237,.25);}',
+    '._3cx_player_box{display:none;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;align-items:center;gap:8px;margin-top:2px;}',
+    '._3cx_player_box._3cx_open{display:flex;}',
+    '._3cx_player_toggle{background:#7c3aed;color:#fff;border:none;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s;}',
+    '._3cx_player_toggle:hover{background:#6d28d9;}',
+    '._3cx_player_toggle svg{width:11px;height:11px;fill:currentColor;}',
+    '._3cx_player_track{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0;}',
+    '._3cx_player_seek{width:100%;height:4px;border-radius:2px;accent-color:#7c3aed;cursor:pointer;margin:0;}',
+    '._3cx_player_meta{display:flex;justify-content:space-between;font-size:9px;font-weight:600;color:#64748b;}',
+    '._3cx_player_dl{color:#64748b;background:transparent;border:none;padding:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s;}',
+    '._3cx_player_dl:hover{color:#0f172a;}',
     '._3cx_empty{padding:36px 20px;text-align:center;color:#6b7280;font-size:12px;}',
     '#_3cx_err{display:none;background:#fee2e2;color:#991b1b;padding:8px 12px;border-radius:8px;',
     'font-size:11px;text-align:center;margin-bottom:10px;font-weight:500;}',
@@ -553,8 +567,28 @@
       setTimeout(function(){ errBanner.style.display = 'none'; }, 5000);
     }
 
-    // ── History ───────────────────────────────────────────────────────────────
+    // ── History & Audio Recording Player ───────────────────────────────────────
     var histLoaded = false;
+    var activeAudio = null;
+    var activeCallId = null;
+
+    function stopActiveAudio() {
+      if (activeAudio) {
+        try { activeAudio.pause(); } catch(e){}
+        activeAudio = null;
+      }
+      if (activeCallId) {
+        var prevBox = document.getElementById('_3cx_pbox_' + activeCallId);
+        var prevBtn = document.getElementById('_3cx_rbtn_' + activeCallId);
+        if (prevBox) prevBox.classList.remove('_3cx_open');
+        if (prevBtn) {
+          prevBtn.classList.remove('_3cx_playing');
+          prevBtn.setAttribute('title', 'Play Recording');
+        }
+        activeCallId = null;
+      }
+    }
+
     function loadHistory() {
       if (histLoaded) return;
       histLoaded = true;
@@ -568,23 +602,138 @@
             var time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             var isConnected = c.status === 'Completed' || c.status === 'Connected';
             var dur = c.duration_seconds ? formatTime(c.duration_seconds) : '';
-            return '<li class="_3cx_hi">' +
-              '<div class="_3cx_hin">' +
-              '<span class="_3cx_hnum">' + (c.destination || '—') + '</span>' +
-              '<div class="_3cx_hm">' +
-              '<span class="_3cx_hs ' + (isConnected ? '_3cx_conn' : '_3cx_miss') + '">' + (isConnected ? 'Connected' : c.status) + '</span>' +
-              '<span>•</span>' +
-              '<span>' + time + '</span>' +
-              (dur ? '<span>• ' + dur + '</span>' : '') +
-              '</div></div>' +
-              '<button class="_3cx_rd" data-num="' + (c.destination||'') + '">' +
-              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>' +
-              '</button></li>';
+            var hasRecording = !!(c.recording_token || c.recording_id);
+            var recToken = c.recording_token;
+            var listenUrl = recToken ? (apiBase + '/recordings/' + recToken + '/listen') : '';
+            var downloadUrl = recToken ? (apiBase + '/recordings/' + recToken + '/download') : '';
+
+            return '<li class="_3cx_hi" id="_3cx_hi_' + c.id + '">' +
+              '<div class="_3cx_hi_main">' +
+                '<div class="_3cx_hin">' +
+                  '<span class="_3cx_hnum">' + (c.destination || '—') + '</span>' +
+                  '<div class="_3cx_hm">' +
+                    '<span class="_3cx_hs ' + (isConnected ? '_3cx_conn' : '_3cx_miss') + '">' + (isConnected ? 'Connected' : c.status) + '</span>' +
+                    '<span>•</span>' +
+                    '<span>' + time + '</span>' +
+                    (dur ? '<span>• ' + dur + '</span>' : '') +
+                  '</div>' +
+                '</div>' +
+                '<div class="_3cx_actions">' +
+                  (hasRecording ?
+                    '<button class="_3cx_rec_btn" id="_3cx_rbtn_' + c.id + '" data-id="' + c.id + '" data-url="' + listenUrl + '" data-dl="' + downloadUrl + '" title="Play Recording">' +
+                      '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
+                    '</button>' : '') +
+                  '<button class="_3cx_rd" data-num="' + (c.destination||'') + '" title="Redial">' +
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>' +
+                  '</button>' +
+                '</div>' +
+              '</div>' +
+              (hasRecording ?
+                '<div class="_3cx_player_box" id="_3cx_pbox_' + c.id + '">' +
+                  '<button class="_3cx_player_toggle" id="_3cx_ptog_' + c.id + '" title="Play/Pause">' +
+                    '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
+                  '</button>' +
+                  '<div class="_3cx_player_track">' +
+                    '<input type="range" class="_3cx_player_seek" id="_3cx_pseek_' + c.id + '" value="0" min="0" max="100"/>' +
+                    '<div class="_3cx_player_meta">' +
+                      '<span id="_3cx_ptime_' + c.id + '">00:00</span>' +
+                      '<span id="_3cx_pdur_' + c.id + '">' + (dur || '00:00') + '</span>' +
+                    '</div>' +
+                  '</div>' +
+                  '<a class="_3cx_player_dl" href="' + downloadUrl + '" target="_blank" download title="Download Recording">' +
+                    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>' +
+                  '</a>' +
+                '</div>' : '') +
+            '</li>';
           }).join('');
+
           list.querySelectorAll('._3cx_rd').forEach(function(btn) {
             btn.addEventListener('click', function() {
               try { iti.setNumber(btn.dataset.num); } catch(e){}
               document.querySelector('[data-tab="dialer"]').click();
+            });
+          });
+
+          list.querySelectorAll('._3cx_rec_btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+              var callId = btn.dataset.id;
+              var url = btn.dataset.url;
+              var box = document.getElementById('_3cx_pbox_' + callId);
+              var seek = document.getElementById('_3cx_pseek_' + callId);
+              var timeTxt = document.getElementById('_3cx_ptime_' + callId);
+              var durTxt = document.getElementById('_3cx_pdur_' + callId);
+              var togBtn = document.getElementById('_3cx_ptog_' + callId);
+
+              if (activeCallId === callId && activeAudio) {
+                if (activeAudio.paused) {
+                  activeAudio.play();
+                  btn.classList.add('_3cx_playing');
+                  if (togBtn) togBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                } else {
+                  activeAudio.pause();
+                  btn.classList.remove('_3cx_playing');
+                  if (togBtn) togBtn.innerHTML = '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                }
+                return;
+              }
+
+              // Stop any other active audio
+              stopActiveAudio();
+
+              if (!url) return;
+
+              box.classList.add('_3cx_open');
+              btn.classList.add('_3cx_playing');
+
+              var audio = new Audio(url);
+              activeAudio = audio;
+              activeCallId = callId;
+
+              if (togBtn) togBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+
+              audio.addEventListener('loadedmetadata', function() {
+                if (durTxt && !isNaN(audio.duration)) durTxt.textContent = formatTime(Math.floor(audio.duration));
+              });
+
+              audio.addEventListener('timeupdate', function() {
+                if (!isNaN(audio.duration) && audio.duration > 0) {
+                  var pct = (audio.currentTime / audio.duration) * 100;
+                  if (seek) seek.value = pct;
+                  if (timeTxt) timeTxt.textContent = formatTime(Math.floor(audio.currentTime));
+                }
+              });
+
+              audio.addEventListener('ended', function() {
+                btn.classList.remove('_3cx_playing');
+                if (togBtn) togBtn.innerHTML = '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                if (seek) seek.value = 0;
+                if (timeTxt) timeTxt.textContent = '00:00';
+              });
+
+              if (seek) {
+                seek.addEventListener('input', function() {
+                  if (activeAudio && !isNaN(activeAudio.duration)) {
+                    activeAudio.currentTime = (seek.value / 100) * activeAudio.duration;
+                  }
+                });
+              }
+
+              if (togBtn) {
+                togBtn.onclick = function() {
+                  if (!activeAudio) return;
+                  if (activeAudio.paused) {
+                    activeAudio.play();
+                    btn.classList.add('_3cx_playing');
+                    togBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                  } else {
+                    activeAudio.pause();
+                    btn.classList.remove('_3cx_playing');
+                    togBtn.innerHTML = '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                  }
+                };
+              }
+
+              audio.play().catch(function(e){ console.error('Audio play error:', e); });
             });
           });
         })

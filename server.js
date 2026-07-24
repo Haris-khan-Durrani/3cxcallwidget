@@ -3151,6 +3151,14 @@ app.get('/api/dialer/history', async (req, res) => {
       order: [['createdAt', 'DESC']],
       limit: 30
     });
+
+    for (let record of history) {
+      if (record.recording_id && !record.recording_token) {
+        record.recording_token = crypto.randomBytes(32).toString('hex');
+        await record.save();
+      }
+    }
+
     res.json(history);
   } catch (err) {
     console.error(err);

@@ -411,10 +411,13 @@
       background: #f1f5f9;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
-      padding: 6px 10px;
+      padding: 6px 8px;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       margin-top: 4px;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
     }
     .player-box.open { display: flex; }
     .player-toggle {
@@ -424,7 +427,7 @@
     }
     .player-toggle:hover { background: #6d28d9; }
     .player-toggle svg { width: 10px; height: 10px; fill: currentColor; }
-    .player-seek { flex: 1; height: 4px; border-radius: 2px; accent-color: #7c3aed; cursor: pointer; margin: 0; min-width: 50px; }
+    .player-seek { flex: 1; min-width: 0; width: 0; height: 4px; border-radius: 2px; accent-color: #7c3aed; cursor: pointer; margin: 0; }
     .player-time { font-size: 9.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: #475569; white-space: nowrap; flex-shrink: 0; }
     .player-dl { color: #64748b; background: transparent; border: none; padding: 2px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color 0.15s; flex-shrink: 0; }
     .player-dl:hover { color: #0f172a; }

@@ -1,178 +1,207 @@
 <template>
-  <div class="widget-card card animate-card-fade-in">
-    <!-- Header -->
+  <div class="wc-card">
+
+    <!-- Top accent bar based on primary color -->
+    <div class="wc-accent-bar" :style="`background:${widget.color_primary || '#1f6feb'}`"></div>
+
+    <!-- ── Card Header ── -->
     <div class="wc-header">
-      <div class="wc-title-row">
-        <div class="wc-dot"></div>
-        <div>
+      <div class="wc-header-left">
+        <!-- Status dot -->
+        <div class="wc-live-dot"></div>
+        <div class="wc-name-block">
           <h3 class="wc-name">{{ widget.name }}</h3>
           <span class="wc-fqdn">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11" style="display:inline-block; vertical-align:text-bottom; margin-right:4px; opacity:0.6;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
             {{ widget.fqdn_3cx }}
           </span>
         </div>
-        <div class="wc-badges">
-          <span class="badge badge-green">
-            <span class="badge-dot badge-dot-green"></span>
-            Live
-          </span>
-          <span v-if="widget.webhook_url_n8n" class="badge badge-blue">
-            <span class="badge-dot badge-dot-blue"></span>
-            Webhook
-          </span>
-        </div>
       </div>
-      <div class="wc-actions">
-        <router-link :to="`/builder/${widget.id}`" class="btn btn-accent btn-sm btn-action-design">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="margin-right:3px; vertical-align:middle;"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
-          Design
-        </router-link>
-        <button class="btn btn-ghost btn-sm btn-action-edit" @click="openEditWidget">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="margin-right:3px; vertical-align:middle;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-          Edit
-        </button>
-        <a :href="`/preview/${widget.id}`" target="_blank" class="btn btn-ghost btn-sm btn-action-preview">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="margin-right:3px; vertical-align:middle;"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-          Preview
-        </a>
-        <button class="btn btn-ghost btn-sm btn-action-clone" :disabled="cloning" @click="doClone">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="margin-right:3px; vertical-align:middle;"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-          Clone
-        </button>
-        <button class="btn btn-danger btn-sm btn-action-delete" @click="del">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="margin-right:3px; vertical-align:middle;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-          Delete
-        </button>
+      <div class="wc-badges">
+        <span class="wc-badge wc-badge-green">
+          <span class="wc-badge-dot wc-dot-green"></span>Live
+        </span>
+        <span v-if="widget.webhook_url_n8n" class="wc-badge wc-badge-blue">
+          <span class="wc-badge-dot wc-dot-blue"></span>Webhook
+        </span>
       </div>
     </div>
 
-    <!-- Body -->
+    <!-- ── Action Buttons ── -->
+    <div class="wc-actions-bar">
+      <router-link :to="`/builder/${widget.id}`" class="wc-btn wc-btn-design">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 20l7-7-3-3-7 7 3 3z"/></svg>
+        Design
+      </router-link>
+      <button class="wc-btn wc-btn-ghost" @click="openEditWidget">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        Edit
+      </button>
+      <a :href="`/preview/${widget.id}`" target="_blank" class="wc-btn wc-btn-ghost">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+        Preview
+      </a>
+      <button class="wc-btn wc-btn-ghost" :disabled="cloning" @click="doClone">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+        Clone
+      </button>
+      <button class="wc-btn wc-btn-danger" @click="del">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        Delete
+      </button>
+    </div>
+
+    <!-- ── Body ── -->
     <div class="wc-body">
-      <!-- Meta row -->
-      <div class="wc-meta">
-        <div class="meta-item">
-          <span class="meta-label">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" style="margin-right:4px; vertical-align:middle; opacity:0.8;"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56-.35-.12-.74-.03-1.01.24l-2.2 2.2c-2.83-1.44-5.15-3.75-6.59-6.59l2.2-2.21c.28-.26.36-.65.25-1C8.7 6.45 8.5 5.25 8.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.58c0-.56-.45-1.04-1-.99z"/></svg>
-            Fallback Ext
+
+      <!-- Meta Chips Row -->
+      <div class="wc-meta-row">
+        <div class="wc-meta-chip">
+          <span class="wc-meta-chip-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
           </span>
-          <code class="meta-val highlight-val">{{ widget.agent_extension_3cx }}</code>
+          <span class="wc-meta-chip-lbl">Fallback</span>
+          <code class="wc-meta-chip-val">{{ widget.agent_extension_3cx || '—' }}</code>
         </div>
-        <div class="meta-item">
-          <span class="meta-label">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" style="margin-right:4px; vertical-align:middle; opacity:0.8;"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-            Agents
+        <div class="wc-meta-chip">
+          <span class="wc-meta-chip-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
           </span>
-          <code class="meta-val highlight-val">{{ (widget.Agents || []).length }} configured</code>
+          <span class="wc-meta-chip-lbl">Agents</span>
+          <code class="wc-meta-chip-val">{{ (widget.Agents||[]).length }} configured</code>
         </div>
-        <div class="meta-item">
-          <span class="meta-label">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" style="margin-right:4px; vertical-align:middle; opacity:0.8;"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12z"/></svg>
-            Primary Color
+        <div class="wc-meta-chip">
+          <span class="wc-meta-chip-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
           </span>
-          <div class="meta-color-row">
-            <div class="meta-color-dot" :style="{ background: widget.color_primary || '#0b4526' }"></div>
-            <code class="meta-val highlight-val">{{ widget.color_primary || '#0b4526' }}</code>
-          </div>
+          <span class="wc-meta-chip-lbl">Color</span>
+          <span class="wc-color-dot" :style="`background:${widget.color_primary||'#0b4526'}`"></span>
+          <code class="wc-meta-chip-val">{{ widget.color_primary || '#0b4526' }}</code>
         </div>
       </div>
 
       <!-- Embed Code -->
-      <div class="embed-section">
-        <span class="embed-label">Embed Code</span>
-        <div class="embed-block">
-          <div class="embed-tag-wrapper">
-            <code class="embed-code">&lt;script src="{{ embedSrc }}"&gt;&lt;/script&gt;</code>
+      <div class="wc-embed-section">
+        <div class="wc-section-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+          Embed Code
+        </div>
+        <div class="wc-embed-block">
+          <div class="wc-embed-code-wrap">
+            <code class="wc-embed-code">&lt;script src="{{ embedSrc }}"&gt;&lt;/script&gt;</code>
           </div>
-          <button class="copy-btn" @click="copy" :class="{ copied }">
-            <span v-if="copied">✓ Copied</span>
-            <span v-else>
-              <svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11" style="margin-right:4px; vertical-align:middle;"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-              Copy
-            </span>
+          <button class="wc-copy-btn" @click="copy" :class="{ copied }">
+            <svg v-if="!copied" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            {{ copied ? 'Copied!' : 'Copy' }}
           </button>
         </div>
       </div>
 
       <!-- Agents -->
-      <div class="agents-section">
-        <div class="agents-header">
-          <h4>Agents (Round-Robin)</h4>
-          <button class="btn btn-ghost btn-sm add-agent-trigger-btn" @click="openAddAgent">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      <div class="wc-agents-section">
+        <div class="wc-agents-hd">
+          <div class="wc-section-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            Agents (Round-Robin)
+            <span class="wc-agent-count">{{ (widget.Agents||[]).length }}</span>
+          </div>
+          <button class="wc-add-agent-btn" @click="openAddAgent">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
             Add Agent
           </button>
         </div>
 
-        <div v-if="!widget.Agents || !widget.Agents.length" class="agents-empty">
-          No agents added — calls go to fallback queue <code>{{ widget.agent_extension_3cx }}</code>
+        <div v-if="!widget.Agents || !widget.Agents.length" class="wc-agents-empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span>No agents — calls route to fallback <code>{{ widget.agent_extension_3cx }}</code></span>
         </div>
 
-        <div v-else class="agents-list">
-          <div v-for="agent in widget.Agents" :key="agent.id" class="agent-row">
-            <img class="agent-avatar"
+        <div v-else class="wc-agents-list">
+          <div v-for="(agent, idx) in widget.Agents" :key="agent.id" class="wc-agent-row" :style="`animation-delay:${idx * 50}ms`">
+            <div class="wc-agent-num">{{ idx + 1 }}</div>
+            <img class="wc-agent-av"
               :src="agent.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(agent.first_name)}&background=1f6feb&color=fff&size=64`"
               :alt="agent.first_name"
               @error="handleImgError"
             />
-            <div class="agent-info">
-              <strong>{{ agent.first_name }} {{ agent.last_name || '' }}</strong>
-              <span>Ext: {{ agent.extension }}</span>
+            <div class="wc-agent-info">
+              <strong class="wc-agent-name">{{ agent.first_name }} {{ agent.last_name || '' }}</strong>
+              <span class="wc-agent-ext">Ext: {{ agent.extension }}</span>
             </div>
-            <div style="display:flex; gap:8px;">
-              <button class="btn btn-ghost btn-sm agent-edit-btn" @click="editAgent(agent)">Edit</button>
-              <button class="btn btn-danger btn-sm agent-remove-btn" @click="delAgent(agent.id)">Remove</button>
+            <div class="wc-agent-status">
+              <span class="wc-agent-dot"></span>Available
+            </div>
+            <div class="wc-agent-btns">
+              <button class="wc-agent-btn" @click="editAgent(agent)" title="Edit">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </button>
+              <button class="wc-agent-btn wc-agent-btn-del" @click="delAgent(agent.id)" title="Remove">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Add Agent Modal -->
+    <!-- ── Add / Edit Agent Modal ── -->
     <teleport to="body">
-      <transition name="fade">
-        <div v-if="showAddAgent" class="modal-backdrop" @click.self="showAddAgent = false">
-          <div class="modal-box card" @click.stop>
-            <div class="modal-header">
-              <h3>{{ editingAgentId ? 'Edit Agent' : 'Add Agent' }}</h3>
-              <button class="btn btn-icon btn-ghost" @click="showAddAgent = false">✕</button>
+      <transition name="wc-fade">
+        <div v-if="showAddAgent" class="wc-modal-backdrop" @click.self="showAddAgent = false">
+          <div class="wc-modal" @click.stop>
+            <div class="wc-modal-hd">
+              <div class="wc-modal-title-row">
+                <div class="wc-modal-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                </div>
+                <h3 class="wc-modal-title">{{ editingAgentId ? 'Edit Agent' : 'Add Agent' }}</h3>
+              </div>
+              <button class="wc-modal-close" @click="showAddAgent = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
             </div>
-            <div class="modal-body">
-              <div class="form-row form-row-2">
+            <div class="wc-modal-body">
+              <div v-if="agentForm.first_name || agentForm.avatar_url" class="wc-agent-preview">
+                <img class="wc-ap-av"
+                  :src="agentForm.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(agentForm.first_name||'A')}&background=1f6feb&color=fff&size=64`"/>
+                <div>
+                  <div class="wc-ap-name">{{ [agentForm.first_name, agentForm.last_name].filter(Boolean).join(' ') || 'New Agent' }}</div>
+                  <div class="wc-ap-ext">{{ agentForm.extension ? `Ext: ${agentForm.extension}` : 'Extension not set' }}</div>
+                </div>
+              </div>
+              <div class="wc-form-row">
                 <div class="form-group">
                   <label class="form-label">First Name *</label>
-                  <input v-model="agentForm.first_name" type="text" class="input" placeholder="John" />
+                  <input v-model="agentForm.first_name" type="text" class="input" placeholder="John"/>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Last Name</label>
-                  <input v-model="agentForm.last_name" type="text" class="input" placeholder="Doe" />
+                  <input v-model="agentForm.last_name" type="text" class="input" placeholder="Doe"/>
                 </div>
               </div>
-              <div class="form-row form-row-2">
+              <div class="wc-form-row">
                 <div class="form-group">
                   <label class="form-label">3CX Extension *</label>
-                  <input v-model="agentForm.extension" type="text" class="input" placeholder="e.g. 101" />
+                  <input v-model="agentForm.extension" type="text" class="input" placeholder="e.g. 101"/>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Agent ID (CRM/GHL ID) *</label>
-                  <input v-model="agentForm.crm_agent_id" type="text" class="input" placeholder="e.g. user_123" />
+                  <label class="form-label">Agent ID (CRM) *</label>
+                  <input v-model="agentForm.crm_agent_id" type="text" class="input" placeholder="e.g. user_123"/>
                 </div>
               </div>
               <div class="form-group">
                 <label class="form-label">Agent Email *</label>
-                <input v-model="agentForm.email" type="email" class="input" placeholder="john@company.com" />
+                <input v-model="agentForm.email" type="email" class="input" placeholder="john@company.com"/>
               </div>
               <div class="form-group">
-                <label class="form-label">Avatar URL <span style="color:var(--text3)">(optional)</span></label>
-                <input v-model="agentForm.avatar_url" type="url" class="input" placeholder="https://..." />
-                <div v-if="agentForm.first_name" style="margin-top:8px; display:flex; align-items:center; gap:8px;">
-                  <img :src="`https://ui-avatars.com/api/?name=${encodeURIComponent(agentForm.first_name)}&background=1f6feb&color=fff&size=64`" style="width:36px;height:36px;border-radius:50%;" />
-                  <span style="color:var(--text2);font-size:12px;">Auto-generated avatar preview</span>
-                </div>
+                <label class="form-label">Avatar URL <span style="color:var(--text3);font-weight:400">(optional)</span></label>
+                <input v-model="agentForm.avatar_url" type="url" class="input" placeholder="https://…"/>
               </div>
             </div>
-            <div class="modal-footer">
-              <button class="btn btn-ghost" @click="showAddAgent = false">Cancel</button>
-              <button class="btn btn-primary" :disabled="addingAgent" @click="addAgent">
+            <div class="wc-modal-ft">
+              <button class="wc-btn-ghost" @click="showAddAgent = false">Cancel</button>
+              <button class="wc-btn-primary" :disabled="addingAgent" @click="addAgent">
                 {{ addingAgent ? 'Saving...' : (editingAgentId ? 'Save Changes' : 'Add Agent') }}
               </button>
             </div>
@@ -181,52 +210,61 @@
       </transition>
     </teleport>
 
-    <!-- Edit Widget Settings Modal -->
+    <!-- ── Edit Widget Modal ── -->
     <teleport to="body">
-      <transition name="fade">
-        <div v-if="showEditWidgetModal" class="modal-backdrop" @click.self="showEditWidgetModal = false">
-          <div class="modal-box card" @click.stop>
-            <div class="modal-header">
-              <h3>Edit Widget Settings</h3>
-              <button class="btn btn-icon btn-ghost" @click="showEditWidgetModal = false">✕</button>
+      <transition name="wc-fade">
+        <div v-if="showEditWidgetModal" class="wc-modal-backdrop" @click.self="showEditWidgetModal = false">
+          <div class="wc-modal" @click.stop>
+            <div class="wc-modal-hd">
+              <div class="wc-modal-title-row">
+                <div class="wc-modal-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                </div>
+                <h3 class="wc-modal-title">Edit Widget Settings</h3>
+              </div>
+              <button class="wc-modal-close" @click="showEditWidgetModal = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
             </div>
-            <div class="modal-body">
-              <div class="form-row form-row-2">
+            <div class="wc-modal-body">
+              <div class="wc-form-row">
                 <div class="form-group">
                   <label class="form-label">Widget Name *</label>
-                  <input v-model="editWidgetForm.name" type="text" class="input" placeholder="e.g. Main Website" />
+                  <input v-model="editWidgetForm.name" type="text" class="input" placeholder="e.g. Main Website"/>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Location ID (GHL / CRM Location ID)</label>
-                  <input v-model="editWidgetForm.location_id" type="text" class="input" placeholder="e.g. loc_abc12345" />
+                  <label class="form-label">Location ID</label>
+                  <input v-model="editWidgetForm.location_id" type="text" class="input" placeholder="e.g. loc_abc12345"/>
                 </div>
               </div>
-              <div class="form-row form-row-2">
+              <div class="wc-form-row">
                 <div class="form-group">
                   <label class="form-label">3CX Server URL (FQDN)</label>
-                  <input v-model="editWidgetForm.fqdn_3cx" type="text" class="input" placeholder="ebmsdxb.3cx.ae:3081" />
+                  <input v-model="editWidgetForm.fqdn_3cx" type="text" class="input" placeholder="ebmsdxb.3cx.ae:3081"/>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Client ID</label>
-                  <input v-model="editWidgetForm.client_id_3cx" type="text" class="input" placeholder="your-client-id" />
+                  <input v-model="editWidgetForm.client_id_3cx" type="text" class="input" placeholder="your-client-id"/>
                 </div>
               </div>
               <div class="form-group">
                 <label class="form-label">Client Secret</label>
-                <input v-model="editWidgetForm.client_secret_3cx" type="password" class="input" placeholder="••••••••••••" />
+                <input v-model="editWidgetForm.client_secret_3cx" type="password" class="input" placeholder="••••••••••••"/>
               </div>
-              <div class="form-group">
-                <label class="form-label">Fallback Extension / Queue</label>
-                <input v-model="editWidgetForm.agent_extension_3cx" type="text" class="input" placeholder="800" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">n8n / GoHighLevel Webhook URL</label>
-                <input v-model="editWidgetForm.webhook_url_n8n" type="url" class="input" placeholder="https://..." />
+              <div class="wc-form-row">
+                <div class="form-group">
+                  <label class="form-label">Fallback Extension</label>
+                  <input v-model="editWidgetForm.agent_extension_3cx" type="text" class="input" placeholder="800"/>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Webhook URL</label>
+                  <input v-model="editWidgetForm.webhook_url_n8n" type="url" class="input" placeholder="https://…"/>
+                </div>
               </div>
             </div>
-            <div class="modal-footer">
-              <button class="btn btn-ghost" @click="showEditWidgetModal = false">Cancel</button>
-              <button class="btn btn-primary" :disabled="savingWidget" @click="saveWidgetSettings">
+            <div class="wc-modal-ft">
+              <button class="wc-btn-ghost" @click="showEditWidgetModal = false">Cancel</button>
+              <button class="wc-btn-primary" :disabled="savingWidget" @click="saveWidgetSettings">
                 {{ savingWidget ? 'Saving...' : 'Save Changes' }}
               </button>
             </div>
@@ -250,28 +288,22 @@ const showAddAgent = ref(false)
 const addingAgent = ref(false)
 const copied = ref(false)
 const cloning = ref(false)
+const editingAgentId = ref(null)
 
 const showEditWidgetModal = ref(false)
 const savingWidget = ref(false)
-const editWidgetForm = reactive({
-  name: '',
-  location_id: '',
-  fqdn_3cx: '',
-  client_id_3cx: '',
-  client_secret_3cx: '',
-  agent_extension_3cx: '',
-  webhook_url_n8n: ''
-})
+const editWidgetForm = reactive({ name:'', location_id:'', fqdn_3cx:'', client_id_3cx:'', client_secret_3cx:'', agent_extension_3cx:'', webhook_url_n8n:'' })
+const agentForm = reactive({ first_name:'', last_name:'', extension:'', crm_agent_id:'', email:'', avatar_url:'' })
+
+const embedSrc = computed(() => `${window.location.origin}/widget.js?id=${props.widget.id}`)
 
 function openEditWidget() {
   Object.assign(editWidgetForm, {
-    name: props.widget.name || '',
-    location_id: props.widget.location_id || '',
-    fqdn_3cx: props.widget.fqdn_3cx || '',
-    client_id_3cx: props.widget.client_id_3cx || '',
-    client_secret_3cx: props.widget.client_secret_3cx || '',
-    agent_extension_3cx: props.widget.agent_extension_3cx || '',
-    webhook_url_n8n: props.widget.webhook_url_n8n || ''
+    name: props.widget.name||'', location_id: props.widget.location_id||'',
+    fqdn_3cx: props.widget.fqdn_3cx||'', client_id_3cx: props.widget.client_id_3cx||'',
+    client_secret_3cx: props.widget.client_secret_3cx||'',
+    agent_extension_3cx: props.widget.agent_extension_3cx||'',
+    webhook_url_n8n: props.widget.webhook_url_n8n||''
   })
   showEditWidgetModal.value = true
 }
@@ -284,23 +316,15 @@ async function saveWidgetSettings() {
     toast('Widget updated successfully!')
     showEditWidgetModal.value = false
     emit('agent-added')
-  } catch {
-    toast('Failed to save widget settings', 'error')
-  } finally {
-    savingWidget.value = false
-  }
+  } catch { toast('Failed to save widget settings', 'error') }
+  finally { savingWidget.value = false }
 }
-
-const editingAgentId = ref(null)
-const agentForm = reactive({ first_name: '', last_name: '', extension: '', crm_agent_id: '', email: '', avatar_url: '' })
-
-const embedSrc = computed(() => `${window.location.origin}/widget.js?id=${props.widget.id}`)
 
 async function copy() {
   try {
     await navigator.clipboard.writeText(`<script src="${embedSrc.value}"><\/script>`)
     copied.value = true
-    setTimeout(() => copied.value = false, 2000)
+    setTimeout(() => copied.value = false, 2200)
     toast('Embed code copied!')
   } catch { toast('Copy failed', 'error') }
 }
@@ -325,14 +349,13 @@ async function doClone() {
 
 function openAddAgent() {
   editingAgentId.value = null
-  Object.assign(agentForm, { first_name: '', last_name: '', extension: '', crm_agent_id: '', email: '', avatar_url: '' })
+  Object.assign(agentForm, { first_name:'', last_name:'', extension:'', crm_agent_id:'', email:'', avatar_url:'' })
   showAddAgent.value = true
 }
 
 async function addAgent() {
-  if (!agentForm.first_name || !agentForm.extension || !agentForm.crm_agent_id || !agentForm.email) {
+  if (!agentForm.first_name || !agentForm.extension || !agentForm.crm_agent_id || !agentForm.email)
     return toast('First name, extension, Agent ID, and email are required', 'error')
-  }
   addingAgent.value = true
   try {
     if (editingAgentId.value) {
@@ -344,7 +367,7 @@ async function addAgent() {
     }
     showAddAgent.value = false
     editingAgentId.value = null
-    Object.assign(agentForm, { first_name: '', last_name: '', extension: '', crm_agent_id: '', email: '', avatar_url: '' })
+    Object.assign(agentForm, { first_name:'', last_name:'', extension:'', crm_agent_id:'', email:'', avatar_url:'' })
     emit('agent-added')
   } catch { toast('Failed to save agent', 'error') }
   finally { addingAgent.value = false }
@@ -353,12 +376,9 @@ async function addAgent() {
 function editAgent(agent) {
   editingAgentId.value = agent.id
   Object.assign(agentForm, {
-    first_name: agent.first_name,
-    last_name: agent.last_name || '',
-    extension: agent.extension,
-    crm_agent_id: agent.crm_agent_id || '',
-    email: agent.email || '',
-    avatar_url: agent.avatar_url || ''
+    first_name: agent.first_name, last_name: agent.last_name||'',
+    extension: agent.extension, crm_agent_id: agent.crm_agent_id||'',
+    email: agent.email||'', avatar_url: agent.avatar_url||''
   })
   showAddAgent.value = true
 }
@@ -378,214 +398,251 @@ function handleImgError(e) {
 </script>
 
 <style scoped>
-.widget-card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+/* ─── Card ─── */
+.wc-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden;
+  transition: border-color .25s, box-shadow .25s, transform .25s;
+  animation: wc-fadein .45s cubic-bezier(0.16,1,0.3,1) both;
 }
-.widget-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(88, 166, 255, 0.3);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15), 0 0 24px rgba(88, 166, 255, 0.08);
-}
-.wc-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--border); gap: 16px; flex-wrap: wrap; background: var(--bg3); }
-.wc-title-row { display: flex; align-items: center; gap: 14px; flex: 1; }
-.wc-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--green);
-  animation: pulse-green 2s infinite;
-  flex-shrink: 0;
-}
-.wc-name { font-size: 16px; font-weight: 700; margin-bottom: 3px; letter-spacing: -0.2px; }
-.wc-fqdn { font-size: 12px; color: var(--text2); font-family: monospace; }
-.wc-badges { display: flex; gap: 8px; align-items: center; }
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid transparent;
-}
-.badge-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.badge-dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
-.badge-dot-blue { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.wc-card:hover { border-color: rgba(88,166,255,.3); box-shadow: 0 12px 40px rgba(0,0,0,.18), 0 0 20px rgba(88,166,255,.06); transform: translateY(-2px); }
+@keyframes wc-fadein { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
 
-.wc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Accent bar */
+.wc-accent-bar { height: 3px; width: 100%; transition: background .3s; }
 
-/* Custom Action Button Interactions */
-.btn-action-design {
-  background: linear-gradient(135deg, #1f6feb, #388bfd);
-  border: 1px solid rgba(255,255,255,0.1);
-  color: white;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+/* ─── Header ─── */
+.wc-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px 14px; gap: 14px; flex-wrap: wrap;
+  background: var(--bg3); border-bottom: 1px solid var(--border);
 }
-.btn-action-design:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(56, 139, 253, 0.4);
+.wc-header-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.wc-live-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
+  animation: wc-pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(63,185,80,.5);
 }
-.btn-action-design:active { transform: translateY(0); }
+@keyframes wc-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(63,185,80,.4); }
+  50% { box-shadow: 0 0 0 5px rgba(63,185,80,0); }
+}
+.wc-name-block { min-width: 0; }
+.wc-name { font-size: 15px; font-weight: 800; color: var(--text); letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc-fqdn { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text3); font-family: monospace; margin-top: 2px; }
 
-.btn-action-preview:hover, .btn-action-clone:hover {
-  transform: translateY(-1px);
-  border-color: var(--text2);
+.wc-badges { display: flex; gap: 6px; align-items: center; }
+.wc-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 700;
 }
-.btn-action-preview:active, .btn-action-clone:active { transform: translateY(0); }
+.wc-badge-dot { width: 5px; height: 5px; border-radius: 50%; }
+.wc-badge-green { background: rgba(63,185,80,.1); border: 1px solid rgba(63,185,80,.22); color: var(--green); }
+.wc-dot-green { background: var(--green); box-shadow: 0 0 0 2px rgba(63,185,80,.25); animation: wc-pulse 2s infinite; }
+.wc-badge-blue  { background: rgba(88,166,255,.1); border: 1px solid rgba(88,166,255,.22); color: var(--accent); }
+.wc-dot-blue  { background: var(--accent); }
 
-.btn-action-delete {
-  background: rgba(248,81,73,0.06);
-  border: 1px solid rgba(248,81,73,0.2);
-  color: var(--red);
-  transition: all 0.2s ease;
+/* ─── Action Buttons ─── */
+.wc-actions-bar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 12px 22px; border-bottom: 1px solid var(--border);
+  background: var(--bg3);
 }
-.btn-action-delete:hover {
-  background: var(--red);
-  color: #fff;
-  border-color: var(--red);
-  box-shadow: 0 4px 12px rgba(248, 81, 73, 0.3);
+.wc-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 13px; border-radius: 8px; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; transition: all .18s; text-decoration: none; border: 1px solid transparent;
 }
+.wc-btn-design {
+  background: linear-gradient(135deg,#1f6feb,#388bfd);
+  color: #fff; border-color: rgba(255,255,255,.1);
+  box-shadow: 0 3px 10px rgba(56,139,253,.28);
+}
+.wc-btn-design:hover { box-shadow: 0 5px 18px rgba(56,139,253,.45); transform: translateY(-1px); }
+.wc-btn-ghost {
+  background: var(--bg2); border-color: var(--border); color: var(--text2);
+}
+.wc-btn-ghost:hover { color: var(--text); border-color: var(--text3); background: var(--bg4); }
+.wc-btn-ghost:disabled { opacity: .4; cursor: not-allowed; }
+.wc-btn-danger {
+  background: rgba(248,81,73,.07); border-color: rgba(248,81,73,.22); color: var(--red);
+  margin-left: auto;
+}
+.wc-btn-danger:hover { background: var(--red); color: #fff; border-color: var(--red); box-shadow: 0 3px 12px rgba(248,81,73,.3); }
 
-.wc-body { padding: 24px; display: flex; flex-direction: column; gap: 24px; }
-.wc-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; }
-.meta-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  padding: 12px 16px;
-  border-radius: var(--radius);
-}
-.meta-label { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; display: flex; align-items: center; gap: 4px; }
-.meta-val { font-size: 13px; font-family: monospace; color: var(--text); }
-.highlight-val { color: var(--accent); font-weight: 700; }
-.meta-color-row { display: flex; align-items: center; gap: 8px; }
-.meta-color-dot { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(128,128,128,0.15); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+/* ─── Body ─── */
+.wc-body { padding: 20px 22px; display: flex; flex-direction: column; gap: 18px; }
 
-/* Embed section code block */
-.embed-section { display: flex; flex-direction: column; gap: 8px; }
-.embed-label { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; }
-.embed-block {
-  display: flex;
-  align-items: center;
-  background: var(--bg);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 14px;
-  gap: 12px;
-  overflow: hidden;
-  transition: border-color 0.2s ease;
+/* Meta chips */
+.wc-meta-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.wc-meta-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 11px; font-size: 11.5px;
+  transition: border-color .15s;
 }
-.embed-block:focus-within {
-  border-color: var(--accent);
-}
-.embed-tag-wrapper { flex: 1; overflow: hidden; display: flex; }
-.embed-code { font-size: 12px; color: #1f6feb; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc-meta-chip:hover { border-color: var(--bg4); }
+.wc-meta-chip-icon { color: var(--text3); flex-shrink: 0; }
+.wc-meta-chip-lbl { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; }
+.wc-meta-chip-val { font-family: monospace; font-size: 11.5px; font-weight: 700; color: var(--accent); }
+.wc-color-dot { width: 12px; height: 12px; border-radius: 4px; border: 1px solid rgba(128,128,128,.2); flex-shrink: 0; }
 
-.copy-btn {
-  flex-shrink: 0;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  color: var(--text2);
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.copy-btn:hover { color: var(--text); border-color: var(--text2); transform: scale(1.03); }
-.copy-btn:active { transform: scale(0.97); }
-.copy-btn.copied { color: #fff; border-color: var(--green); background: var(--green); box-shadow: 0 0 10px rgba(63,185,80,0.3); }
-
-/* Agents Section */
-.agents-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.agents-header h4 { font-size: 13px; font-weight: 700; color: var(--text2); letter-spacing: 0.5px; }
-.add-agent-trigger-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px dashed var(--border); }
-.add-agent-trigger-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,0.06); }
-
-.agents-empty { font-size: 13px; color: var(--text2); padding: 14px; background: var(--bg); border: 1px dashed var(--border); border-radius: var(--radius); text-align: center; }
-
-.agents-list { display: flex; flex-direction: column; gap: 8px; }
-.agent-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  transition: all 0.2s ease;
-  border-left: 3px solid transparent;
-}
-.agent-row:hover {
-  background: var(--bg2);
-  border-color: var(--border);
-  border-left-color: var(--accent);
-  transform: translateX(4px);
-}
-.agent-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border); }
-.agent-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.agent-info strong { font-size: 13px; font-weight: 600; color: var(--text); }
-.agent-info span { font-size: 11px; color: var(--text2); font-family: monospace; }
-.agent-remove-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text3);
-  transition: all 0.2s ease;
-}
-.agent-remove-btn:hover {
-  background: rgba(248,81,73,0.1);
-  border-color: rgba(248,81,73,0.2);
-  color: var(--red);
+/* Section label */
+.wc-section-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .7px;
 }
 
-/* Modals */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 12, 16, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+/* Embed */
+.wc-embed-section { display: flex; flex-direction: column; gap: 8px; }
+.wc-embed-block {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 9px 14px;
+  transition: border-color .18s;
 }
-.modal-box {
-  width: 100%;
-  max-width: 500px;
-  background: linear-gradient(135deg, var(--bg2), var(--bg3));
-  border: 1px solid rgba(128,128,128,0.2);
-  box-shadow: 0 24px 60px rgba(0,0,0,0.2);
-  border-radius: var(--radius-lg);
+.wc-embed-block:hover { border-color: rgba(88,166,255,.3); }
+.wc-embed-code-wrap { flex: 1; overflow: hidden; }
+.wc-embed-code { font-size: 11.5px; color: var(--accent); font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.wc-copy-btn {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 7px; font-size: 11.5px; font-weight: 600; color: var(--text2);
+  cursor: pointer; transition: all .18s cubic-bezier(0.175,0.885,0.32,1.275);
+  white-space: nowrap;
 }
-.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 24px 24px 8px; }
-.modal-body { padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 16px; }
-.modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 0 24px 24px; border-top: 1px solid rgba(128,128,128,0.1); padding-top: 16px; }
+.wc-copy-btn:hover { color: var(--text); border-color: var(--text2); transform: scale(1.03); }
+.wc-copy-btn.copied { background: var(--green); border-color: var(--green); color: #fff; box-shadow: 0 0 12px rgba(63,185,80,.3); }
 
-/* Micro-animations */
-.animate-card-fade-in {
-  animation: cardFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+/* Agents */
+.wc-agents-section { display: flex; flex-direction: column; gap: 10px; }
+.wc-agents-hd { display: flex; align-items: center; justify-content: space-between; }
+.wc-agent-count {
+  background: var(--bg3); border: 1px solid var(--border);
+  font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 10px; color: var(--text3);
 }
-@keyframes cardFadeIn {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+.wc-add-agent-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; background: transparent;
+  border: 1px dashed var(--border); border-radius: 8px;
+  font-size: 11.5px; font-weight: 600; color: var(--text2); cursor: pointer; transition: all .15s;
 }
+.wc-add-agent-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,.06); }
+
+.wc-agents-empty {
+  display: flex; align-items: center; gap: 10px; justify-content: center;
+  padding: 16px; background: var(--bg); border: 1px dashed var(--border);
+  border-radius: 10px; font-size: 12.5px; color: var(--text2);
+}
+.wc-agents-empty code { background: var(--bg3); padding: 1px 6px; border-radius: 4px; font-size: 11px; color: var(--accent); }
+
+.wc-agents-list { display: flex; flex-direction: column; gap: 6px; }
+.wc-agent-row {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 14px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 11px;
+  border-left: 3px solid transparent; transition: all .2s;
+  animation: wc-fadein .35s both;
+}
+.wc-agent-row:hover { background: var(--bg2); border-left-color: var(--accent); transform: translateX(3px); }
+.wc-agent-num {
+  width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0;
+  background: var(--bg3); border: 1px solid var(--border);
+  font-size: 10px; font-weight: 700; color: var(--text3);
+  display: flex; align-items: center; justify-content: center;
+}
+.wc-agent-av { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; border: 1.5px solid var(--border); flex-shrink: 0; }
+.wc-agent-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wc-agent-name { font-size: 12.5px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc-agent-ext { font-size: 10.5px; color: var(--text3); font-family: monospace; }
+.wc-agent-status {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; color: var(--green); font-weight: 600; flex-shrink: 0;
+}
+.wc-agent-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); animation: wc-pulse 2s infinite; }
+.wc-agent-btns { display: flex; gap: 5px; }
+.wc-agent-btn {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .15s;
+}
+.wc-agent-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--text3); }
+.wc-agent-btn-del:hover { background: rgba(248,81,73,.1); border-color: rgba(248,81,73,.25); color: var(--red); }
+
+/* ─── Modals ─── */
+.wc-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(10,12,16,.65);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.wc-modal {
+  width: 100%; max-width: 520px;
+  background: linear-gradient(145deg, var(--bg2), var(--bg3));
+  border: 1px solid rgba(128,128,128,.2);
+  box-shadow: 0 28px 80px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04);
+  border-radius: 18px; overflow: hidden;
+  animation: wc-slideup .28s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes wc-slideup { from { transform:translateY(28px) scale(.96); opacity:0; } to { transform:none; opacity:1; } }
+
+.wc-modal-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 22px 16px; border-bottom: 1px solid rgba(128,128,128,.12);
+}
+.wc-modal-title-row { display: flex; align-items: center; gap: 12px; }
+.wc-modal-icon {
+  width: 34px; height: 34px; background: rgba(88,166,255,.12);
+  border: 1px solid rgba(88,166,255,.2); border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; color: var(--accent);
+}
+.wc-modal-title { font-size: 16px; font-weight: 800; color: var(--text); }
+.wc-modal-close {
+  width: 28px; height: 28px; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer; color: var(--text2);
+  display: flex; align-items: center; justify-content: center; transition: all .15s;
+}
+.wc-modal-close:hover { background: var(--bg4); color: var(--text); }
+
+.wc-modal-body { padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; max-height: 55vh; overflow-y: auto; }
+.wc-modal-body::-webkit-scrollbar { width: 4px; }
+.wc-modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.wc-modal-ft {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 14px 22px; border-top: 1px solid rgba(128,128,128,.1);
+}
+.wc-btn-ghost {
+  padding: 8px 18px; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 9px; color: var(--text2); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all .15s;
+}
+.wc-btn-ghost:hover { color: var(--text); border-color: var(--text2); }
+.wc-btn-primary {
+  padding: 8px 18px; background: linear-gradient(135deg,#1f6feb,#388bfd);
+  border: none; border-radius: 9px; color: #fff;
+  font-size: 13px; font-weight: 700; cursor: pointer; transition: all .18s;
+  box-shadow: 0 3px 12px rgba(56,139,253,.3);
+}
+.wc-btn-primary:hover:not(:disabled) { box-shadow: 0 5px 20px rgba(56,139,253,.45); transform: translateY(-1px); }
+.wc-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Agent preview in modal */
+.wc-agent-preview {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+}
+.wc-ap-av { width: 40px; height: 40px; border-radius: 10px; border: 1.5px solid var(--border); }
+.wc-ap-name { font-size: 13px; font-weight: 700; color: var(--text); }
+.wc-ap-ext { font-size: 11px; color: var(--text3); font-family: monospace; margin-top: 2px; }
+
+/* 2-col form row */
+.wc-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width:480px) { .wc-form-row { grid-template-columns: 1fr; } }
+
+/* Fade transition */
+.wc-fade-enter-active, .wc-fade-leave-active { transition: opacity .2s ease; }
+.wc-fade-enter-from, .wc-fade-leave-to { opacity: 0; }
 </style>

@@ -20,6 +20,10 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
 
   db:
     image: mysql:8.0
@@ -37,6 +41,37 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: 3cxwidget-phpmyadmin
+    environment:
+      - PMA_HOST=db
+      - PMA_USER=3cx_user
+      - PMA_PASSWORD=3cx_secret
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    container_name: 3cxwidget-redis
+    restart: unless-stopped
+
+  ai-runner:
+    build: ./ai-runner
+    container_name: 3cxwidget-ai-runner
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NODE_BACKEND_URL=http://app:3005
+    depends_on:
+      - redis
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
 
 volumes:
   3cxwidget_mysql_data:

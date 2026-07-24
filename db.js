@@ -132,6 +132,10 @@ const Widget = sequelize.define('Widget', {
   tooltip_autohide:      { type: DataTypes.BOOLEAN, defaultValue: true },
   tooltip_autohide_seconds: { type: DataTypes.INTEGER, defaultValue: 15 },
   location_id:           { type: DataTypes.STRING, allowNull: true },
+  // Tenant Quotas & Limits
+  max_concurrent_calls: { type: DataTypes.INTEGER, defaultValue: 5 },
+  monthly_call_minutes: { type: DataTypes.INTEGER, defaultValue: 1000 },
+  max_campaigns:        { type: DataTypes.INTEGER, defaultValue: 10 },
 });
 
 const CallRecord = sequelize.define('CallRecord', {
@@ -403,6 +407,184 @@ const User = sequelize.define('User', {
   }
 });
 
+const AIProject = sequelize.define('AIProject', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  fqdn_3cx: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  }
+});
+
+const AIProviderCredential = sequelize.define('AIProviderCredential', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  ai_project_id: { type: DataTypes.UUID, allowNull: false },
+  provider_type: { type: DataTypes.STRING, allowNull: false }, // 'stt', 'llm', 'tts'
+  provider_name: { type: DataTypes.STRING, allowNull: false }, // 'deepgram', 'openrouter', 'cartesia'
+  encrypted_api_key: { type: DataTypes.TEXT, allowNull: false },
+  encryption_iv: { type: DataTypes.STRING, allowNull: false },
+  encryption_auth_tag: { type: DataTypes.STRING, allowNull: false },
+  metadata: { type: DataTypes.JSON, allowNull: true },
+  version: { type: DataTypes.INTEGER, defaultValue: 1 },
+  is_active: { type: DataTypes.BOOLEAN, defaultValue: true }
+});
+
+const SIPConfiguration = sequelize.define('SIPConfiguration', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  ai_project_id: { type: DataTypes.UUID, allowNull: false },
+  provider: { type: DataTypes.STRING, defaultValue: '3cx' },
+  server_url: { type: DataTypes.STRING, allowNull: false },
+  extension: { type: DataTypes.STRING, allowNull: false },
+  encrypted_password: { type: DataTypes.TEXT, allowNull: false },
+  encryption_iv: { type: DataTypes.STRING, allowNull: false },
+  encryption_auth_tag: { type: DataTypes.STRING, allowNull: false },
+  version: { type: DataTypes.INTEGER, defaultValue: 1 },
+  is_active: { type: DataTypes.BOOLEAN, defaultValue: true }
+});
+
+const AICallCampaign = sequelize.define('AICallCampaign', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  ai_project_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  system_prompt: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+  stt_provider: {
+    type: DataTypes.STRING,
+    defaultValue: 'deepgram',
+  },
+  llm_provider: {
+    type: DataTypes.STRING,
+    defaultValue: 'openrouter',
+  },
+  llm_model: {
+    type: DataTypes.STRING,
+    defaultValue: 'google/gemini-2-flash', 
+  },
+  tts_provider: {
+    type: DataTypes.STRING,
+    defaultValue: 'cartesia',
+  },
+  language: {
+    type: DataTypes.STRING,
+    defaultValue: 'en-US',
+  },
+  voice_settings: {
+    type: DataTypes.JSON,
+    allowNull: true,
+  }
+});
+
+const AICallRecord = sequelize.define('AICallRecord', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  ai_project_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+  },
+  campaign_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+  },
+  destination: {
+    type: DataTypes.STRING,
+    allowNull: false, 
+  },
+  customer_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  status: {
+    type: DataTypes.STRING,
+    defaultValue: 'Initiated', 
+  },
+  started_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  connected_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  ended_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  duration_seconds: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  customer_intent: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  sentiment: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  stt_cost: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+  },
+  llm_cost: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+  },
+  tts_cost: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+  },
+  total_cost: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+  },
+  transcript: {
+    type: DataTypes.JSON, 
+    allowNull: true,
+  },
+  summary: {
+    type: DataTypes.TEXT, 
+    allowNull: true,
+  },
+  recording_url: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  sip_call_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  external_call_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  failure_reason: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  }
+});
+
 const SystemSetting = sequelize.define('SystemSetting', {
   id: {
     type: DataTypes.UUID,
@@ -433,6 +615,21 @@ DialerCallRecord.belongsTo(DialerWidget, { foreignKey: 'dialerId' });
 DialerWidget.hasMany(DialerAgent, { foreignKey: 'dialerId', onDelete: 'CASCADE' });
 DialerAgent.belongsTo(DialerWidget, { foreignKey: 'dialerId' });
 
+AIProject.hasMany(AIProviderCredential, { foreignKey: 'ai_project_id', onDelete: 'CASCADE' });
+AIProviderCredential.belongsTo(AIProject, { foreignKey: 'ai_project_id' });
+
+AIProject.hasMany(SIPConfiguration, { foreignKey: 'ai_project_id', onDelete: 'CASCADE' });
+SIPConfiguration.belongsTo(AIProject, { foreignKey: 'ai_project_id' });
+
+AIProject.hasMany(AICallCampaign, { foreignKey: 'ai_project_id', onDelete: 'CASCADE' });
+AICallCampaign.belongsTo(AIProject, { foreignKey: 'ai_project_id' });
+
+AIProject.hasMany(AICallRecord, { foreignKey: 'ai_project_id', onDelete: 'CASCADE' });
+AICallRecord.belongsTo(AIProject, { foreignKey: 'ai_project_id' });
+
+AICallCampaign.hasMany(AICallRecord, { foreignKey: 'campaign_id', onDelete: 'CASCADE' });
+AICallRecord.belongsTo(AICallCampaign, { foreignKey: 'campaign_id' });
+
 module.exports = {
   sequelize,
   Widget,
@@ -442,5 +639,10 @@ module.exports = {
   DialerCallRecord,
   DialerAgent,
   User,
-  SystemSetting
+  SystemSetting,
+  AIProject,
+  AIProviderCredential,
+  SIPConfiguration,
+  AICallCampaign,
+  AICallRecord
 };

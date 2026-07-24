@@ -13,6 +13,9 @@ import DialerReportsView from './views/DialerReportsView.vue'
 import UsersView from './views/UsersView.vue'
 import SettingsView from './views/SettingsView.vue'
 import ResetPasswordView from './views/ResetPasswordView.vue'
+import AICampaignsView from './views/AICampaignsView.vue'
+import AICallHistoryView from './views/AICallHistoryView.vue'
+import AICredentialsView from './views/AICredentialsView.vue'
 import './style.css'
 
 // Restore auth header after page refresh (interceptor approach — works even with cached JS)
@@ -27,6 +30,19 @@ axios.interceptors.request.use(config => {
   return config
 })
 
+// Global 401/403 handler - redirect to login if token is invalid/expired
+axios.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      localStorage.removeItem('admin_token')
+      delete axios.defaults.headers.common['Authorization']
+      window.location.hash = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
@@ -40,7 +56,10 @@ const router = createRouter({
     { path: '/dialer-reports', component: DialerReportsView, meta: { requiresAuth: true } },
     { path: '/docs', component: DocsView, meta: { requiresAuth: true } },
     { path: '/users', component: UsersView, meta: { requiresAuth: true } },
-    { path: '/settings', component: SettingsView, meta: { requiresAuth: true } }
+    { path: '/settings', component: SettingsView, meta: { requiresAuth: true } },
+    { path: '/ai-credentials', component: AICredentialsView, meta: { requiresAuth: true } },
+    { path: '/ai-campaigns', component: AICampaignsView, meta: { requiresAuth: true } },
+    { path: '/ai-history', component: AICallHistoryView, meta: { requiresAuth: true } }
   ]
 })
 

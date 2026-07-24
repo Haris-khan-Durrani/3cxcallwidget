@@ -33,9 +33,19 @@ export const useWidgetStore = defineStore('widgets', {
   actions: {
     async fetch() {
       this.loading = true
-      const res = await axios.get('/api/admin/widgets')
-      this.widgets = res.data
-      this.loading = false
+      try {
+        const res = await axios.get('/api/admin/widgets')
+        this.widgets = res.data
+      } catch (err) {
+        console.error('Failed to fetch widgets:', err)
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          localStorage.removeItem('admin_token')
+          delete axios.defaults.headers.common['Authorization']
+          window.location.hash = '/login'
+        }
+      } finally {
+        this.loading = false
+      }
     },
     async create(payload) {
       const res = await axios.post('/api/admin/widgets', payload)
@@ -79,9 +89,14 @@ export const useDialerStore = defineStore('dialers', {
   actions: {
     async fetch() {
       this.loading = true
-      const res = await axios.get('/api/admin/dialers')
-      this.dialers = res.data
-      this.loading = false
+      try {
+        const res = await axios.get('/api/admin/dialers')
+        this.dialers = res.data
+      } catch (err) {
+        console.error('Failed to fetch dialers:', err)
+      } finally {
+        this.loading = false
+      }
     },
     async create(payload) {
       const res = await axios.post('/api/admin/dialers', payload)

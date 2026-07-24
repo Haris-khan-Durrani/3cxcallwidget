@@ -7,8 +7,10 @@ const dns = require('dns');
 
 // Force DNS resolution to prefer IPv4 to prevent IPv6 Docker timeouts on dual-stack servers
 dns.setDefaultResultOrder('ipv4first');
-const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent, User, SystemSetting } = require('./db');
+const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent, User, SystemSetting, AICallCampaign, AICallRecord, AIProviderCredential, SIPConfiguration, AIProject } = require('./db');
 const crypto = require('crypto');
+const { verifyInternalRequest } = require('./utils/jwt');
+const { decrypt, encrypt } = require('./utils/encryption');
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -2322,6 +2324,354 @@ app.post('/api/admin/widgets/:id/clone', authenticateToken, async (req, res) => 
     res.status(500).json({ error: err.message });
   }
 });
+// --- Cartesia Voice Management ---
+// Helper: retry axios requests on transient network errors (EAI_AGAIN, ECONNRESET, etc.)
+async function axiosWithRetry(fn, retries = 3, delayMs = 500) {
+  let lastErr;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const isTransient = err.code === 'EAI_AGAIN' || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT' || err.code === 'ENOTFOUND';
+      if (!isTransient || i === retries - 1) throw err;
+      console.warn(`[Cartesia] Transient error (${err.code}), retrying in ${delayMs}ms... (attempt ${i + 1}/${retries})`);
+      await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+app.get('/api/admin/ai-projects/:ai_project_id/cartesia/voices', authenticateToken, async (req, res) => {
+  try {
+    const cred = await AIProviderCredential.findOne({ where: { ai_project_id: req.params.ai_project_id, provider_name: 'cartesia' } });
+    if (!cred) return res.status(404).json({ error: 'Cartesia credential not found for this AI Project.' });
+    
+    const cartesiaKey = decrypt(cred.encrypted_api_key, cred.encryption_iv, cred.encryption_auth_tag);
+    
+    const response = await axiosWithRetry(() => axios.get('https://api.cartesia.ai/voices', {
+      headers: {
+        'X-API-Key': cartesiaKey,
+        'Cartesia-Version': '2024-06-10'
+      }
+    }));
+    res.json(response.data);
+  } catch (err) {
+    console.error('Failed to fetch Cartesia voices:', err.message);
+    res.status(500).json({ error: err.response?.data?.error || err.message });
+  }
+});
+
+app.post('/api/admin/ai-projects/:ai_project_id/cartesia/preview', authenticateToken, async (req, res) => {
+  try {
+    const { voice_id, text, language } = req.body;
+    if (!voice_id || !text) return res.status(400).json({ error: 'voice_id and text are required' });
+
+    const cred = await AIProviderCredential.findOne({ where: { ai_project_id: req.params.ai_project_id, provider_name: 'cartesia' } });
+    if (!cred) return res.status(404).json({ error: 'Cartesia credential not found.' });
+    
+    const cartesiaKey = decrypt(cred.encrypted_api_key, cred.encryption_iv, cred.encryption_auth_tag);
+
+    const response = await axiosWithRetry(() => axios.post('https://api.cartesia.ai/tts/bytes', {
+      model_id: "sonic-3.5",
+      transcript: text,
+      language: language || "en",
+      voice: {
+        mode: "id",
+        id: voice_id
+      },
+      output_format: {
+        container: "wav",
+        encoding: "pcm_s16le",
+        sample_rate: 16000
+      }
+    }, {
+      headers: {
+        'X-API-Key': cartesiaKey,
+        'Cartesia-Version': '2024-06-10',
+        'Content-Type': 'application/json'
+      },
+      responseType: 'arraybuffer'
+    }));
+    
+    res.set('Content-Type', 'audio/wav');
+    res.send(response.data);
+  } catch (err) {
+    let errorMsg = err.message;
+    if (err.response?.data) {
+      try {
+        errorMsg = Buffer.from(err.response.data).toString('utf-8');
+      } catch (e) {
+        errorMsg = err.message;
+      }
+    }
+    console.error('Failed to preview Cartesia voice:', errorMsg);
+    res.status(500).json({ error: errorMsg });
+  }
+});
+
+// --- AI Credentials Management ---
+// AI Projects CRUD
+app.get('/api/admin/ai-projects', authenticateToken, async (req, res) => {
+  try {
+    const projects = await AIProject.findAll();
+    res.json(projects);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/ai-projects', authenticateToken, async (req, res) => {
+  try {
+    const { name, fqdn_3cx } = req.body;
+    if (!name || !fqdn_3cx) return res.status(400).json({ error: 'name and fqdn_3cx required' });
+    const project = await AIProject.create({ name, fqdn_3cx });
+    res.json(project);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/ai-credentials', authenticateToken, async (req, res) => {
+  try {
+    const projects = await AIProject.findAll();
+    const creds = await AIProviderCredential.findAll();
+    const sips = await SIPConfiguration.findAll();
+    
+    const result = projects.map(p => {
+      const pCreds = creds.filter(c => c.ai_project_id === p.id);
+      const sip = sips.find(s => s.ai_project_id === p.id);
+      return {
+        ai_project_id: p.id,
+        project_name: p.name,
+        has_deepgram: pCreds.some(c => c.provider_name === 'deepgram'),
+        has_openrouter: pCreds.some(c => c.provider_name === 'openrouter'),
+        has_cartesia: pCreds.some(c => c.provider_name === 'cartesia'),
+        cartesia_voice_id: pCreds.find(c => c.provider_name === 'cartesia')?.metadata?.voice_id || null,
+        has_daily: pCreds.some(c => c.provider_name === 'daily'),
+        has_sip: !!sip,
+        sip_extension: sip ? sip.extension : ''
+      };
+    });
+    
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/ai-credentials', authenticateToken, async (req, res) => {
+  try {
+    const { ai_project_id, deepgram_key, openrouter_key, cartesia_key, cartesia_voice_id, cartesia_language, daily_key, sip_extension, sip_password } = req.body;
+    if (!ai_project_id) return res.status(400).json({ error: 'ai_project_id is required' });
+
+    const project = await AIProject.findByPk(ai_project_id);
+    if (!project) return res.status(404).json({ error: 'AI Project not found' });
+
+    const saveCredential = async (provider_type, provider_name, raw_key, metadata = null) => {
+      const existing = await AIProviderCredential.findOne({ where: { ai_project_id, provider_name } });
+      
+      if (!raw_key && !existing) return;
+      
+      let updatePayload = {};
+      
+      if (raw_key) {
+        const enc = encrypt(raw_key);
+        updatePayload.encrypted_api_key = enc.encryptedText;
+        updatePayload.encryption_iv = enc.iv;
+        updatePayload.encryption_auth_tag = enc.authTag;
+      }
+
+      if (existing) {
+        if (raw_key) updatePayload.version = existing.version + 1;
+        if (metadata) updatePayload.metadata = { ...(existing.metadata || {}), ...metadata };
+        if (Object.keys(updatePayload).length > 0) await existing.update(updatePayload);
+      } else {
+        if (!raw_key) return;
+        updatePayload.metadata = metadata || null;
+        await AIProviderCredential.create({
+          ai_project_id, provider_type, provider_name,
+          ...updatePayload
+        });
+      }
+    };
+
+    await saveCredential('stt', 'deepgram', deepgram_key);
+    await saveCredential('llm', 'openrouter', openrouter_key);
+    
+    let cartesiaMeta = null;
+    if (cartesia_voice_id || cartesia_language) {
+      cartesiaMeta = {};
+      if (cartesia_voice_id) cartesiaMeta.voice_id = cartesia_voice_id;
+      if (cartesia_language) cartesiaMeta.language = cartesia_language;
+    }
+    await saveCredential('tts', 'cartesia', cartesia_key, cartesiaMeta);
+    
+    await saveCredential('transport', 'daily', daily_key);
+
+    if (sip_extension || sip_password) {
+      const existing = await SIPConfiguration.findOne({ where: { ai_project_id } });
+      const fqdn = project.fqdn_3cx;
+      
+      if (existing) {
+        let updateData = { server_url: fqdn };
+        if (sip_extension) updateData.extension = sip_extension;
+        if (sip_password) {
+          const enc = encrypt(sip_password);
+          updateData.encrypted_password = enc.encryptedText;
+          updateData.encryption_iv = enc.iv;
+          updateData.encryption_auth_tag = enc.authTag;
+        }
+        await existing.update(updateData);
+      } else {
+        if (sip_extension && sip_password) {
+          const enc = encrypt(sip_password);
+          await SIPConfiguration.create({
+            ai_project_id,
+            provider: '3cx',
+            server_url: fqdn,
+            extension: sip_extension,
+            encrypted_password: enc.encryptedText,
+            encryption_iv: enc.iv,
+            encryption_auth_tag: enc.authTag
+          });
+        }
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error saving credentials:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- AI Runner Integration ---
+const { Queue } = require('bullmq');
+const redisOptions = process.env.REDIS_URL ? { url: process.env.REDIS_URL } : { host: 'redis', port: 6379 };
+const aiCallQueue = new Queue('ai-call-initiation', { connection: redisOptions });
+
+// Trigger a test call
+app.post('/api/admin/test-call', authenticateToken, async (req, res) => {
+  try {
+    const { ai_project_id, destination } = req.body;
+    if (!ai_project_id || !destination) return res.status(400).json({ error: 'ai_project_id and destination required' });
+
+    const call_id = `test-${Date.now()}`;
+    const jwt_token = jwt.sign({ ai_project_id, role: 'ai-runner' }, process.env.JWT_SECRET || 'change_this_secret_in_production', { expiresIn: '1h' });
+
+    await aiCallQueue.add('outbound-call', {
+      callId: call_id,
+      jwt: jwt_token,
+      destination: destination
+    });
+
+    res.json({ success: true, call_id });
+  } catch (err) {
+    console.error('Test call error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Internal route for python runner to fetch decrypted credentials
+app.get('/internal/ai-calls/credentials/:call_id', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.sendStatus(401);
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'change_this_secret_in_production');
+    if (decoded.role !== 'ai-runner') return res.sendStatus(403);
+
+    const ai_project_id = decoded.ai_project_id;
+    
+    // Fetch and decrypt
+    const aiCreds = await AIProviderCredential.findAll({ where: { ai_project_id } });
+    const sipConf = await SIPConfiguration.findOne({ where: { ai_project_id } });
+    
+    const providers = {};
+    for (const c of aiCreds) {
+      if (c.encrypted_api_key) {
+        providers[c.provider_name] = decrypt(c.encrypted_api_key, c.encryption_iv, c.encryption_auth_tag);
+      }
+      if (c.provider_name === 'cartesia') {
+        providers['cartesia_voice_id'] = c.metadata?.voice_id || 'a0e99841-438c-4a64-b679-ae501e7d6091';
+        providers['cartesia_language'] = c.metadata?.language || 'en';
+      }
+    }
+    
+    let sip = {};
+    if (sipConf && sipConf.encrypted_password) {
+      sip = {
+        provider: sipConf.provider,
+        server_url: sipConf.server_url,
+        extension: sipConf.extension,
+        password: decrypt(sipConf.encrypted_password, sipConf.encryption_iv, sipConf.encryption_auth_tag)
+      };
+    }
+    
+    res.json({
+      sip,
+      providers,
+      campaign: {
+        language: 'en-US',
+        system_prompt: 'You are a test assistant calling from 3CX. Keep your response brief and polite.'
+      }
+    });
+  } catch (err) {
+    console.error('Internal Credential Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- AI Campaigns ---
+
+// Get all AI campaigns
+app.get('/api/admin/ai-campaigns', authenticateToken, async (req, res) => {
+  try {
+    const campaigns = await AICallCampaign.findAll();
+    res.json(campaigns);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create AI campaign
+app.post('/api/admin/ai-campaigns', authenticateToken, async (req, res) => {
+  try {
+    const { ai_project_id, name, system_prompt, stt_provider, llm_provider, llm_model, tts_provider, language } = req.body;
+    if (!ai_project_id || !name || !system_prompt) {
+      return res.status(400).json({ error: 'ai_project_id, name, and system_prompt are required' });
+    }
+    const campaign = await AICallCampaign.create(req.body);
+    res.json(campaign);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update AI campaign
+app.put('/api/admin/ai-campaigns/:id', authenticateToken, async (req, res) => {
+  try {
+    const campaign = await AICallCampaign.findByPk(req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+    
+    await campaign.update(req.body);
+    res.json(campaign);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete AI campaign
+app.delete('/api/admin/ai-campaigns/:id', authenticateToken, async (req, res) => {
+  try {
+    await AICallCampaign.destroy({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Delete widget
 app.delete('/api/admin/widgets/:id', authenticateToken, async (req, res) => {
@@ -3155,6 +3505,211 @@ app.get('/api/dialer/history', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch history' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI AUTO-CALLING & DYNAMIC IVR ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Get all AI Campaigns
+app.get('/api/ai-calls/campaigns', async (req, res) => {
+  try {
+    const { widgetId } = req.query;
+    const whereClause = widgetId ? { widget_id: widgetId } : {};
+    const campaigns = await AICallCampaign.findAll({ where: whereClause, order: [['createdAt', 'DESC']] });
+    res.json(campaigns);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create/Update AI Campaign
+app.post('/api/ai-calls/campaigns', async (req, res) => {
+  try {
+    const { id, widget_id, name, system_prompt, stt_provider, llm_provider, llm_model, tts_provider, language, voice_settings } = req.body;
+    let campaign;
+    if (id) {
+      campaign = await AICallCampaign.findByPk(id);
+      if (campaign) {
+        await campaign.update({ name, system_prompt, stt_provider, llm_provider, llm_model, tts_provider, language, voice_settings });
+      }
+    }
+    if (!campaign && widget_id) {
+      campaign = await AICallCampaign.create({ widget_id, name, system_prompt, stt_provider, llm_provider, llm_model, tts_provider, language, voice_settings });
+    }
+    if (!campaign) return res.status(400).json({ error: 'Failed to create campaign. widget_id is required.' });
+    
+    res.json({ success: true, campaign });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get AI Call History
+app.get('/api/ai-calls/history', async (req, res) => {
+  try {
+    const { aiProjectId, campaignId } = req.query;
+    const whereClause = {};
+    if (aiProjectId) whereClause.ai_project_id = aiProjectId;
+    if (campaignId) whereClause.campaign_id = campaignId;
+    
+    const history = await AICallRecord.findAll({
+      where: whereClause,
+      order: [['createdAt', 'DESC']],
+      limit: 100
+    });
+    res.json(history);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Trigger AI Outbound Call
+app.post('/api/ai-calls/trigger', async (req, res) => {
+  try {
+    const { campaignId, aiProjectId, destination, customerName, variables } = req.body;
+    if (!campaignId || !aiProjectId || !destination) {
+      return res.status(400).json({ error: 'campaignId, aiProjectId, and destination are required' });
+    }
+
+    const campaign = await AICallCampaign.findOne({ where: { id: campaignId, ai_project_id: aiProjectId } });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found for this tenant' });
+
+    // Format destination correctly
+    if (!isValidPhoneNumber(destination)) {
+      return res.status(400).json({ error: 'Invalid destination phone number format.' });
+    }
+
+    // 1. Create Call Record
+    const record = await AICallRecord.create({
+      campaign_id: campaignId,
+      ai_project_id: aiProjectId,
+      destination: String(destination),
+      customer_name: customerName,
+      status: 'INITIATED',
+      started_at: new Date()
+    });
+
+    // 2. Lookup active SIP Configuration
+    const sipConfig = await SIPConfiguration.findOne({ where: { ai_project_id: aiProjectId, is_active: true } });
+    if (!sipConfig) return res.status(500).json({ error: 'No active SIP configuration found for tenant.' });
+
+    // 3. Generate short-lived JWT for Pipecat
+    const { generateInternalToken } = require('./utils/jwt');
+    const jwtToken = generateInternalToken({
+      callId: record.id,
+      aiProjectId: aiProjectId
+    }, '5m');
+
+    // 4. Push job to BullMQ `ai-call-initiation`
+    const { initiationQueue } = require('./utils/queue');
+    const job = await initiationQueue.add('outbound-call', {
+      callId: record.id,
+      aiProjectId: aiProjectId,
+      campaignId: campaignId,
+      destination: String(destination),
+      jwt: jwtToken
+    });
+
+    console.log(`[BullMQ] Dispatched job ${job.id} to ai-call-initiation queue`);
+
+    // 5. Trigger 3CX MakeCall (Assuming 3CX is the provider)
+    // We pass the SIP extension stored in the DB configuration
+    const project = await AIProject.findByPk(aiProjectId);
+    console.log(`[AI Runner] Dialing ${destination} from extension ${sipConfig.extension} via https://${sipConfig.server_url}`);
+    
+    // Abstracting execute3cxMakeCall to accept sipConfig override
+    // We update the fqdn_3cx override inline just for this call trigger execution
+    // (Assuming this widget variable in execute3cxMakeCall only uses fqdn_3cx)
+    const dummyWidget = { fqdn_3cx: sipConfig.server_url, client_id_3cx: null, client_secret_3cx: null };
+    await execute3cxMakeCall(dummyWidget, sipConfig.extension, destination);
+
+    res.json({ success: true, callId: record.id, jobId: job.id });
+  } catch (err) {
+    console.error('[AI Trigger Error]', err.message);
+    res.status(500).json({ error: err.message || 'Failed to initiate AI call' });
+  }
+});
+
+// Webhook for telemetry from Pipecat
+app.post('/api/ai-calls/webhook', async (req, res) => {
+  try {
+    const { callId, duration, transcript, recording_url, summary, sentiment, customer_intent, status } = req.body;
+    
+    if (!callId) return res.status(400).json({ error: 'callId is required' });
+
+    const record = await AICallRecord.findByPk(callId);
+    if (record) {
+      record.status = status || 'Completed';
+      record.ended_at = new Date();
+      if (duration) record.duration_seconds = duration;
+      if (transcript) record.transcript = transcript;
+      if (recording_url) record.recording_url = recording_url;
+      if (summary) record.summary = summary;
+      if (sentiment) record.sentiment = sentiment;
+      if (customer_intent) record.customer_intent = customer_intent;
+      
+      await record.save();
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Secure internal API for Pipecat credential retrieval
+app.get('/internal/ai-calls/credentials/:callId', verifyInternalRequest, async (req, res) => {
+  try {
+    const { callId } = req.params;
+    const record = await AICallRecord.findByPk(callId);
+    if (!record) return res.status(404).json({ error: 'Call record not found' });
+
+    // Fetch AI credentials and SIP config for the tenant (project)
+    const aiCreds = await AIProviderCredential.findAll({ 
+      where: { ai_project_id: record.ai_project_id, is_active: true } 
+    });
+    
+    const sipConfig = await SIPConfiguration.findOne({
+      where: { ai_project_id: record.ai_project_id, is_active: true }
+    });
+
+    if (!sipConfig) return res.status(500).json({ error: 'No active SIP configuration found for tenant' });
+
+    // Decrypt credentials securely
+    const decryptedProviders = {};
+    for (const cred of aiCreds) {
+      const plainKey = decrypt(cred.encrypted_api_key, cred.encryption_iv, cred.encryption_auth_tag);
+      decryptedProviders[cred.provider_name] = plainKey;
+      if (cred.provider_name === 'cartesia') {
+        decryptedProviders['cartesia_voice_id'] = cred.metadata?.voice_id || 'a0e99841-438c-4a64-b679-ae501e7d6091';
+        decryptedProviders['cartesia_language'] = cred.metadata?.language || 'en';
+      }
+    }
+
+    const sipPassword = decrypt(sipConfig.encrypted_password, sipConfig.encryption_iv, sipConfig.encryption_auth_tag);
+
+    // Fetch the Campaign to get the prompts and settings
+    const campaign = await AICallCampaign.findByPk(record.campaign_id);
+
+    // Return the decrypted configuration payload specifically to the internal Pipecat worker
+    res.json({
+      sip: {
+        server_url: sipConfig.server_url,
+        extension: sipConfig.extension,
+        password: sipPassword,
+        provider: sipConfig.provider
+      },
+      providers: decryptedProviders,
+      campaign: campaign ? {
+        system_prompt: campaign.system_prompt,
+        language: campaign.language,
+        voice_settings: campaign.voice_settings
+      } : null
+    });
+  } catch (err) {
+    console.error('[Internal Auth Error]', err.message);
+    res.status(500).json({ error: 'Internal credential retrieval failed' });
   }
 });
 

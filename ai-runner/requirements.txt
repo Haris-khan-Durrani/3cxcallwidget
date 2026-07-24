@@ -1,0 +1,6 @@
+pipecat-ai[daily,deepgram,elevenlabs,cartesia,openai]
+websockets
+requests
+pydantic
+redis
+bullmq

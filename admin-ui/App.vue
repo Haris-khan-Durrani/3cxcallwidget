@@ -3,7 +3,7 @@
   <Teleport to="body">
     <transition name="fade">
       <div v-if="toast.show" class="toast" :class="`toast-${toast.type}`">
-        <span>{{ toast.type === 'success' ? '✅' : '❌' }}</span>
+      <span>{{ toast.type === 'success' ? '✅' : toast.type === 'info' ? '🔊' : '❌' }}</span>
         {{ toast.message }}
       </div>
     </transition>

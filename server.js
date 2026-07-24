@@ -49,12 +49,12 @@ function isOfficeHours(widget) {
   try {
     const tz = widget.office_hours_timezone || 'Asia/Dubai';
     const now = new Date();
-    
+
     // Convert current time to target timezone string
     const tzString = now.toLocaleString('en-US', { timeZone: tz });
     const localDate = new Date(tzString);
     const dayOfWeek = localDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
-    
+
     // Check if current day of week is allowed (Mon-Fri = 1,2,3,4,5)
     const allowedDays = (widget.office_hours_days || '1,2,3,4,5')
       .split(',')
@@ -67,11 +67,11 @@ function isOfficeHours(widget) {
 
     // Check time bounds (HH:MM format)
     const currentHour = String(localDate.getHours()).padStart(2, '0');
-    const currentMin  = String(localDate.getMinutes()).padStart(2, '0');
+    const currentMin = String(localDate.getMinutes()).padStart(2, '0');
     const currentTime = `${currentHour}:${currentMin}`;
 
     const start = widget.office_hours_start || '09:00';
-    const end   = widget.office_hours_end || '18:00';
+    const end = widget.office_hours_end || '18:00';
 
     return currentTime >= start && currentTime <= end;
   } catch (err) {
@@ -163,27 +163,27 @@ async function triggerUserWebhook(callRecord, widget) {
     }
 
     const payload = {
-      callId:             callRecord.id,
-      widgetId:           widget.id,
-      widgetName:         widget.name,
-      locationId:         widget.location_id || '',
-      customerName:       callRecord.customer_name,
-      customerPhone:      callRecord.customer_phone,
-      customerEmail:      callRecord.customer_email || '',
-      agentExtension:     targetExt || callRecord.agent_extension || '',
-      agentId:            agentId,
-      agentEmail:         agentEmail,
-      agentName:          agentName,
-      status:             callRecord.status,
-      outcome:            callRecord.outcome || callRecord.status,
-      durationSeconds:    callRecord.duration_seconds || 0,
-      retryCount:         callRecord.retry_count || 0,
-      recordingId:        callRecord.recording_id || null,
-      recordingUrl:       recordingUrl,
+      callId: callRecord.id,
+      widgetId: widget.id,
+      widgetName: widget.name,
+      locationId: widget.location_id || '',
+      customerName: callRecord.customer_name,
+      customerPhone: callRecord.customer_phone,
+      customerEmail: callRecord.customer_email || '',
+      agentExtension: targetExt || callRecord.agent_extension || '',
+      agentId: agentId,
+      agentEmail: agentEmail,
+      agentName: agentName,
+      status: callRecord.status,
+      outcome: callRecord.outcome || callRecord.status,
+      durationSeconds: callRecord.duration_seconds || 0,
+      retryCount: callRecord.retry_count || 0,
+      recordingId: callRecord.recording_id || null,
+      recordingUrl: recordingUrl,
       recordingListenUrl: recordingListenUrl,
-      pageUrl:            callRecord.page_url || '',
-      ipAddress:          callRecord.ip_address || '',
-      timestamp:          new Date()
+      pageUrl: callRecord.page_url || '',
+      ipAddress: callRecord.ip_address || '',
+      timestamp: new Date()
     };
 
     for (const url of uniqueUrls) {
@@ -208,17 +208,17 @@ function parsePageUrlInfo(pageUrl) {
     contactId: '',
     queryParams: {}
   };
-  
+
   if (!pageUrl) return result;
-  
+
   try {
     // 1. Extract locationId and contactId via regex matching path segments
     const locMatch = pageUrl.match(/\/location\/([A-Za-z0-9_-]+)/);
     if (locMatch) result.locationId = locMatch[1];
-    
+
     const contactMatch = pageUrl.match(/\/contacts\/detail\/([A-Za-z0-9_-]+)/);
     if (contactMatch) result.contactId = contactMatch[1];
-    
+
     // 2. Parse query parameters
     const urlObj = new URL(pageUrl);
     for (const [key, value] of urlObj.searchParams.entries()) {
@@ -238,9 +238,9 @@ function parsePageUrlInfo(pageUrl) {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   }
-  
+
   return result;
 }
 
@@ -318,28 +318,28 @@ async function triggerDialerWebhook(record, dialer) {
     const resolvedContactId = record.contact_id || urlInfo.contactId || '';
 
     const payload = {
-      callId:             record.id,
-      dialerId:           freshDialer.id,
-      dialerName:         freshDialer.name,
-      locationId:         resolvedLocationId,
-      agentExtension:     record.agent_extension || '',
-      agentId:            agentId,
-      agentEmail:         agentEmail,
-      agentName:          agentName,
-      destination:        record.destination,
-      contactId:          resolvedContactId,
-      status:             record.status,
-      durationSeconds:    record.duration_seconds || 0,
-      recordingId:        record.recording_id || null,
-      recordingUrl:       recordingUrl,
+      callId: record.id,
+      dialerId: freshDialer.id,
+      dialerName: freshDialer.name,
+      locationId: resolvedLocationId,
+      agentExtension: record.agent_extension || '',
+      agentId: agentId,
+      agentEmail: agentEmail,
+      agentName: agentName,
+      destination: record.destination,
+      contactId: resolvedContactId,
+      status: record.status,
+      durationSeconds: record.duration_seconds || 0,
+      recordingId: record.recording_id || null,
+      recordingUrl: recordingUrl,
       recordingListenUrl: recordingListenUrl,
-      pageUrl:            record.page_url || '',
-      ipAddress:          record.ip_address || '',
-      endedAt:            record.ended_at || null,
-      timestamp:          new Date(),
-      urlLocationId:      urlInfo.locationId,
-      urlContactId:       urlInfo.contactId,
-      urlQueryParams:     urlInfo.queryParams
+      pageUrl: record.page_url || '',
+      ipAddress: record.ip_address || '',
+      endedAt: record.ended_at || null,
+      timestamp: new Date(),
+      urlLocationId: urlInfo.locationId,
+      urlContactId: urlInfo.contactId,
+      urlQueryParams: urlInfo.queryParams
     };
 
     for (const url of uniqueUrls) {
@@ -363,7 +363,7 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
   try {
     const record = await DialerCallRecord.findByPk(recordId, { include: [DialerWidget] });
     if (!record || !record.DialerWidget) return;
-    
+
     const dialer = record.DialerWidget;
     if (!dialer.client_id_3cx || !dialer.client_secret_3cx) return;
 
@@ -372,14 +372,14 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     const token = await get3cxToken(dialer);
     const fqdn = sanitizeFqdn(dialer.fqdn_3cx);
     const url = `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`;
-    
+
     const resp = await axios.get(url, {
       headers: { Authorization: `Bearer ${token}` },
       timeout: 5000
     });
 
     const list = Array.isArray(resp.data) ? resp.data : (resp.data?.value || []);
-    
+
     console.log(`[3CX Dialer] Total recordings fetched: ${list.length}.`);
 
     const matches = list.filter(r => {
@@ -392,15 +392,15 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
         r.FromDn,
         r.ToDn
       ];
-      
+
       const callerText = fields.filter(Boolean).map(String).join(' | ').replace(/\D/g, '');
       const cleanPhone = record.destination.replace(/\D/g, '');
       const agentExt = record.agent_extension.replace(/\D/g, '');
-      
+
       const phoneSuffix = cleanPhone.slice(-8);
       const phoneMatch = phoneSuffix && callerText.includes(phoneSuffix);
       const extMatch = agentExt && callerText.includes(agentExt);
-      
+
       if (!phoneMatch || !extMatch) return false;
 
       const recDateStr = r.Date || r.date || r.StartTime || r.startTime || r.DateTime || r.dateTime;
@@ -433,7 +433,7 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
         const crypto = require('crypto');
         record.recording_token = crypto.randomBytes(32).toString('hex');
         await record.save();
-        
+
         // Push update to webhook
         await triggerDialerWebhook(record, dialer);
       }
@@ -557,21 +557,21 @@ async function get3cxToken(widget) {
     return cached.token;
   }
 
-  const clientId     = widget.client_id_3cx;
+  const clientId = widget.client_id_3cx;
   const clientSecret = widget.client_secret_3cx;
-  const grantType    = widget.grant_type_3cx || 'client_credentials';
+  const grantType = widget.grant_type_3cx || 'client_credentials';
 
   if (!clientId || !clientSecret) {
     throw new Error('3CX OAuth credentials not configured for this widget.');
   }
 
-  const fqdn     = sanitizeFqdn(widget.fqdn_3cx);
+  const fqdn = sanitizeFqdn(widget.fqdn_3cx);
   const tokenUrl = `https://${fqdn}/connect/token`;
 
-  const params   = new URLSearchParams({
-    client_id:     clientId,
+  const params = new URLSearchParams({
+    client_id: clientId,
     client_secret: clientSecret,
-    grant_type:    grantType,
+    grant_type: grantType,
   });
 
   const resp = await axios.post(tokenUrl, params.toString(), {
@@ -581,7 +581,7 @@ async function get3cxToken(widget) {
 
   const { access_token, expires_in } = resp.data;
   tokenCache[widget.id] = {
-    token:     access_token,
+    token: access_token,
     expiresAt: Date.now() + (expires_in || 3600) * 1000,
   };
   console.log(`[3CX] Token refreshed for widget ${widget.id} (expires in ${expires_in}s)`);
@@ -618,9 +618,9 @@ async function execute3cxMakeCall(widgetOrDialer, extension, destination) {
     if (err.response?.status === 403) {
       console.error(`[3CX 403 Forbidden Error] 3CX denied permission to place call from Extension ${extension}.`, err.response?.data || '');
       console.error(`[3CX Fix Instruction] To resolve 403 Forbidden:\n` +
-                    ` 1. In 3CX Console, go to Admin -> Integrations / System API Credentials.\n` +
-                    ` 2. Ensure the Client ID is assigned 'System Owner' or 'System Administrator' role.\n` +
-                    ` 3. In Users -> Ext ${extension} -> Rights, ensure Call Control / CTI operations are allowed.`);
+        ` 1. In 3CX Console, go to Admin -> Integrations / System API Credentials.\n` +
+        ` 2. Ensure the Client ID is assigned 'System Owner' or 'System Administrator' role.\n` +
+        ` 3. In Users -> Ext ${extension} -> Rights, ensure Call Control / CTI operations are allowed.`);
     } else if (err.response?.status === 401) {
       console.warn(`[3CX CallControl] 401 Unauthorized for Ext ${extension}. Clearing token cache & retrying...`);
       invalidate3cxToken(widgetOrDialer.id);
@@ -652,7 +652,7 @@ async function execute3cxMakeCall(widgetOrDialer, extension, destination) {
 async function fetch3cxDnList(widget) {
   const token = await get3cxToken(widget);
   const fqdn = sanitizeFqdn(widget.fqdn_3cx);
-  
+
   // Try Users endpoint first
   try {
     const usersUrl = `https://${fqdn}/xapi/v1/Users`;
@@ -707,20 +707,20 @@ async function fetchAvailableAgents(widget) {
 
   for (const agent of widget.Agents) {
     const extStr = String(agent.extension).trim();
-    
+
     // Check user presence
     const dn = dnList.find(d =>
       String(d.Number || d.DN || d.Extension || d.number || '').trim() === extStr
     );
 
     if (dn) {
-      const registered  = dn.IsRegistered !== false;
+      const registered = dn.IsRegistered !== false;
       const profileName = String(dn.CurrentProfileName || '').toLowerCase().trim();
-      
+
       // Profiles allowed for widget routing
-      const isAvailableProfile = profileName === '' || 
-                                 profileName === 'available' || 
-                                 profileName === 'default';
+      const isAvailableProfile = profileName === '' ||
+        profileName === 'available' ||
+        profileName === 'default';
 
       if (!registered || !isAvailableProfile) {
         console.log(`[3CX] Agent ${agent.first_name} (${extStr}) filtered out: Registered=${registered}, Profile="${profileName}"`);
@@ -732,15 +732,15 @@ async function fetchAvailableAgents(widget) {
     const isOnActiveCall = activeCalls.some(c => {
       const caller = String(c.Caller || c.CallerID || c.callerId || '').trim();
       const callee = String(c.Callee || c.calleeId || '').trim();
-      
+
       return caller === extStr ||
-             callee === extStr ||
-             caller.endsWith(`(${extStr})`) ||
-             callee.endsWith(`(${extStr})`) ||
-             caller.startsWith(`${extStr} `) ||
-             callee.startsWith(`${extStr} `) ||
-             new RegExp(`\\b${extStr}\\b`).test(caller) ||
-             new RegExp(`\\b${extStr}\\b`).test(callee);
+        callee === extStr ||
+        caller.endsWith(`(${extStr})`) ||
+        callee.endsWith(`(${extStr})`) ||
+        caller.startsWith(`${extStr} `) ||
+        callee.startsWith(`${extStr} `) ||
+        new RegExp(`\\b${extStr}\\b`).test(caller) ||
+        new RegExp(`\\b${extStr}\\b`).test(callee);
     });
 
     if (isOnActiveCall) {
@@ -852,7 +852,7 @@ async function checkCallStatusViaCallControl(widget, extension, cxCallId, custom
           if (cxCallId && pCallId && pCallId === String(cxCallId)) {
             return true;
           }
-          
+
           // 2. Match by customer phone suffix (last 8 digits to handle country code differences)
           if (customerPhone) {
             const cleanPhone = customerPhone.replace(/\D/g, '');
@@ -869,7 +869,7 @@ async function checkCallStatusViaCallControl(widget, extension, cxCallId, custom
               }
             }
           }
-          
+
           return false;
         });
       }
@@ -945,7 +945,7 @@ async function checkDialerCallControlStatus(dialer, extension, destination) {
       const state = String(agentPart.status || agentPart.Status || agentPart.state || agentPart.State || '').toLowerCase().trim();
       const isConnected = state === 'connected' || state === 'talking' || state === 'established';
       const isRinging = state === 'ringing' || state === 'dialing' || state === 'invited' || state === 'routing' || state === 'initiating';
-      
+
       console.log(`[3CX Dialer CC] Ext ${extension} state: "${state}" (connected=${isConnected}, ringing=${isRinging})`);
       return { active: true, connected: isConnected, ringing: isRinging };
     }
@@ -978,7 +978,7 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
   try {
     const record = await CallRecord.findByPk(recordId, { include: [Widget] });
     if (!record || !record.Widget) return;
-    
+
     const widget = record.Widget;
     if (!widget.client_id_3cx || !widget.client_secret_3cx) return;
 
@@ -988,14 +988,14 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     const fqdn = sanitizeFqdn(widget.fqdn_3cx);
     // Fetch recent recordings (limit to top 45, sorted descending by ID so we get the newest ones first)
     const url = `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`;
-    
+
     const resp = await axios.get(url, {
       headers: { Authorization: `Bearer ${token}` },
       timeout: 5000
     });
 
     const list = Array.isArray(resp.data) ? resp.data : (resp.data?.value || []);
-    
+
     console.log(`[3CX] Total recordings fetched: ${list.length}. Sample:`, JSON.stringify(list.slice(0, 2), null, 2));
 
     // Find matching recordings using multi-factor criteria:
@@ -1010,10 +1010,10 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
         r.FromDn,
         r.ToDn
       ];
-      
+
       const callerText = fields.filter(Boolean).map(String).join(' | ').replace(/\D/g, '');
       const cleanPhone = record.customer_phone.replace(/\D/g, '');
-      
+
       // Compare the last 8 digits to handle international/local country code prefix differences (e.g. +971 vs 0 vs no prefix)
       const phoneSuffix = cleanPhone.slice(-8);
       const phoneMatch = phoneSuffix && callerText.includes(phoneSuffix);
@@ -1051,7 +1051,7 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
         const crypto = require('crypto');
         record.recording_token = crypto.randomBytes(32).toString('hex');
         await record.save();
-        
+
         // Push update to webhook.site / n8n so they get the download link!
         await triggerUserWebhook(record, widget);
       }
@@ -1154,7 +1154,7 @@ async function pollActiveCalls() {
           if (cxCall) {
             const state = String(cxCall.State || cxCall.state || cxCall.status || '').toLowerCase();
             const established = cxCall.Established || cxCall.established || cxCall.EstablishedAt || cxCall.establishedAt ||
-                                (state === 'connected' || state === 'talking' || state === 'established');
+              (state === 'connected' || state === 'talking' || state === 'established');
 
             if (established && record.status !== 'Answered') {
               console.log(`[3CX] Call ${record.id} answered.`);
@@ -1211,7 +1211,7 @@ async function pollActiveCalls() {
                     record.duration_seconds = Math.max(1, Math.round((new Date() - start) / 1000));
                     await record.save();
                     await triggerUserWebhook(record, widget);
-                    
+
                     // Search and link recording after 5s settle delay
                     setTimeout(() => fetchAndLinkRecording(record.id), 5000);
                   } else {
@@ -1337,7 +1337,7 @@ app.get('/preview/:id', (req, res) => {
   const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
   const fallbackUrl = `//${host}`;
   const serverUrl = process.env.FRONTEND_URL || fallbackUrl;
-  
+
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
@@ -1373,7 +1373,7 @@ app.get('/widget.js', async (req, res) => {
   if (!widgetId) {
     return res.status(400).send('console.error("Widget ID is required");');
   }
-  
+
   try {
     const widget = await Widget.findByPk(widgetId);
     if (!widget) {
@@ -1386,9 +1386,9 @@ app.get('/widget.js', async (req, res) => {
     const fs = require('fs');
     const widgetScriptPath = path.join(__dirname, 'public', 'widget-template.js');
     let scriptContent = fs.readFileSync(widgetScriptPath, 'utf8');
-    
+
     const isClosed = !isOfficeHours(widget);
-    
+
     // Replace all dynamic placeholders
     const replacements = {
       '__WIDGET_ID__': widgetId,
@@ -1448,7 +1448,7 @@ app.get('/widget.js', async (req, res) => {
       // Use split/join to replace all occurrences globally
       scriptContent = scriptContent.split(key).join(val);
     }
-    
+
     res.setHeader('Content-Type', 'application/javascript');
     res.send(scriptContent);
   } catch (err) {
@@ -1465,7 +1465,7 @@ app.get('/api/widget/:id/available-agent', async (req, res) => {
     if (!widget) {
       return res.status(404).json({ error: 'Widget not found' });
     }
-    
+
     if (!widget.Agents || widget.Agents.length === 0) {
       return res.json({ agent: null });
     }
@@ -1508,7 +1508,7 @@ app.get('/api/widget/:id/available-agents', async (req, res) => {
     if (!widget) {
       return res.status(404).json({ error: 'Widget not found' });
     }
-    
+
     if (!widget.Agents || widget.Agents.length === 0) {
       return res.json({ agents: [] });
     }
@@ -1569,11 +1569,11 @@ function isIpRateLimited(clientIp, limit = 5, windowMs = 15 * 60 * 1000) {
   const now = Date.now();
   const timestamps = callIpRateMap.get(clientIp) || [];
   const validTimestamps = timestamps.filter(ts => now - ts < windowMs);
-  
+
   if (validTimestamps.length >= limit) {
     return true; // Rate limited
   }
-  
+
   validTimestamps.push(now);
   callIpRateMap.set(clientIp, validTimestamps);
   return false;
@@ -1614,8 +1614,8 @@ app.post('/api/call', async (req, res) => {
 
   // 4. Honeypot Anti-Bot Protection: Real human visitors cannot see or fill hidden fields
   const honeypotTriggered = (website_hp_confirm && String(website_hp_confirm).trim() !== '') ||
-                            (website && String(website).trim() !== '') ||
-                            (fax && String(fax).trim() !== '');
+    (website && String(website).trim() !== '') ||
+    (fax && String(fax).trim() !== '');
 
   if (honeypotTriggered) {
     console.warn(`[Security] Spam Bot Honeypot triggered from IP ${clientIp} for Widget ${widgetId}`);
@@ -1644,7 +1644,7 @@ app.post('/api/call', async (req, res) => {
       return res.status(404).json({ error: 'Widget not found' });
     }
 
-    const pageUrl  = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
+    const pageUrl = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
 
     // Save call record
     const callRecord = await CallRecord.create({
@@ -1765,7 +1765,7 @@ app.get('/api/call/:callId/status', async (req, res) => {
 app.post('/api/webhook/3cx', async (req, res) => {
   // This endpoint expects a payload from 3CX when a call finishes.
   console.log('Received 3CX Webhook:', req.body);
-  
+
   // Depending on 3CX payload structure, extract relevant fields (e.g. caller number, duration).
   // For demonstration, assume payload contains customerPhone
   const { customerPhone, duration, callStatus } = req.body;
@@ -1814,7 +1814,7 @@ function authenticateToken(req, res, next) {
 app.post('/api/admin/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
     // Check database users
     const user = await User.findOne({ where: { username } });
     if (user && verifyPassword(password, user.password)) {
@@ -2302,7 +2302,7 @@ app.post('/api/admin/widgets/:id/clone', authenticateToken, async (req, res) => 
     delete origData.createdAt;
     delete origData.updatedAt;
     delete origData.Agents;
-    
+
     origData.name = `${orig.name} (Copy)`;
 
     const clone = await Widget.create(origData);
@@ -2324,6 +2324,7 @@ app.post('/api/admin/widgets/:id/clone', authenticateToken, async (req, res) => 
     res.status(500).json({ error: err.message });
   }
 });
+
 // --- Cartesia Voice Management ---
 // Helper: retry axios requests on transient network errors (EAI_AGAIN, ECONNRESET, etc.)
 async function axiosWithRetry(fn, retries = 3, delayMs = 500) {
@@ -2346,9 +2347,9 @@ app.get('/api/admin/ai-projects/:ai_project_id/cartesia/voices', authenticateTok
   try {
     const cred = await AIProviderCredential.findOne({ where: { ai_project_id: req.params.ai_project_id, provider_name: 'cartesia' } });
     if (!cred) return res.status(404).json({ error: 'Cartesia credential not found for this AI Project.' });
-    
+
     const cartesiaKey = decrypt(cred.encrypted_api_key, cred.encryption_iv, cred.encryption_auth_tag);
-    
+
     const response = await axiosWithRetry(() => axios.get('https://api.cartesia.ai/voices', {
       headers: {
         'X-API-Key': cartesiaKey,
@@ -2369,7 +2370,7 @@ app.post('/api/admin/ai-projects/:ai_project_id/cartesia/preview', authenticateT
 
     const cred = await AIProviderCredential.findOne({ where: { ai_project_id: req.params.ai_project_id, provider_name: 'cartesia' } });
     if (!cred) return res.status(404).json({ error: 'Cartesia credential not found.' });
-    
+
     const cartesiaKey = decrypt(cred.encrypted_api_key, cred.encryption_iv, cred.encryption_auth_tag);
 
     const response = await axiosWithRetry(() => axios.post('https://api.cartesia.ai/tts/bytes', {
@@ -2393,7 +2394,7 @@ app.post('/api/admin/ai-projects/:ai_project_id/cartesia/preview', authenticateT
       },
       responseType: 'arraybuffer'
     }));
-    
+
     res.set('Content-Type', 'audio/wav');
     res.send(response.data);
   } catch (err) {
@@ -2437,7 +2438,7 @@ app.get('/api/admin/ai-credentials', authenticateToken, async (req, res) => {
     const projects = await AIProject.findAll();
     const creds = await AIProviderCredential.findAll();
     const sips = await SIPConfiguration.findAll();
-    
+
     const result = projects.map(p => {
       const pCreds = creds.filter(c => c.ai_project_id === p.id);
       const sip = sips.find(s => s.ai_project_id === p.id);
@@ -2453,7 +2454,7 @@ app.get('/api/admin/ai-credentials', authenticateToken, async (req, res) => {
         sip_extension: sip ? sip.extension : ''
       };
     });
-    
+
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2470,11 +2471,11 @@ app.post('/api/admin/ai-credentials', authenticateToken, async (req, res) => {
 
     const saveCredential = async (provider_type, provider_name, raw_key, metadata = null) => {
       const existing = await AIProviderCredential.findOne({ where: { ai_project_id, provider_name } });
-      
+
       if (!raw_key && !existing) return;
-      
+
       let updatePayload = {};
-      
+
       if (raw_key) {
         const enc = encrypt(raw_key);
         updatePayload.encrypted_api_key = enc.encryptedText;
@@ -2498,7 +2499,7 @@ app.post('/api/admin/ai-credentials', authenticateToken, async (req, res) => {
 
     await saveCredential('stt', 'deepgram', deepgram_key);
     await saveCredential('llm', 'openrouter', openrouter_key);
-    
+
     let cartesiaMeta = null;
     if (cartesia_voice_id || cartesia_language) {
       cartesiaMeta = {};
@@ -2506,13 +2507,13 @@ app.post('/api/admin/ai-credentials', authenticateToken, async (req, res) => {
       if (cartesia_language) cartesiaMeta.language = cartesia_language;
     }
     await saveCredential('tts', 'cartesia', cartesia_key, cartesiaMeta);
-    
+
     await saveCredential('transport', 'daily', daily_key);
 
     if (sip_extension || sip_password) {
       const existing = await SIPConfiguration.findOne({ where: { ai_project_id } });
       const fqdn = project.fqdn_3cx;
-      
+
       if (existing) {
         let updateData = { server_url: fqdn };
         if (sip_extension) updateData.extension = sip_extension;
@@ -2584,11 +2585,11 @@ app.get('/internal/ai-calls/credentials/:call_id', async (req, res) => {
     if (decoded.role !== 'ai-runner') return res.sendStatus(403);
 
     const ai_project_id = decoded.ai_project_id;
-    
+
     // Fetch and decrypt
     const aiCreds = await AIProviderCredential.findAll({ where: { ai_project_id } });
     const sipConf = await SIPConfiguration.findOne({ where: { ai_project_id } });
-    
+
     const providers = {};
     for (const c of aiCreds) {
       if (c.encrypted_api_key) {
@@ -2599,7 +2600,7 @@ app.get('/internal/ai-calls/credentials/:call_id', async (req, res) => {
         providers['cartesia_language'] = c.metadata?.language || 'en';
       }
     }
-    
+
     let sip = {};
     if (sipConf && sipConf.encrypted_password) {
       sip = {
@@ -2609,7 +2610,7 @@ app.get('/internal/ai-calls/credentials/:call_id', async (req, res) => {
         password: decrypt(sipConf.encrypted_password, sipConf.encryption_iv, sipConf.encryption_auth_tag)
       };
     }
-    
+
     res.json({
       sip,
       providers,
@@ -2655,7 +2656,7 @@ app.put('/api/admin/ai-campaigns/:id', authenticateToken, async (req, res) => {
   try {
     const campaign = await AICallCampaign.findByPk(req.params.id);
     if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-    
+
     await campaign.update(req.body);
     res.json(campaign);
   } catch (err) {
@@ -2745,7 +2746,7 @@ app.post('/api/admin/widgets/:id/test-connection', authenticateToken, async (req
 
     // Ping XAPI to confirm the token works and retrieve extensions
     try {
-      const dnList     = await fetch3cxDnList(testWidget);
+      const dnList = await fetch3cxDnList(testWidget);
       const extensions = dnList
         .map(d => (d.Number || d.DN || d.Extension || d.number || '').toString())
         .filter(Boolean)
@@ -2766,7 +2767,7 @@ app.put('/api/admin/widgets/:id', authenticateToken, async (req, res) => {
   try {
     const data = { ...req.body };
     const intFields = [
-      'border_radius', 'btn_size', 'widget_width', 'widget_height', 
+      'border_radius', 'btn_size', 'widget_width', 'widget_height',
       'logo_height', 'logo_width', 'ring_timeout_seconds', 'overlay_blur'
     ];
     intFields.forEach(field => {
@@ -2792,8 +2793,8 @@ app.get('/api/admin/widgets/:id/stats', authenticateToken, async (req, res) => {
   try {
     const { Op } = require('sequelize');
     const widgetId = req.params.id;
-    const total     = await CallRecord.count({ where: { widgetId } });
-    
+    const total = await CallRecord.count({ where: { widgetId } });
+
     // Initiated or Ringing or Answered (active calls in progress)
     const initiated = await CallRecord.count({
       where: {
@@ -2803,7 +2804,7 @@ app.get('/api/admin/widgets/:id/stats', authenticateToken, async (req, res) => {
     });
 
     // Failed, Missed or Abandoned calls
-    const failed    = await CallRecord.count({
+    const failed = await CallRecord.count({
       where: {
         widgetId,
         [Op.or]: [
@@ -2841,7 +2842,7 @@ app.get('/api/admin/dialer-widgets/:id/stats', authenticateToken, async (req, re
     const { Op } = require('sequelize');
     const dialerId = req.params.id;
     const total = await DialerCallRecord.count({ where: { dialerId } });
-    
+
     const initiated = await DialerCallRecord.count({
       where: {
         dialerId,
@@ -2909,7 +2910,7 @@ app.put('/api/admin/dialer-widgets/:id/agents/:agentId', authenticateToken, asyn
     if (!crm_user_id || !extension || !email) return res.status(400).json({ error: 'Missing required fields (crm_user_id, extension, email)' });
     const agent = await DialerAgent.findOne({ where: { id: req.params.agentId, dialerId: req.params.id } });
     if (!agent) return res.status(404).json({ error: 'Agent mapping not found' });
-    
+
     await agent.update({
       crm_user_id,
       extension,
@@ -2944,7 +2945,7 @@ app.get('/recordings/:token/download', async (req, res) => {
       where: { recording_token: recordingToken },
       include: [DialerWidget]
     });
-    
+
     let isDialer = true;
     let widgetOrDialer = record ? record.DialerWidget : null;
 
@@ -2965,7 +2966,7 @@ app.get('/recordings/:token/download', async (req, res) => {
     const cxToken = await get3cxToken(widgetOrDialer);
     const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
     const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
-    
+
     console.log(`[3CX Share] Streaming download for recording ${record.recording_id}...`);
 
     const response = await axios({
@@ -3001,7 +3002,7 @@ app.get('/recordings/:token/listen', async (req, res) => {
       where: { recording_token: recordingToken },
       include: [DialerWidget]
     });
-    
+
     let isDialer = true;
     let widgetOrDialer = record ? record.DialerWidget : null;
 
@@ -3022,7 +3023,7 @@ app.get('/recordings/:token/listen', async (req, res) => {
     const cxToken = await get3cxToken(widgetOrDialer);
     const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
     const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
-    
+
     console.log(`[3CX Share] Streaming inline playback for recording ${record.recording_id}...`);
 
     const response = await axios({
@@ -3067,7 +3068,7 @@ app.get('/api/admin/widgets/:widgetId/recordings/:recId/download', async (req, r
         const cxToken = await get3cxToken(widget);
         const fqdn = sanitizeFqdn(widget.fqdn_3cx);
         const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
-        
+
         console.log(`[3CX] Streaming recording ${req.params.recId} for widget ${widget.id}...`);
 
         const response = await axios({
@@ -3117,7 +3118,7 @@ app.get('/api/admin/widgets/:widgetId/recordings/:recId/listen', async (req, res
         const cxToken = await get3cxToken(widget);
         const fqdn = sanitizeFqdn(widget.fqdn_3cx);
         const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
-        
+
         console.log(`[3CX] Streaming recording ${req.params.recId} for widget ${widget.id} inline playback...`);
 
         const response = await axios({
@@ -3167,7 +3168,7 @@ app.get('/api/admin/dialers/:dialerId/recordings/:recId/download', async (req, r
         const cxToken = await get3cxToken(dialer);
         const fqdn = sanitizeFqdn(dialer.fqdn_3cx);
         const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
-        
+
         console.log(`[3CX Dialer] Streaming recording ${req.params.recId} for dialer ${dialer.id}...`);
 
         const response = await axios({
@@ -3217,7 +3218,7 @@ app.get('/api/admin/dialers/:dialerId/recordings/:recId/listen', async (req, res
         const cxToken = await get3cxToken(dialer);
         const fqdn = sanitizeFqdn(dialer.fqdn_3cx);
         const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
-        
+
         console.log(`[3CX Dialer] Streaming recording ${req.params.recId} for inline listen playback...`);
 
         const response = await axios({
@@ -3356,7 +3357,7 @@ app.get('/api/dialer/resolve-agent', async (req, res) => {
   try {
     const { dialerId, userid } = req.query;
     if (!dialerId || !userid) return res.status(400).json({ error: 'Missing parameters' });
-    
+
     const agent = await DialerAgent.findOne({ where: { dialerId, crm_user_id: userid } });
     if (agent && agent.extension && agent.extension.trim()) {
       return res.json({ extension: agent.extension.trim() });
@@ -3387,7 +3388,7 @@ app.post('/api/dialer/call', async (req, res) => {
     await execute3cxMakeCall(dialer, extension, destination);
 
     const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || req.ip || '';
-    const pageUrl  = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
+    const pageUrl = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
     const contactId = req.body.contactId || '';
 
     // Create Call Record
@@ -3407,7 +3408,7 @@ app.post('/api/dialer/call', async (req, res) => {
     res.json({ success: true, message: 'Call initiated', callId: record.id });
   } catch (err) {
     const errorData = err.response?.data;
-    const detailMsg = typeof errorData === 'object' 
+    const detailMsg = typeof errorData === 'object'
       ? (errorData.message || errorData.error_description || errorData.error || JSON.stringify(errorData))
       : (errorData || err.message);
     const statusMsg = err.response?.status ? `3CX returned ${err.response.status}: ${detailMsg}` : detailMsg;
@@ -3456,7 +3457,7 @@ app.get('/api/dialer/status', async (req, res) => {
           dbRecord.duration_seconds = parseInt(duration || '0');
           dbRecord.ended_at = new Date();
           await dbRecord.save();
-          
+
           await triggerDialerWebhook(dbRecord, dialer);
 
           if (dbRecord.status === 'Completed') {
@@ -3539,7 +3540,7 @@ app.post('/api/ai-calls/campaigns', async (req, res) => {
       campaign = await AICallCampaign.create({ widget_id, name, system_prompt, stt_provider, llm_provider, llm_model, tts_provider, language, voice_settings });
     }
     if (!campaign) return res.status(400).json({ error: 'Failed to create campaign. widget_id is required.' });
-    
+
     res.json({ success: true, campaign });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3553,7 +3554,7 @@ app.get('/api/ai-calls/history', async (req, res) => {
     const whereClause = {};
     if (aiProjectId) whereClause.ai_project_id = aiProjectId;
     if (campaignId) whereClause.campaign_id = campaignId;
-    
+
     const history = await AICallRecord.findAll({
       where: whereClause,
       order: [['createdAt', 'DESC']],
@@ -3618,7 +3619,7 @@ app.post('/api/ai-calls/trigger', async (req, res) => {
     // We pass the SIP extension stored in the DB configuration
     const project = await AIProject.findByPk(aiProjectId);
     console.log(`[AI Runner] Dialing ${destination} from extension ${sipConfig.extension} via https://${sipConfig.server_url}`);
-    
+
     // Abstracting execute3cxMakeCall to accept sipConfig override
     // We update the fqdn_3cx override inline just for this call trigger execution
     // (Assuming this widget variable in execute3cxMakeCall only uses fqdn_3cx)
@@ -3636,7 +3637,7 @@ app.post('/api/ai-calls/trigger', async (req, res) => {
 app.post('/api/ai-calls/webhook', async (req, res) => {
   try {
     const { callId, duration, transcript, recording_url, summary, sentiment, customer_intent, status } = req.body;
-    
+
     if (!callId) return res.status(400).json({ error: 'callId is required' });
 
     const record = await AICallRecord.findByPk(callId);
@@ -3649,7 +3650,7 @@ app.post('/api/ai-calls/webhook', async (req, res) => {
       if (summary) record.summary = summary;
       if (sentiment) record.sentiment = sentiment;
       if (customer_intent) record.customer_intent = customer_intent;
-      
+
       await record.save();
     }
     res.json({ success: true });
@@ -3666,10 +3667,10 @@ app.get('/internal/ai-calls/credentials/:callId', verifyInternalRequest, async (
     if (!record) return res.status(404).json({ error: 'Call record not found' });
 
     // Fetch AI credentials and SIP config for the tenant (project)
-    const aiCreds = await AIProviderCredential.findAll({ 
-      where: { ai_project_id: record.ai_project_id, is_active: true } 
+    const aiCreds = await AIProviderCredential.findAll({
+      where: { ai_project_id: record.ai_project_id, is_active: true }
     });
-    
+
     const sipConfig = await SIPConfiguration.findOne({
       where: { ai_project_id: record.ai_project_id, is_active: true }
     });

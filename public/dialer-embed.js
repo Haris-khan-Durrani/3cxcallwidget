@@ -45,7 +45,7 @@
     '#_3cx_fab:active{cursor:grabbing;}',
     '#_3cx_fab svg{width:16px;height:16px;}',
 
-    '#_3cx_popup{display:none;position:fixed;bottom:66px;right:20px;width:220px;height:380px;',
+    '#_3cx_popup{display:none;position:fixed;bottom:66px;right:20px;width:275px;height:420px;',
     'background:#fff;border-radius:18px;box-shadow:0 12px 48px rgba(0,0,0,.18);',
     'flex-direction:column;overflow:hidden;border:1px solid rgba(0,0,0,.07);',
     'z-index:2147483645;opacity:0;transform:translateY(10px) scale(.96);pointer-events:none;',
@@ -62,7 +62,7 @@
     '._3cx_tc{display:none;flex:1;flex-direction:column;position:relative;}',
     '._3cx_tc._3cx_tc_active{display:flex;}',
     '#_3cx_tab_dialer{overflow:hidden;}',
-    '#_3cx_tab_history{overflow-y:auto;max-height:340px;scrollbar-width:thin;scrollbar-color:rgba(0,0,0,0.15) transparent;}',
+    '#_3cx_tab_history{overflow-y:auto;max-height:380px;scrollbar-width:thin;scrollbar-color:rgba(0,0,0,0.15) transparent;}',
     '#_3cx_tab_history::-webkit-scrollbar{width:4px;}',
     '#_3cx_tab_history::-webkit-scrollbar-track{background:transparent;}',
     '#_3cx_tab_history::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15);border-radius:4px;}',
@@ -129,32 +129,32 @@
     '#_3cx_sdesc{font-size:11px;color:#6b7280;text-align:center;padding:0 20px;line-height:1.5;}',
     '#_3cx_timer{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;color:#22c55e;margin-top:10px;}',
 
-    '._3cx_hl{list-style:none;padding:8px 10px;margin:0;display:flex;flex-direction:column;gap:8px;}',
-    '._3cx_hi{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,0.03);transition:all .15s ease;}',
+    '._3cx_hl{list-style:none;padding:8px;margin:0;display:flex;flex-direction:column;gap:6px;}',
+    '._3cx_hi{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 3px rgba(0,0,0,0.03);transition:all .15s ease;}',
     '._3cx_hi:hover{border-color:#cbd5e1;box-shadow:0 3px 8px rgba(0,0,0,0.06);background:#f8fafc;}',
-    '._3cx_hi_main{display:flex;align-items:center;justify-content:space-between;gap:8px;}',
-    '._3cx_hin{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;}',
-    '._3cx_hnum{font-size:13px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
-    '._3cx_hm{display:flex;align-items:center;gap:6px;font-size:10px;color:#64748b;}',
-    '._3cx_hs{font-weight:600;font-size:9.5px;padding:2px 7px;border-radius:12px;display:inline-flex;align-items:center;line-height:1;}',
-    '._3cx_hs._3cx_conn{background:#dcfce7;color:#15803d;}',
-    '._3cx_hs._3cx_miss{background:#fee2e2;color:#b91c1c;}',
-    '._3cx_actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}',
-    '._3cx_rd,._3cx_rec_btn{border:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s ease;}',
+    '._3cx_hi_top{display:flex;align-items:center;justify-content:space-between;gap:6px;}',
+    '._3cx_hnum{font-size:12.5px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}',
+    '._3cx_actions{display:flex;align-items:center;gap:5px;flex-shrink:0;}',
+    '._3cx_rd,._3cx_rec_btn{border:none;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s ease;}',
     '._3cx_rd{background:rgba(37,99,235,.08);color:#2563eb;}',
     '._3cx_rd:hover{background:#2563eb;color:#fff;transform:scale(1.06);}',
     '._3cx_rec_btn{background:rgba(124,58,237,.1);color:#7c3aed;}',
     '._3cx_rec_btn:hover{background:#7c3aed;color:#fff;transform:scale(1.06);}',
     '._3cx_rec_btn._3cx_playing{background:#7c3aed;color:#fff;box-shadow:0 0 0 3px rgba(124,58,237,.25);}',
-    '._3cx_player_box{display:none;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;align-items:center;gap:8px;margin-top:2px;}',
+    '._3cx_hi_sub{display:flex;align-items:center;gap:8px;font-size:10px;color:#64748b;white-space:nowrap;}',
+    '._3cx_hs{font-weight:600;font-size:9.5px;padding:2px 7px;border-radius:10px;display:inline-flex;align-items:center;line-height:1;white-space:nowrap;}',
+    '._3cx_hs._3cx_conn{background:#dcfce7;color:#15803d;}',
+    '._3cx_hs._3cx_miss{background:#fee2e2;color:#b91c1c;}',
+    '._3cx_htime{font-size:10px;color:#64748b;white-space:nowrap;}',
+    '._3cx_player_box{display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;align-items:center;gap:8px;margin-top:2px;}',
     '._3cx_player_box._3cx_open{display:flex;}',
-    '._3cx_player_toggle{background:#7c3aed;color:#fff;border:none;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s;}',
+    '._3cx_player_toggle{background:#7c3aed;color:#fff;border:none;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s;}',
     '._3cx_player_toggle:hover{background:#6d28d9;}',
-    '._3cx_player_toggle svg{width:11px;height:11px;fill:currentColor;}',
-    '._3cx_player_track{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0;}',
+    '._3cx_player_toggle svg{width:10px;height:10px;fill:currentColor;}',
+    '._3cx_player_track{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;}',
     '._3cx_player_seek{width:100%;height:4px;border-radius:2px;accent-color:#7c3aed;cursor:pointer;margin:0;}',
-    '._3cx_player_meta{display:flex;justify-content:space-between;font-size:9px;font-weight:600;color:#64748b;}',
-    '._3cx_player_dl{color:#64748b;background:transparent;border:none;padding:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s;}',
+    '._3cx_player_meta{display:flex;justify-content:space-between;font-size:9px;font-weight:600;color:#64748b;white-space:nowrap;}',
+    '._3cx_player_dl{color:#64748b;background:transparent;border:none;padding:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s;flex-shrink:0;}',
     '._3cx_player_dl:hover{color:#0f172a;}',
     '._3cx_empty{padding:36px 20px;text-align:center;color:#6b7280;font-size:12px;}',
     '#_3cx_err{display:none;background:#fee2e2;color:#991b1b;padding:8px 12px;border-radius:8px;',
@@ -608,25 +608,21 @@
             var downloadUrl = recToken ? (apiBase + '/recordings/' + recToken + '/download') : '';
 
             return '<li class="_3cx_hi" id="_3cx_hi_' + c.id + '">' +
-              '<div class="_3cx_hi_main">' +
-                '<div class="_3cx_hin">' +
-                  '<span class="_3cx_hnum">' + (c.destination || '—') + '</span>' +
-                  '<div class="_3cx_hm">' +
-                    '<span class="_3cx_hs ' + (isConnected ? '_3cx_conn' : '_3cx_miss') + '">' + (isConnected ? 'Connected' : c.status) + '</span>' +
-                    '<span>•</span>' +
-                    '<span>' + time + '</span>' +
-                    (dur ? '<span>• ' + dur + '</span>' : '') +
-                  '</div>' +
-                '</div>' +
+              '<div class="_3cx_hi_top">' +
+                '<span class="_3cx_hnum" title="' + (c.destination || '') + '">' + (c.destination || '—') + '</span>' +
                 '<div class="_3cx_actions">' +
                   (hasRecording ?
                     '<button class="_3cx_rec_btn" id="_3cx_rbtn_' + c.id + '" data-id="' + c.id + '" data-url="' + listenUrl + '" data-dl="' + downloadUrl + '" title="Play Recording">' +
-                      '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
+                      '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
                     '</button>' : '') +
                   '<button class="_3cx_rd" data-num="' + (c.destination||'') + '" title="Redial">' +
                     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>' +
                   '</button>' +
                 '</div>' +
+              '</div>' +
+              '<div class="_3cx_hi_sub">' +
+                '<span class="_3cx_hs ' + (isConnected ? '_3cx_conn' : '_3cx_miss') + '">' + (isConnected ? 'Connected' : c.status) + '</span>' +
+                '<span class="_3cx_htime">' + time + (dur ? ' • ' + dur : '') + '</span>' +
               '</div>' +
               (hasRecording ?
                 '<div class="_3cx_player_box" id="_3cx_pbox_' + c.id + '">' +
@@ -641,7 +637,7 @@
                     '</div>' +
                   '</div>' +
                   '<a class="_3cx_player_dl" href="' + downloadUrl + '" target="_blank" download title="Download Recording">' +
-                    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>' +
+                    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>' +
                   '</a>' +
                 '</div>' : '') +
             '</li>';
@@ -753,7 +749,7 @@
     }
 
     function positionPopup() {
-      var r = fab.getBoundingClientRect(), pW = 220, pH = 380;
+      var r = fab.getBoundingClientRect(), pW = 275, pH = 420;
       var pTop  = r.top - pH - 8, pLeft = r.right - pW;
       if (pTop  < 8) pTop  = r.bottom + 8;
       if (pLeft < 8) pLeft = 8;

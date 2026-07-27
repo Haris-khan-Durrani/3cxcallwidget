@@ -136,6 +136,7 @@ const Widget = sequelize.define('Widget', {
   rate_limit_enabled: { type: DataTypes.BOOLEAN, defaultValue: false },
   rate_limit_max_attempts: { type: DataTypes.INTEGER, defaultValue: 5 },
   rate_limit_cooldown_minutes: { type: DataTypes.INTEGER, defaultValue: 15 },
+  recording_access_token: { type: DataTypes.TEXT, allowNull: true },
 });
 
 const CallRecord = sequelize.define('CallRecord', {
@@ -278,6 +279,10 @@ const DialerWidget = sequelize.define('DialerWidget', {
   },
   location_id: {
     type: DataTypes.STRING,
+    allowNull: true,
+  },
+  recording_access_token: {
+    type: DataTypes.TEXT,
     allowNull: true,
   }
 });

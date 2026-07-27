@@ -365,20 +365,36 @@ async function triggerDialerWebhook(record, dialer) {
 }
 
 /**
+ * Helper to retrieve a user recording access token if configured on Widget/Dialer or environment,
+ * falling back to the standard client credentials token.
+ */
+async function getRecordingToken(widgetOrDialer) {
+  if (widgetOrDialer?.recording_access_token && widgetOrDialer.recording_access_token.trim()) {
+    return widgetOrDialer.recording_access_token.trim();
+  }
+  if (process.env.RECORDING_ACCESS_TOKEN && process.env.RECORDING_ACCESS_TOKEN.trim()) {
+    return process.env.RECORDING_ACCESS_TOKEN.trim();
+  }
+  return await get3cxToken(widgetOrDialer);
+}
+
+/**
  * Searches the 3CX recordings list for a match and links it to the dialer call record.
  * Retries up to 4 times with a 5-second delay.
  */
 async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
+  let dialerIdForToken = null;
   try {
     const record = await DialerCallRecord.findByPk(recordId, { include: [DialerWidget] });
     if (!record || !record.DialerWidget) return;
 
     const dialer = record.DialerWidget;
+    dialerIdForToken = dialer.id;
     if (!dialer.client_id_3cx || !dialer.client_secret_3cx) return;
 
     console.log(`[3CX Dialer] Searching call recording for destination ${record.destination} / call ${record.id} (Attempt ${attempt}/10)...`);
 
-    let currentToken = await get3cxToken(dialer);
+    let currentToken = await getRecordingToken(dialer);
     const hostWithPort = sanitizeFqdn(dialer.fqdn_3cx);
     const hostOnly = sanitizeHostOnly(dialer.fqdn_3cx);
     const agentExt = record.agent_extension ? encodeURIComponent(String(record.agent_extension).trim().split(':')[0]) : '';
@@ -1116,7 +1132,7 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
 
     console.log(`[3CX] Searching call recording for customer ${record.customer_phone} / call ${record.id} (Attempt ${attempt}/20)...`);
 
-    let currentToken = await get3cxToken(widget);
+    let currentToken = await getRecordingToken(widget);
     const hostWithPort = sanitizeFqdn(widget.fqdn_3cx);
     const hostOnly = sanitizeHostOnly(widget.fqdn_3cx);
 
@@ -3200,46 +3216,58 @@ async function streamRecordingFrom3cx(widgetOrDialer, recId, res, isInline = fal
   const https = require('https');
   const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-  let cxToken = null;
+  let recToken = null;
   try {
-    cxToken = await get3cxToken(widgetOrDialer);
+    recToken = await getRecordingToken(widgetOrDialer);
   } catch (tErr) {
-    console.error('[3CX Stream] Token fetch failed:', tErr.message);
+    console.error('[3CX Stream] Recording token fetch failed:', tErr.message);
   }
+
+  let appToken = null;
+  try {
+    appToken = await get3cxToken(widgetOrDialer);
+  } catch (aErr) {}
 
   const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
   const hostOnly = sanitizeHostOnly(widgetOrDialer.fqdn_3cx);
 
-  const candidateUrls = [
-    `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${cxToken || ''}`,
-    `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${cxToken || ''}`,
-    `https://${fqdn}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${cxToken || ''}`,
-    `https://${hostOnly}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${cxToken || ''}`
-  ];
+  const tokensToTry = Array.from(new Set([recToken, appToken].filter(Boolean)));
 
   let lastErr = null;
-  for (const url of candidateUrls) {
-    try {
-      const response = await axios({
-        method: 'get',
-        url,
-        responseType: 'stream',
-        headers: cxToken ? { Authorization: `Bearer ${cxToken}` } : {},
-        httpsAgent,
-        timeout: 20000
-      });
+  for (const token of tokensToTry) {
+    const candidateUrls = [
+      `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
+      `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
+      `https://${fqdn}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
+      `https://${hostOnly}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`
+    ];
 
-      res.setHeader('Content-Type', response.headers['content-type'] || 'audio/wav');
-      if (response.headers['content-length']) {
-        res.setHeader('Content-Length', response.headers['content-length']);
+    for (const url of candidateUrls) {
+      try {
+        const response = await axios({
+          method: 'get',
+          url,
+          responseType: 'stream',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'audio/wav, audio/*, */*'
+          },
+          httpsAgent,
+          timeout: 15000
+        });
+
+        res.setHeader('Content-Type', response.headers['content-type'] || 'audio/wav');
+        if (response.headers['content-length']) {
+          res.setHeader('Content-Length', response.headers['content-length']);
+        }
+        res.setHeader('Content-Disposition', isInline ? 'inline' : (response.headers['content-disposition'] || `attachment; filename="recording_${recId}.wav"`));
+
+        response.data.pipe(res);
+        return;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[3CX Recording Stream] Candidate ${url} returned ${err.response?.status || err.message}`);
       }
-      res.setHeader('Content-Disposition', isInline ? 'inline' : (response.headers['content-disposition'] || `attachment; filename="recording_${recId}.wav"`));
-
-      response.data.pipe(res);
-      return;
-    } catch (err) {
-      lastErr = err;
-      console.warn(`[3CX Recording Stream] Candidate ${url} returned ${err.response?.status || err.message}`);
     }
   }
 

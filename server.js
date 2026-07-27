@@ -3771,56 +3771,16 @@ async function startServer() {
     const queryInterface = sequelize.getQueryInterface();
     try {
       const tableInfo = await queryInterface.describeTable('Widgets');
-      if (tableInfo && !tableInfo.rate_limit_enabled) {
-        await queryInterface.addColumn('Widgets', 'rate_limit_enabled', {
-          type: Sequelize.BOOLEAN,
-          defaultValue: false,
-        });
-        console.log('[Migration] Added missing column rate_limit_enabled to Widgets table.');
-      }
-      if (tableInfo && !tableInfo.rate_limit_max_attempts) {
-        await queryInterface.addColumn('Widgets', 'rate_limit_max_attempts', {
-          type: Sequelize.INTEGER,
-          defaultValue: 5,
-        });
-        console.log('[Migration] Added missing column rate_limit_max_attempts to Widgets table.');
-      }
-      if (tableInfo && !tableInfo.rate_limit_cooldown_minutes) {
-        await queryInterface.addColumn('Widgets', 'rate_limit_cooldown_minutes', {
-          type: Sequelize.INTEGER,
-          defaultValue: 15,
-        });
-        console.log('[Migration] Added missing column rate_limit_cooldown_minutes to Widgets table.');
-      }
-      if (tableInfo && !tableInfo.agent_display_mode) {
-        await queryInterface.addColumn('Widgets', 'agent_display_mode', {
-          type: Sequelize.STRING,
-          defaultValue: 'circle',
-        });
-      }
-      if (tableInfo && !tableInfo.agent_full_image_url) {
-        await queryInterface.addColumn('Widgets', 'agent_full_image_url', {
-          type: Sequelize.STRING,
-          allowNull: true,
-        });
-      }
-      if (tableInfo && !tableInfo.side_graphic_url) {
-        await queryInterface.addColumn('Widgets', 'side_graphic_url', {
-          type: Sequelize.STRING,
-          allowNull: true,
-        });
-      }
-      if (tableInfo && !tableInfo.slider_auto_play) {
-        await queryInterface.addColumn('Widgets', 'slider_auto_play', {
-          type: Sequelize.BOOLEAN,
-          defaultValue: true,
-        });
-      }
-      if (tableInfo && !tableInfo.slider_interval_sec) {
-        await queryInterface.addColumn('Widgets', 'slider_interval_sec', {
-          type: Sequelize.INTEGER,
-          defaultValue: 4,
-        });
+      const widgetAttrs = Widget.rawAttributes;
+      for (const [colName, attrDef] of Object.entries(widgetAttrs)) {
+        if (tableInfo && !tableInfo[colName]) {
+          try {
+            await queryInterface.addColumn('Widgets', colName, attrDef);
+            console.log(`[Migration] Automatically added missing column '${colName}' to Widgets table.`);
+          } catch (colErr) {
+            console.warn(`[Migration] Notice for column '${colName}':`, colErr.message);
+          }
+        }
       }
     } catch (migErr) {
       console.warn('[Migration] Column auto-migration check notice:', migErr.message);

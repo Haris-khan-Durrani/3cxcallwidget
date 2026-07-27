@@ -393,15 +393,45 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     console.log(`[3CX Dialer] Searching call recording for destination ${record.destination} / call ${record.id} (Attempt ${attempt}/10)...`);
 
     const token = await getRecordingToken(dialer);
-    const fqdn = sanitizeFqdn(dialer.fqdn_3cx);
-    const url = `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`;
+    const hostWithPort = sanitizeFqdn(dialer.fqdn_3cx);
+    const hostOnly = sanitizeHostOnly(dialer.fqdn_3cx);
 
-    const resp = await axios.get(url, {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 5000
-    });
+    const candidateUrls = [
+      `https://${hostOnly}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/recordings?$top=45&$orderby=Id desc`
+    ];
 
-    const list = Array.isArray(resp.data) ? resp.data : (resp.data?.value || []);
+    const https = require('https');
+    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+    let list = [];
+    let lastErr = null;
+
+    for (const url of candidateUrls) {
+      try {
+        const resp = await axios.get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          httpsAgent,
+          timeout: 4000
+        });
+        const data = resp.data;
+        const items = Array.isArray(data) ? data : (data?.value || data?.items || data?.result || []);
+        if (items.length > 0) {
+          console.log(`[3CX Dialer Recordings] Successfully fetched ${items.length} recordings from endpoint: ${url}`);
+          list = items;
+          break;
+        }
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+
+    if (list.length === 0 && lastErr && (lastErr.response?.status === 403 || lastErr.response?.status === 401)) {
+      console.warn('[3CX Dialer] 3CX returned 403/401 Forbidden. App Token lacks recording access. Set RECORDING_ACCESS_TOKEN in .env or set recording_access_token on the Dialer Widget.');
+      return;
+    }
 
     console.log(`[3CX Dialer] Total recordings fetched: ${list.length}.`);
 
@@ -1090,16 +1120,45 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     console.log(`[3CX] Searching call recording for customer ${record.customer_phone} / call ${record.id} (Attempt ${attempt}/20)...`);
 
     const token = await getRecordingToken(widget);
-    const fqdn = sanitizeFqdn(widget.fqdn_3cx);
-    // Fetch recent recordings (limit to top 45, sorted descending by ID so we get the newest ones first)
-    const url = `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`;
+    const hostWithPort = sanitizeFqdn(widget.fqdn_3cx);
+    const hostOnly = sanitizeHostOnly(widget.fqdn_3cx);
 
-    const resp = await axios.get(url, {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 5000
-    });
+    const candidateUrls = [
+      `https://${hostOnly}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/recordings?$top=45&$orderby=Id desc`
+    ];
 
-    const list = Array.isArray(resp.data) ? resp.data : (resp.data?.value || []);
+    const https = require('https');
+    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+    let list = [];
+    let lastErr = null;
+
+    for (const url of candidateUrls) {
+      try {
+        const resp = await axios.get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          httpsAgent,
+          timeout: 4000
+        });
+        const data = resp.data;
+        const items = Array.isArray(data) ? data : (data?.value || data?.items || data?.result || []);
+        if (items.length > 0) {
+          console.log(`[3CX Recordings] Successfully fetched ${items.length} recordings from endpoint: ${url}`);
+          list = items;
+          break;
+        }
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+
+    if (list.length === 0 && lastErr && (lastErr.response?.status === 403 || lastErr.response?.status === 401)) {
+      console.warn('[3CX] 3CX returned 403/401 Forbidden. App Token lacks recording access. Set RECORDING_ACCESS_TOKEN in .env or set recording_access_token on the Widget.');
+      return;
+    }
 
     console.log(`[3CX] Total recordings fetched: ${list.length}. Sample:`, JSON.stringify(list.slice(0, 2), null, 2));
 
@@ -3121,10 +3180,13 @@ async function streamRecordingFrom3cx(widgetOrDialer, recId, res, isInline = fal
   const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
   const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
+  const hostOnly = sanitizeHostOnly(widgetOrDialer.fqdn_3cx);
 
   let token = await getRecordingToken(widgetOrDialer);
 
   const candidateUrls = [
+    `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
+    `https://${hostOnly}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
     `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
     `https://${fqdn}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`
   ];

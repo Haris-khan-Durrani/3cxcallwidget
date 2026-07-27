@@ -383,22 +383,17 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     const agentExt = record.agent_extension ? encodeURIComponent(String(record.agent_extension).trim().split(':')[0]) : '';
 
     const candidateUrls = [
-      // Standard HTTPS port 443 (port-less FQDN)
-      `https://${hostOnly}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recording?$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recording?$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recordings`,
-      `https://${hostOnly}/xapi/v1/recordings`,
-      ...(hostWithPort !== hostOnly ? [
-        `https://${hostWithPort}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
-        `https://${hostWithPort}/xapi/v1/recordings?$top=45&$orderby=Id desc`
-      ] : []),
+      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}`,
+      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}`,
+      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}`,
+      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}`,
       ...(agentExt ? [
-        `https://${hostOnly}/callcontrol/${agentExt}/recordings`,
-        `https://${hostWithPort}/callcontrol/${agentExt}/recordings`,
-        `https://${hostOnly}/xapi/v1/Users/${agentExt}/Recordings`,
-        `https://${hostOnly}/xapi/v1/Users/${agentExt}/recordings`
+        `https://${hostWithPort}/callcontrol/${agentExt}/recordings?access_token=${currentToken}`,
+        `https://${hostWithPort}/xapi/v1/Users/${agentExt}/Recordings?access_token=${currentToken}`
       ] : [])
     ];
 
@@ -1129,22 +1124,17 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     const agentExt = lastExt ? encodeURIComponent(lastExt) : '';
 
     const candidateUrls = [
-      // Standard HTTPS port 443 (port-less FQDN)
-      `https://${hostOnly}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recording?$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recording?$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recordings`,
-      `https://${hostOnly}/xapi/v1/recordings`,
-      ...(hostWithPort !== hostOnly ? [
-        `https://${hostWithPort}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
-        `https://${hostWithPort}/xapi/v1/recordings?$top=45&$orderby=Id desc`
-      ] : []),
+      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}`,
+      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}`,
+      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}`,
+      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}`,
       ...(agentExt ? [
-        `https://${hostOnly}/callcontrol/${agentExt}/recordings`,
-        `https://${hostWithPort}/callcontrol/${agentExt}/recordings`,
-        `https://${hostOnly}/xapi/v1/Users/${agentExt}/Recordings`,
-        `https://${hostOnly}/xapi/v1/Users/${agentExt}/recordings`
+        `https://${hostWithPort}/callcontrol/${agentExt}/recordings?access_token=${currentToken}`,
+        `https://${hostWithPort}/xapi/v1/Users/${agentExt}/Recordings?access_token=${currentToken}`
       ] : [])
     ];
 
@@ -1357,6 +1347,7 @@ async function pollActiveCalls() {
 
               if (ccState) {
                 if (ccState.active) {
+                  record._unactive_ticks = 0; // Reset transient counter when active
                   if (ccState.connected && record.status !== 'Answered') {
                     console.log(`[3CX] Call ${record.id} answered (detected via extension ${lastExt} participants fallback).`);
                     record.status = 'Answered';
@@ -1382,6 +1373,14 @@ async function pollActiveCalls() {
                 } else {
                   // Extension has no active call participants (call ended on extension or busy)
                   if (record.status === 'Answered') {
+                    // Require at least 2 consecutive unactive polling ticks (8s) before declaring call completed
+                    // to prevent transient 1-tick 3CX bridge/handshake blips from terminating live calls
+                    record._unactive_ticks = (record._unactive_ticks || 0) + 1;
+                    if (record._unactive_ticks < 2) {
+                      console.log(`[3CX] Call ${record.id} answered call unactive tick 1. Verifying on next poll before marking completed...`);
+                      continue;
+                    }
+
                     console.log(`[3CX] Call ${record.id} ended talking. Marking Completed.`);
                     record.status = 'Completed';
                     record.outcome = 'Answered';

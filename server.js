@@ -797,6 +797,42 @@ async function fetchAvailableAgents(widget) {
 }
 
 
+/**
+ * Helper to drop / hangup an active ringing call on an extension in 3CX
+ * when failing over to another agent.
+ */
+async function dropCallOnExtension(widgetOrDialer, extension) {
+  if (!extension) return false;
+  try {
+    const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
+    const ext = encodeURIComponent(extension);
+    const token = await get3cxToken(widgetOrDialer);
+
+    const candidateUrls = [
+      `https://${fqdn}/callcontrol/${ext}/drop`,
+      `https://${fqdn}/xapi/v1/CallControl/${ext}/drop`,
+      `https://${fqdn}/callcontrol/${ext}/hangup`,
+    ];
+
+    for (const url of candidateUrls) {
+      try {
+        await axios.post(url, {}, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 3000
+        });
+        console.log(`[3CX CallControl] Successfully dropped/cancelled call on Ext ${extension}`);
+        return true;
+      } catch (err) {
+        if (err.response?.status === 404) continue;
+        break;
+      }
+    }
+  } catch (err) {
+    console.warn(`[3CX CallControl] Could not drop call on Ext ${extension}:`, err.message);
+  }
+  return false;
+}
+
 // ─── Call Lifecycle Polling & Failover ────────────────────────────────────────
 
 /**
@@ -804,6 +840,12 @@ async function fetchAvailableAgents(widget) {
  */
 async function triggerFailoverCall(callRecord, widget) {
   try {
+    // Safety check: Do NOT place failover call if call was already answered or completed
+    if (callRecord.status === 'Answered' || callRecord.status === 'Completed') {
+      console.log(`[3CX] Call ${callRecord.id} is already ${callRecord.status}. Aborting failover call.`);
+      return false;
+    }
+
     // Find all agents configured on this widget
     const agents = await Agent.findAll({ where: { widgetId: widget.id } });
     if (!agents || agents.length === 0) {
@@ -817,6 +859,14 @@ async function triggerFailoverCall(callRecord, widget) {
 
     // Parse agents already tried (comma-separated list of extensions, removing status suffixes)
     const triedExtensions = (callRecord.agent_extension || '').split(',').map(x => x.trim().split(':')[0]).filter(Boolean);
+    const lastExt = triedExtensions[triedExtensions.length - 1];
+
+    // STOP / CANCEL the call attempt on the previous agent's extension before dialing the next one!
+    if (lastExt) {
+      console.log(`[3CX] Cancelling/dropping previous call on Ext ${lastExt} before failover...`);
+      await dropCallOnExtension(widget, lastExt);
+    }
+
     const remainingAgents = agents.filter(a => !triedExtensions.includes(String(a.extension)));
 
     // Maximum 3 retries or run out of remaining agents
@@ -832,7 +882,7 @@ async function triggerFailoverCall(callRecord, widget) {
 
     // Pick next agent randomly from remaining ones
     const newAgent = remainingAgents[Math.floor(Math.random() * remainingAgents.length)];
-    const oldExt = triedExtensions[triedExtensions.length - 1] || 'default';
+    const oldExt = lastExt || 'default';
     console.log(`[3CX] Call ${callRecord.id} missed/declined by Ext ${oldExt}. Auto-retrying with ${newAgent.first_name} (Ext ${newAgent.extension})...`);
 
     const responseData = await execute3cxMakeCall(widget, newAgent.extension, callRecord.customer_phone);
@@ -883,18 +933,13 @@ async function checkCallStatusViaCallControl(widget, extension, cxCallId, custom
             return true;
           }
 
-          // 2. Match by customer phone suffix (last 8 digits to handle country code differences)
+          // 2. Match by customer phone suffix
           if (customerPhone) {
             const cleanPhone = customerPhone.replace(/\D/g, '');
-            const phoneSuffix = cleanPhone.slice(-8);
+            const phoneSuffix = cleanPhone.length >= 7 ? cleanPhone.slice(-7) : cleanPhone;
             if (phoneSuffix) {
-              const fields = [
-                p.PartyDn, p.partyDn, p.DN, p.dn, p.Number, p.number, p.party_caller_id,
-                p.Caller, p.CallerID, p.callerId, p.Callee, p.calleeId,
-                p.PartyCallerName, p.party_caller_name
-              ];
-              const searchableText = fields.filter(Boolean).map(String).join(' | ').replace(/\D/g, '');
-              if (searchableText.includes(phoneSuffix)) {
+              const pStr = JSON.stringify(p);
+              if (pStr.replace(/\D/g, '').includes(phoneSuffix)) {
                 return true;
               }
             }
@@ -915,7 +960,7 @@ async function checkCallStatusViaCallControl(widget, extension, cxCallId, custom
         if (agentPart) {
           const state = String(agentPart.State || agentPart.state || agentPart.Status || agentPart.status || '').toLowerCase().trim();
           const isConnected = state === 'connected' || state === 'talking' || state === 'established';
-          const isRinging = state === 'ringing' || state === 'dialing' || state === 'invited';
+          const isRinging = state === 'ringing' || state === 'dialing' || state === 'invited' || state === 'routing' || state === 'initiating';
           console.log(`[3CX] Extension ${agentExtStr} CallControl status for Call ${cxCallId || 'any'}: "${state}" (connected=${isConnected}, ringing=${isRinging})`);
           return { active: true, connected: isConnected, ringing: isRinging };
         }
@@ -927,16 +972,32 @@ async function checkCallStatusViaCallControl(widget, extension, cxCallId, custom
           const state = String(p.State || p.state || p.Status || p.status || '').toLowerCase().trim();
           if (state === 'connected' || state === 'talking' || state === 'established') {
             isConnected = true;
-          } else if (state === 'ringing' || state === 'dialing' || state === 'invited') {
+          } else if (state === 'ringing' || state === 'dialing' || state === 'invited' || state === 'routing' || state === 'initiating') {
             isRinging = true;
           }
         }
         return { active: true, connected: isConnected, ringing: isRinging };
       } else {
-        // Active participants exist on extension, but none belong to this call id yet.
-        // It could be the initial leg of our call before the customer is dialed.
-        // Returning active: false (without busy: true) lets the polling loop wait up to 12s before failing over.
-        return { active: false };
+        // Active participants exist on extension, but filtering by phone suffix didn't match.
+        // If there is only 1 active call session on this extension (2 participants max: agent + 1 other party),
+        // treat it as active to prevent false negatives caused by 3CX format variations.
+        if (participants.length <= 2) {
+          let isConnected = false;
+          let isRinging = false;
+          for (const p of participants) {
+            const state = String(p.State || p.state || p.Status || p.status || '').toLowerCase().trim();
+            if (state === 'connected' || state === 'talking' || state === 'established') {
+              isConnected = true;
+            } else if (state === 'ringing' || state === 'dialing' || state === 'invited' || state === 'routing' || state === 'initiating') {
+              isRinging = true;
+            }
+          }
+          console.log(`[3CX] Extension ${extension} active call detected (single call on extension). connected=${isConnected}, ringing=${isRinging}`);
+          return { active: true, connected: isConnected, ringing: isRinging };
+        }
+
+        console.log(`[3CX] Extension ${extension} is busy on another call (active call participants present but do not match CallId ${cxCallId}).`);
+        return { active: false, busy: true };
       }
     }
     return { active: false };
@@ -1219,8 +1280,10 @@ async function pollActiveCalls() {
                     await record.save();
                     await triggerUserWebhook(record, widget);
                   } else if (!ccState.connected && (record.status === 'Initiated' || record.status === 'Ringing')) {
-                    record.status = 'Ringing';
-                    await record.save();
+                    if (record.status !== 'Ringing') {
+                      record.status = 'Ringing';
+                      await record.save();
+                    }
 
                     // If still ringing and exceeded user timeout limit, trigger next agent
                     const timeoutLimit = widget.ring_timeout_seconds || 40;
@@ -1246,13 +1309,14 @@ async function pollActiveCalls() {
                     // Search and link recording after 5s settle delay
                     setTimeout(() => fetchAndLinkRecording(record.id), 5000);
                   } else {
-                    if (ageSeconds < 12) {
-                      console.log(`[3CX] Call ${record.id} not active on extension ${lastExt} yet (age ${Math.round(ageSeconds)}s). Waiting.`);
+                    const timeoutLimit = widget.ring_timeout_seconds || 40;
+                    if (ageSeconds < timeoutLimit) {
+                      console.log(`[3CX] Call ${record.id} not active on extension ${lastExt} yet (age ${Math.round(ageSeconds)}s < ${timeoutLimit}s timeout). Waiting.`);
                       continue;
                     }
                     const isBusy = ccState.busy === true;
                     const outcomeStatus = isBusy ? 'busy' : 'missed';
-                    console.log(`[3CX] Call ${record.id} went unanswered/busy (${outcomeStatus}) on extension ${lastExt}. Triggering failover.`);
+                    console.log(`[3CX] Call ${record.id} went unanswered/busy (${outcomeStatus}) after ${Math.round(ageSeconds)}s on extension ${lastExt}. Triggering failover.`);
                     record.agent_extension = updateLastAgentStatus(record.agent_extension, outcomeStatus);
                     await record.save();
                     await triggerFailoverCall(record, widget);
@@ -1265,13 +1329,14 @@ async function pollActiveCalls() {
             console.error(`[3CX] Extension status check failed for call ${record.id}:`, ccErr.message);
           }
 
-          // 4. Double Fallback: if both activeList and participants checks failed (e.g. timeout / network errors)
+          // 4. Double Fallback: if both activeList and participants checks failed (e.g. timeout / network errors / 403)
+          const timeoutLimit = widget.ring_timeout_seconds || 40;
           if (record.status === 'Initiated' || record.status === 'Ringing') {
-            if (ageSeconds < 12) {
-              console.log(`[3CX] Call ${record.id} not verified yet (age ${Math.round(ageSeconds)}s). Waiting.`);
+            if (ageSeconds < timeoutLimit) {
+              console.log(`[3CX] Call ${record.id} not verified yet (age ${Math.round(ageSeconds)}s < ${timeoutLimit}s timeout). Waiting.`);
               continue;
             }
-            console.log(`[3CX] Call ${record.id} unanswered (no active status found). Triggering failover.`);
+            console.log(`[3CX] Call ${record.id} unanswered after ${Math.round(ageSeconds)}s timeout (no active status found). Triggering failover.`);
             record.agent_extension = updateLastAgentStatus(record.agent_extension, 'missed');
             await record.save();
             await triggerFailoverCall(record, widget);

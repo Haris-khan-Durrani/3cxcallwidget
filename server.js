@@ -467,7 +467,12 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
       }
     }
   } catch (err) {
+    const is403 = err.response?.status === 403 || err.response?.status === 401;
     console.error('[3CX Dialer] Error fetching recordings list:', err.response?.data || err.message);
+    if (is403) {
+      console.warn('[3CX Dialer] 3CX returned 403 Forbidden. App Token lacks recording access. Set RECORDING_ACCESS_TOKEN in .env or set recording_access_token on the Dialer Widget.');
+      return;
+    }
     if (attempt < 10) {
       console.log(`[3CX Dialer] Retrying search due to error (attempt ${attempt + 1}/10) in 5s...`);
       setTimeout(() => fetchAndLinkDialerRecording(recordId, attempt + 1), 5000);
@@ -1164,7 +1169,12 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
       }
     }
   } catch (err) {
+    const is403 = err.response?.status === 403 || err.response?.status === 401;
     console.error('[3CX] Error fetching recordings list:', err.response?.data || err.message);
+    if (is403) {
+      console.warn('[3CX] 3CX returned 403 Forbidden. App Token lacks recording access. Set RECORDING_ACCESS_TOKEN in .env or set recording_access_token on the Widget.');
+      return;
+    }
     if (attempt < 20) {
       console.log(`[3CX] Retrying search due to error (attempt ${attempt + 1}/20) in 5s...`);
       setTimeout(() => fetchAndLinkRecording(recordId, attempt + 1), 5000);

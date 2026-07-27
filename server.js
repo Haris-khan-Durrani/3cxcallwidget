@@ -393,6 +393,8 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     console.log(`[3CX Dialer] Searching call recording for destination ${record.destination} / call ${record.id} (Attempt ${attempt}/10)...`);
 
     const token = await getRecordingToken(dialer);
+    const hostWithPort = sanitizeFqdn(dialer.fqdn_3cx);
+    const hostOnly = sanitizeHostOnly(dialer.fqdn_3cx);
     const now = new Date();
     const pastIso = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
     const futureIso = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -1111,6 +1113,8 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     console.log(`[3CX] Searching call recording for customer ${record.customer_phone} / call ${record.id} (Attempt ${attempt}/20)...`);
 
     const token = await getRecordingToken(widget);
+    const hostWithPort = sanitizeFqdn(widget.fqdn_3cx);
+    const hostOnly = sanitizeHostOnly(widget.fqdn_3cx);
     const now = new Date();
     const pastIso = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
     const futureIso = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();

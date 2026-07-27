@@ -2345,10 +2345,12 @@ async function axiosWithRetry(fn, retries = 3, delayMs = 500) {
 
 app.get('/api/admin/ai-projects/:ai_project_id/cartesia/voices', authenticateToken, async (req, res) => {
   try {
-    const cred = await AIProviderCredential.findOne({ where: { ai_project_id: req.params.ai_project_id, provider_name: 'cartesia' } });
-    if (!cred) return res.status(404).json({ error: 'Cartesia credential not found for this AI Project.' });
-
-    const cartesiaKey = decrypt(cred.encrypted_api_key, cred.encryption_iv, cred.encryption_auth_tag);
+    let cartesiaKey = req.headers['x-cartesia-key-override'];
+    if (!cartesiaKey) {
+      const cred = await AIProviderCredential.findOne({ where: { ai_project_id: req.params.ai_project_id, provider_name: 'cartesia' } });
+      if (!cred) return res.status(404).json({ error: 'Cartesia credential not found for this AI Project.' });
+      cartesiaKey = decrypt(cred.encrypted_api_key, cred.encryption_iv, cred.encryption_auth_tag);
+    }
 
     const response = await axiosWithRetry(() => axios.get('https://api.cartesia.ai/voices', {
       headers: {
@@ -2365,13 +2367,15 @@ app.get('/api/admin/ai-projects/:ai_project_id/cartesia/voices', authenticateTok
 
 app.post('/api/admin/ai-projects/:ai_project_id/cartesia/preview', authenticateToken, async (req, res) => {
   try {
-    const { voice_id, text, language } = req.body;
+    const { voice_id, text, language, cartesia_key } = req.body;
     if (!voice_id || !text) return res.status(400).json({ error: 'voice_id and text are required' });
 
-    const cred = await AIProviderCredential.findOne({ where: { ai_project_id: req.params.ai_project_id, provider_name: 'cartesia' } });
-    if (!cred) return res.status(404).json({ error: 'Cartesia credential not found.' });
-
-    const cartesiaKey = decrypt(cred.encrypted_api_key, cred.encryption_iv, cred.encryption_auth_tag);
+    let finalCartesiaKey = cartesia_key;
+    if (!finalCartesiaKey) {
+      const cred = await AIProviderCredential.findOne({ where: { ai_project_id: req.params.ai_project_id, provider_name: 'cartesia' } });
+      if (!cred) return res.status(404).json({ error: 'Cartesia credential not found.' });
+      finalCartesiaKey = decrypt(cred.encrypted_api_key, cred.encryption_iv, cred.encryption_auth_tag);
+    }
 
     const response = await axiosWithRetry(() => axios.post('https://api.cartesia.ai/tts/bytes', {
       model_id: "sonic-3.5",
@@ -2388,7 +2392,7 @@ app.post('/api/admin/ai-projects/:ai_project_id/cartesia/preview', authenticateT
       }
     }, {
       headers: {
-        'X-API-Key': cartesiaKey,
+        'X-API-Key': finalCartesiaKey,
         'Cartesia-Version': '2024-06-10',
         'Content-Type': 'application/json'
       },
@@ -2428,6 +2432,17 @@ app.post('/api/admin/ai-projects', authenticateToken, async (req, res) => {
     if (!name || !fqdn_3cx) return res.status(400).json({ error: 'name and fqdn_3cx required' });
     const project = await AIProject.create({ name, fqdn_3cx });
     res.json(project);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/ai-projects/:id', authenticateToken, async (req, res) => {
+  try {
+    const project = await AIProject.findByPk(req.params.id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    await project.destroy();
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2551,15 +2566,22 @@ app.post('/api/admin/ai-credentials', authenticateToken, async (req, res) => {
 const { Queue } = require('bullmq');
 const redisOptions = process.env.REDIS_URL ? { url: process.env.REDIS_URL } : { host: 'redis', port: 6379 };
 const aiCallQueue = new Queue('ai-call-initiation', { connection: redisOptions });
+const aiKnowledgeQueue = new Queue('ai-knowledge-ingestion', { connection: redisOptions });
+
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/', limits: { fileSize: 20 * 1024 * 1024 } }); // 20MB limit
 
 // Trigger a test call
 app.post('/api/admin/test-call', authenticateToken, async (req, res) => {
   try {
-    const { ai_project_id, destination } = req.body;
+    const { ai_project_id, destination, campaign_id } = req.body;
     if (!ai_project_id || !destination) return res.status(400).json({ error: 'ai_project_id and destination required' });
 
     const call_id = `test-${Date.now()}`;
-    const jwt_token = jwt.sign({ ai_project_id, role: 'ai-runner' }, process.env.JWT_SECRET || 'change_this_secret_in_production', { expiresIn: '1h' });
+    const tokenPayload = { ai_project_id, role: 'ai-runner' };
+    if (campaign_id) tokenPayload.campaign_id = campaign_id;
+    
+    const jwt_token = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'change_this_secret_in_production', { expiresIn: '1h' });
 
     await aiCallQueue.add('outbound-call', {
       callId: call_id,
@@ -2585,6 +2607,7 @@ app.get('/internal/ai-calls/credentials/:call_id', async (req, res) => {
     if (decoded.role !== 'ai-runner') return res.sendStatus(403);
 
     const ai_project_id = decoded.ai_project_id;
+    const campaign_id = decoded.campaign_id;
 
     // Fetch and decrypt
     const aiCreds = await AIProviderCredential.findAll({ where: { ai_project_id } });
@@ -2611,13 +2634,27 @@ app.get('/internal/ai-calls/credentials/:call_id', async (req, res) => {
       };
     }
 
+    let campaignData = {
+      language: 'en-US',
+      system_prompt: 'You are a test assistant calling from 3CX. Keep your response brief and polite.',
+      llm_model: 'google/gemini-2.0-flash-001'
+    };
+
+    if (campaign_id) {
+      const dbCampaign = await AICallCampaign.findByPk(campaign_id);
+      if (dbCampaign) {
+        campaignData = {
+          language: dbCampaign.language || campaignData.language,
+          system_prompt: dbCampaign.system_prompt || campaignData.system_prompt,
+          llm_model: dbCampaign.llm_model || campaignData.llm_model
+        };
+      }
+    }
+
     res.json({
       sip,
       providers,
-      campaign: {
-        language: 'en-US',
-        system_prompt: 'You are a test assistant calling from 3CX. Keep your response brief and polite.'
-      }
+      campaign: campaignData
     });
   } catch (err) {
     console.error('Internal Credential Error:', err);
@@ -2643,6 +2680,9 @@ app.post('/api/admin/ai-campaigns', authenticateToken, async (req, res) => {
     const { ai_project_id, name, system_prompt, stt_provider, llm_provider, llm_model, tts_provider, language } = req.body;
     if (!ai_project_id || !name || !system_prompt) {
       return res.status(400).json({ error: 'ai_project_id, name, and system_prompt are required' });
+    }
+    if (req.body.id === null || req.body.id === '') {
+      delete req.body.id;
     }
     const campaign = await AICallCampaign.create(req.body);
     res.json(campaign);
@@ -3719,6 +3759,39 @@ app.get('/internal/ai-calls/credentials/:callId', verifyInternalRequest, async (
   } catch (err) {
     console.error('[Internal Auth Error]', err.message);
     res.status(500).json({ error: 'Internal credential retrieval failed' });
+  }
+});
+app.post('/api/campaigns/:id/knowledge-base', authenticateToken, upload.array('files', 5), async (req, res) => {
+  try {
+    const campaignId = req.params.id;
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+    
+    // Find campaign to ensure it exists and user has access (simplified for now)
+    const campaign = await AICallCampaign.findByPk(campaignId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    
+    const filesInfo = req.files.map(f => ({ path: f.path, name: f.originalname }));
+    const fileNames = filesInfo.map(f => f.name).join(', ');
+
+    await campaign.update({
+      knowledge_base_file: fileNames,
+      knowledge_base_status: 'Pending'
+    });
+
+    // Enqueue job for AI Runner
+    await aiKnowledgeQueue.add('index-pdf', {
+      campaignId: campaign.id,
+      files: filesInfo
+    });
+
+    res.json({ message: 'File uploaded and ingestion started', status: 'Pending' });
+  } catch (error) {
+    console.error('Error uploading knowledge base:', error);
+    res.status(500).json({ error: 'Failed to upload knowledge base' });
   }
 });
 

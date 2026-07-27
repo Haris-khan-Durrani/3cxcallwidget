@@ -41,6 +41,13 @@ function sanitizeFqdn(fqdn) {
 }
 
 /**
+ * Strip custom ports (e.g. :3081) from FQDN to access standard HTTPS (443) xAPI OData endpoints.
+ */
+function sanitizeHostOnly(fqdn) {
+  return (fqdn || '').replace(/^https?:\/\//i, '').replace(/\/$/, '').split(':')[0];
+}
+
+/**
  * Check if the widget is currently within its configured office hours.
  * Uses native Intl formatting to avoid dependency on heavy libraries.
  */
@@ -371,22 +378,28 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     console.log(`[3CX Dialer] Searching call recording for destination ${record.destination} / call ${record.id} (Attempt ${attempt}/10)...`);
 
     let currentToken = await get3cxToken(dialer);
-    const fqdn = sanitizeFqdn(dialer.fqdn_3cx);
+    const hostWithPort = sanitizeFqdn(dialer.fqdn_3cx);
+    const hostOnly = sanitizeHostOnly(dialer.fqdn_3cx);
     const agentExt = record.agent_extension ? encodeURIComponent(String(record.agent_extension).trim().split(':')[0]) : '';
 
     const candidateUrls = [
-      `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
-      `https://${fqdn}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
-      `https://${fqdn}/xapi/v1/Recording?$top=45&$orderby=Id desc`,
-      `https://${fqdn}/xapi/v1/recording?$top=45&$orderby=Id desc`,
-      ...(agentExt ? [
-        `https://${fqdn}/callcontrol/${agentExt}/recordings`,
-        `https://${fqdn}/xapi/v1/CallControl/${agentExt}/recordings`,
-        `https://${fqdn}/xapi/v1/Users/${agentExt}/Recordings`,
-        `https://${fqdn}/xapi/v1/Users/${agentExt}/recordings`
+      // Standard HTTPS port 443 (port-less FQDN)
+      `https://${hostOnly}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/Recording?$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recording?$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/Recordings`,
+      `https://${hostOnly}/xapi/v1/recordings`,
+      ...(hostWithPort !== hostOnly ? [
+        `https://${hostWithPort}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
+        `https://${hostWithPort}/xapi/v1/recordings?$top=45&$orderby=Id desc`
       ] : []),
-      `https://${fqdn}/xapi/v1/Recordings`,
-      `https://${fqdn}/xapi/v1/recordings`
+      ...(agentExt ? [
+        `https://${hostOnly}/callcontrol/${agentExt}/recordings`,
+        `https://${hostWithPort}/callcontrol/${agentExt}/recordings`,
+        `https://${hostOnly}/xapi/v1/Users/${agentExt}/Recordings`,
+        `https://${hostOnly}/xapi/v1/Users/${agentExt}/recordings`
+      ] : [])
     ];
 
     let list = [];
@@ -1108,25 +1121,31 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     console.log(`[3CX] Searching call recording for customer ${record.customer_phone} / call ${record.id} (Attempt ${attempt}/20)...`);
 
     let currentToken = await get3cxToken(widget);
-    const fqdn = sanitizeFqdn(widget.fqdn_3cx);
+    const hostWithPort = sanitizeFqdn(widget.fqdn_3cx);
+    const hostOnly = sanitizeHostOnly(widget.fqdn_3cx);
 
     const triedExts = (record.agent_extension || '').split(',').map(x => x.trim().split(':')[0]).filter(Boolean);
     const lastExt = triedExts[triedExts.length - 1];
     const agentExt = lastExt ? encodeURIComponent(lastExt) : '';
 
     const candidateUrls = [
-      `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
-      `https://${fqdn}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
-      `https://${fqdn}/xapi/v1/Recording?$top=45&$orderby=Id desc`,
-      `https://${fqdn}/xapi/v1/recording?$top=45&$orderby=Id desc`,
-      ...(agentExt ? [
-        `https://${fqdn}/callcontrol/${agentExt}/recordings`,
-        `https://${fqdn}/xapi/v1/CallControl/${agentExt}/recordings`,
-        `https://${fqdn}/xapi/v1/Users/${agentExt}/Recordings`,
-        `https://${fqdn}/xapi/v1/Users/${agentExt}/recordings`
+      // Standard HTTPS port 443 (port-less FQDN)
+      `https://${hostOnly}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/Recording?$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recording?$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/Recordings`,
+      `https://${hostOnly}/xapi/v1/recordings`,
+      ...(hostWithPort !== hostOnly ? [
+        `https://${hostWithPort}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
+        `https://${hostWithPort}/xapi/v1/recordings?$top=45&$orderby=Id desc`
       ] : []),
-      `https://${fqdn}/xapi/v1/Recordings`,
-      `https://${fqdn}/xapi/v1/recordings`
+      ...(agentExt ? [
+        `https://${hostOnly}/callcontrol/${agentExt}/recordings`,
+        `https://${hostWithPort}/callcontrol/${agentExt}/recordings`,
+        `https://${hostOnly}/xapi/v1/Users/${agentExt}/Recordings`,
+        `https://${hostOnly}/xapi/v1/Users/${agentExt}/recordings`
+      ] : [])
     ];
 
     let list = [];
@@ -3178,8 +3197,8 @@ app.get('/recordings/:token/download', async (req, res) => {
     }
 
     const cxToken = await get3cxToken(widgetOrDialer);
-    const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
-    const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
+    const hostOnly = sanitizeHostOnly(widgetOrDialer.fqdn_3cx);
+    const downloadUrl = `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
 
     console.log(`[3CX Share] Streaming download for recording ${record.recording_id}...`);
 
@@ -3235,8 +3254,8 @@ app.get('/recordings/:token/listen', async (req, res) => {
     }
 
     const cxToken = await get3cxToken(widgetOrDialer);
-    const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
-    const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
+    const hostOnly = sanitizeHostOnly(widgetOrDialer.fqdn_3cx);
+    const downloadUrl = `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
 
     console.log(`[3CX Share] Streaming inline playback for recording ${record.recording_id}...`);
 
@@ -3280,8 +3299,8 @@ app.get('/api/admin/widgets/:widgetId/recordings/:recId/download', async (req, r
         if (!widget) return res.status(404).json({ error: 'Widget not found' });
 
         const cxToken = await get3cxToken(widget);
-        const fqdn = sanitizeFqdn(widget.fqdn_3cx);
-        const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
+        const hostOnly = sanitizeHostOnly(widget.fqdn_3cx);
+        const downloadUrl = `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
 
         console.log(`[3CX] Streaming recording ${req.params.recId} for widget ${widget.id}...`);
 

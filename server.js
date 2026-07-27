@@ -364,17 +364,64 @@ async function triggerDialerWebhook(record, dialer) {
   }
 }
 
+const userTokenCache = {};
+
 /**
- * Helper to retrieve a user recording access token if configured on Widget/Dialer or environment,
- * falling back to the standard client credentials token.
+ * Helper to retrieve or auto-generate a 3CX user recording access token via Webclient refresh token grant,
+ * falling back to configured access token or standard client credentials.
  */
 async function getRecordingToken(widgetOrDialer) {
-  if (widgetOrDialer?.recording_access_token && widgetOrDialer.recording_access_token.trim()) {
-    return widgetOrDialer.recording_access_token.trim();
+  const tokenVal = (widgetOrDialer?.recording_access_token || process.env.RECORDING_REFRESH_TOKEN || process.env.RECORDING_ACCESS_TOKEN || '').trim();
+  if (tokenVal) {
+    try {
+      const cacheKey = widgetOrDialer?.id || 'global';
+      const cached = userTokenCache[cacheKey];
+      if (cached && cached.expiresAt > Date.now() + 60 * 1000) {
+        return cached.token;
+      }
+
+      // Attempt to auto-generate fresh User Access Token using 3CX Webclient refresh token grant
+      const fqdn = sanitizeFqdn(widgetOrDialer?.fqdn_3cx || process.env.FQDN_3CX);
+      if (fqdn) {
+        const tokenUrl = `https://${fqdn}/connect/token`;
+        const https = require('https');
+        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+        const params = new URLSearchParams({
+          client_id: 'Webclient',
+          grant_type: 'refresh_token',
+          refresh_token: tokenVal,
+          expires_in_minutes: '60'
+        });
+
+        try {
+          const resp = await axios.post(tokenUrl, params.toString(), {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+              'Cookie': `RefreshTokenCookie=${tokenVal}`
+            },
+            httpsAgent,
+            timeout: 6000
+          });
+
+          if (resp.data?.access_token) {
+            userTokenCache[cacheKey] = {
+              token: resp.data.access_token,
+              expiresAt: Date.now() + (resp.data.expires_in || 3600) * 1000
+            };
+            console.log(`[3CX User Token] Auto-generated fresh User Access Token from 3CX /connect/token!`);
+            return resp.data.access_token;
+          }
+        } catch (rfErr) {
+          // If refresh token grant fails, fallback to using raw token string directly
+        }
+      }
+      return tokenVal;
+    } catch (e) {
+      return tokenVal;
+    }
   }
-  if (process.env.RECORDING_ACCESS_TOKEN && process.env.RECORDING_ACCESS_TOKEN.trim()) {
-    return process.env.RECORDING_ACCESS_TOKEN.trim();
-  }
+
   return await get3cxToken(widgetOrDialer);
 }
 

@@ -132,13 +132,9 @@ const Widget = sequelize.define('Widget', {
   tooltip_autohide: { type: DataTypes.BOOLEAN, defaultValue: true },
   tooltip_autohide_seconds: { type: DataTypes.INTEGER, defaultValue: 15 },
   location_id: { type: DataTypes.STRING, allowNull: true },
-  // Tenant Quotas & Limits
-  max_concurrent_calls: { type: DataTypes.INTEGER, defaultValue: 5 },
-  monthly_call_minutes: { type: DataTypes.INTEGER, defaultValue: 1000 },
-  max_campaigns:        { type: DataTypes.INTEGER, defaultValue: 10 },
   // Rate limiting & IP protection settings
-  rate_limit_enabled:          { type: DataTypes.BOOLEAN, defaultValue: false },
-  rate_limit_max_attempts:     { type: DataTypes.INTEGER, defaultValue: 5 },
+  rate_limit_enabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+  rate_limit_max_attempts: { type: DataTypes.INTEGER, defaultValue: 5 },
   rate_limit_cooldown_minutes: { type: DataTypes.INTEGER, defaultValue: 15 },
 });
 

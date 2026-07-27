@@ -397,10 +397,10 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     const hostOnly = sanitizeHostOnly(dialer.fqdn_3cx);
 
     const candidateUrls = [
-      `https://${hostOnly}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings?$top=45&$orderby=Id desc`
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc&$select=Id,IsArchived,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDidNumber,ToDisplayName,ToDn`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`,
+      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=Id desc`
     ];
 
     const https = require('https');
@@ -435,34 +435,22 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
 
     console.log(`[3CX Dialer] Total recordings fetched: ${list.length}.`);
 
+    const cleanPhone = record.destination.replace(/\D/g, '');
+    const phoneSuffix = cleanPhone.length >= 7 ? cleanPhone.slice(-7) : cleanPhone;
+    const callEndTime = new Date(record.ended_at || record.updatedAt || record.createdAt).getTime();
+
     const matches = list.filter(r => {
-      const fields = [
-        r.FromCallerNumber,
-        r.ToCallerNumber,
-        r.FromDisplayName,
-        r.ToDisplayName,
-        r.RecordingUrl,
-        r.FromDn,
-        r.ToDn
-      ];
+      const pStr = JSON.stringify(r);
+      const digitsInRecord = pStr.replace(/\D/g, '');
+      const phoneMatch = phoneSuffix && digitsInRecord.includes(phoneSuffix);
+      if (!phoneMatch) return false;
 
-      const callerText = fields.filter(Boolean).map(String).join(' | ').replace(/\D/g, '');
-      const cleanPhone = record.destination.replace(/\D/g, '');
-      const agentExt = record.agent_extension ? record.agent_extension.replace(/\D/g, '') : '';
-
-      const phoneSuffix = cleanPhone.slice(-8);
-      const phoneMatch = phoneSuffix && callerText.includes(phoneSuffix);
-      const extMatch = agentExt && callerText.includes(agentExt);
-
-      if (!phoneMatch || !extMatch) return false;
-
-      const recDateStr = r.Date || r.date || r.StartTime || r.startTime || r.DateTime || r.dateTime;
+      const recDateStr = r.StartTime || r.startTime || r.Date || r.date || r.DateTime || r.dateTime || r.Created || r.created;
       let timeMatch = true;
       if (recDateStr) {
         const recTime = new Date(recDateStr).getTime();
-        const callTime = new Date(record.ended_at || record.updatedAt).getTime();
-        const diffMs = Math.abs(recTime - callTime);
-        timeMatch = diffMs < 12 * 60 * 60 * 1000;
+        const diffMs = Math.abs(recTime - callEndTime);
+        timeMatch = diffMs < 60 * 60 * 1000; // 1-hour window
       }
 
       return phoneMatch && timeMatch;
@@ -471,8 +459,8 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     let match = null;
     if (matches.length > 0) {
       matches.sort((a, b) => {
-        const idA = parseInt(a.Id || a.id || a.recId || 0, 10);
-        const idB = parseInt(b.Id || b.id || b.recId || 0, 10);
+        const idA = parseInt(a.Id ?? a.id ?? a.recId ?? a.ID ?? 0, 10);
+        const idB = parseInt(b.Id ?? b.id ?? b.recId ?? b.ID ?? 0, 10);
         return idB - idA;
       });
       match = matches[0];
@@ -1124,10 +1112,10 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     const hostOnly = sanitizeHostOnly(widget.fqdn_3cx);
 
     const candidateUrls = [
-      `https://${hostOnly}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings?$top=45&$orderby=Id desc`
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc&$select=Id,IsArchived,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDidNumber,ToDisplayName,ToDn`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`,
+      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=Id desc`
     ];
 
     const https = require('https');
@@ -1162,35 +1150,24 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
 
     console.log(`[3CX] Total recordings fetched: ${list.length}. Sample:`, JSON.stringify(list.slice(0, 2), null, 2));
 
+    const cleanPhone = (record.customer_phone || '').replace(/\D/g, '');
+    const phoneSuffix = cleanPhone.length >= 7 ? cleanPhone.slice(-7) : cleanPhone;
+    const callEndTime = new Date(record.ended_at || record.updatedAt || record.createdAt).getTime();
+
     // Find matching recordings using multi-factor criteria:
     const matches = list.filter(r => {
-      // Aggregate all V20 caller/participant and URL properties into a single searchable string
-      const fields = [
-        r.FromCallerNumber,
-        r.ToCallerNumber,
-        r.FromDisplayName,
-        r.ToDisplayName,
-        r.RecordingUrl,
-        r.FromDn,
-        r.ToDn
-      ];
-
-      const callerText = fields.filter(Boolean).map(String).join(' | ').replace(/\D/g, '');
-      const cleanPhone = record.customer_phone.replace(/\D/g, '');
-
-      // Compare the last 8 digits to handle international/local country code prefix differences (e.g. +971 vs 0 vs no prefix)
-      const phoneSuffix = cleanPhone.slice(-8);
-      const phoneMatch = phoneSuffix && callerText.includes(phoneSuffix);
+      const pStr = JSON.stringify(r);
+      const digitsInRecord = pStr.replace(/\D/g, '');
+      const phoneMatch = phoneSuffix && digitsInRecord.includes(phoneSuffix);
       if (!phoneMatch) return false;
 
-      // Time match (ensures the recording timestamp is close to call end time, timezone-tolerant 12h window)
-      const recDateStr = r.Date || r.date || r.StartTime || r.startTime || r.DateTime || r.dateTime;
+      // Time match (ensures the recording timestamp is close to call end time, 1-hour window)
+      const recDateStr = r.StartTime || r.startTime || r.Date || r.date || r.DateTime || r.dateTime || r.Created || r.created;
       let timeMatch = true;
       if (recDateStr) {
         const recTime = new Date(recDateStr).getTime();
-        const callTime = new Date(record.ended_at || record.updatedAt).getTime();
-        const diffMs = Math.abs(recTime - callTime);
-        timeMatch = diffMs < 12 * 60 * 60 * 1000;
+        const diffMs = Math.abs(recTime - callEndTime);
+        timeMatch = diffMs < 60 * 60 * 1000; // 1-hour window
       }
 
       return phoneMatch && timeMatch;
@@ -1200,8 +1177,8 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     if (matches.length > 0) {
       // Sort matches descending by ID (highest ID represents the newest recording)
       matches.sort((a, b) => {
-        const idA = parseInt(a.Id || a.id || a.recId || 0, 10);
-        const idB = parseInt(b.Id || b.id || b.recId || 0, 10);
+        const idA = parseInt(a.Id ?? a.id ?? a.recId ?? a.ID ?? 0, 10);
+        const idB = parseInt(b.Id ?? b.id ?? b.recId ?? b.ID ?? 0, 10);
         return idB - idA;
       });
       match = matches[0];
@@ -3185,10 +3162,10 @@ async function streamRecordingFrom3cx(widgetOrDialer, recId, res, isInline = fal
   let token = await getRecordingToken(widgetOrDialer);
 
   const candidateUrls = [
-    `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
-    `https://${hostOnly}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
     `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
-    `https://${fqdn}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`
+    `https://${fqdn}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
+    `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
+    `https://${hostOnly}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`
   ];
 
   let lastErr = null;

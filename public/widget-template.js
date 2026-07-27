@@ -33,6 +33,11 @@
   const BRANDING_URL  = '__BRANDING_URL__';
   const THEME_STYLE  = '__THEME_STYLE__';
   const AGENT_BG_URL = '__AGENT_BG_URL__';
+  const AGENT_DISPLAY_MODE = '__AGENT_DISPLAY_MODE__';
+  const AGENT_FULL_IMAGE_URL = '__AGENT_FULL_IMAGE_URL__';
+  const SIDE_GRAPHIC_URL = '__SIDE_GRAPHIC_URL__';
+  const SLIDER_AUTO_PLAY = __SLIDER_AUTO_PLAY__;
+  const SLIDER_INTERVAL_SEC = __SLIDER_INTERVAL_SEC__;
   const W_WIDTH     = __WIDGET_WIDTH__;
   const W_HEIGHT    = '__WIDGET_HEIGHT__';
   const LOGO_HEIGHT = '__LOGO_HEIGHT__';
@@ -775,6 +780,51 @@
       #cx-modal.cx-theme-split #cx-av-name { color: ${BTN_COLOR}; margin-top: 8px; }
       #cx-modal.cx-theme-split #cx-av-sub { color: ${BTN_COLOR}; opacity: 0.85; margin-bottom: 0; }
       
+      .cx-slider-wrapper {
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+        border-radius: 12px;
+        margin-bottom: 12px;
+      }
+      .cx-slider-track {
+        display: flex;
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        width: 100%;
+      }
+      .cx-slide {
+        min-width: 100%;
+        box-sizing: border-box;
+        position: relative;
+      }
+      .cx-graphic-img {
+        width: 100%;
+        max-height: 220px;
+        object-fit: cover;
+        display: block;
+        border-radius: 12px;
+      }
+      .cx-slider-dots {
+        display: flex;
+        justify-content: center;
+        gap: 6px;
+        margin-top: 8px;
+        margin-bottom: 4px;
+      }
+      .cx-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.4);
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .cx-dot.active {
+        background: ${BTN_COLOR};
+        width: 18px;
+        border-radius: 4px;
+      }
+      
       #cx-modal.cx-theme-split .cx-body {
         grid-column: 2;
         grid-row: 2;
@@ -1118,13 +1168,34 @@
         ` : `
           <div id="cx-agent-content" style="width: 100%;">
             ${agentLogoHtml}
-            <div class="cx-av-container">
-              <svg class="cx-av-ring-svg" viewBox="0 0 76 76">
-                <circle class="cx-av-ring-bg" cx="38" cy="38" r="33" />
-                <circle class="cx-av-ring-progress" id="cx-av-ring" cx="38" cy="38" r="33" />
-              </svg>
-              <img id="cx-av" src="" alt="Agent" style="display:none;">
-            </div>
+            ${(AGENT_DISPLAY_MODE === 'full_graphic' || AGENT_DISPLAY_MODE === 'auto_slider') ? `
+              <div class="cx-slider-wrapper" id="cx-slider-wrapper">
+                <div class="cx-slider-track" id="cx-slider-track">
+                  <div class="cx-slide cx-slide-1">
+                    <img id="cx-full-graphic-1" src="${AGENT_FULL_IMAGE_URL}" class="cx-graphic-img" alt="Agent Graphic" onerror="this.style.display='none'" />
+                  </div>
+                  ${AGENT_DISPLAY_MODE === 'auto_slider' ? `
+                    <div class="cx-slide cx-slide-2">
+                      <img id="cx-full-graphic-2" src="${SIDE_GRAPHIC_URL}" class="cx-graphic-img" alt="Side Banner Graphic" onerror="this.style.display='none'" />
+                    </div>
+                  ` : ''}
+                </div>
+                ${AGENT_DISPLAY_MODE === 'auto_slider' ? `
+                  <div class="cx-slider-dots" id="cx-slider-dots">
+                    <span class="cx-dot active" data-slide="0"></span>
+                    <span class="cx-dot" data-slide="1"></span>
+                  </div>
+                ` : ''}
+              </div>
+            ` : `
+              <div class="cx-av-container">
+                <svg class="cx-av-ring-svg" viewBox="0 0 76 76">
+                  <circle class="cx-av-ring-bg" cx="38" cy="38" r="33" />
+                  <circle class="cx-av-ring-progress" id="cx-av-ring" cx="38" cy="38" r="33" />
+                </svg>
+                <img id="cx-av" src="" alt="Agent" style="display:none;">
+              </div>
+            `}
             <div id="cx-av-name"></div>
             <div id="cx-av-sub">${AV_STATUS || 'Will answer your call'}</div>
           </div>
@@ -1328,6 +1399,38 @@
           }
         }
       } catch {}
+    }
+
+    /* ─── Auto-Slider Engine ─── */
+    if (AGENT_DISPLAY_MODE === 'auto_slider' && SLIDER_AUTO_PLAY) {
+      let cxCurrentSlide = 0;
+      const $track = document.getElementById('cx-slider-track');
+      const $dots = document.querySelectorAll('#cx-slider-dots .cx-dot');
+      function goToCxSlide(idx) {
+        cxCurrentSlide = idx;
+        if ($track) $track.style.transform = `translateX(-${idx * 100}%)`;
+        $dots.forEach((dot, i) => dot.classList.toggle('active', i === idx));
+      }
+      let cxSlideTimer = setInterval(() => {
+        goToCxSlide((cxCurrentSlide + 1) % 2);
+      }, (SLIDER_INTERVAL_SEC || 4) * 1000);
+
+      $dots.forEach((dot, i) => {
+        dot.addEventListener('click', (e) => {
+          e.stopPropagation();
+          goToCxSlide(i);
+        });
+      });
+
+      const $sliderWrap = document.getElementById('cx-slider-wrapper');
+      if ($sliderWrap) {
+        $sliderWrap.addEventListener('mouseenter', () => clearInterval(cxSlideTimer));
+        $sliderWrap.addEventListener('mouseleave', () => {
+          cxSlideTimer = setInterval(() => {
+            goToCxSlide((cxCurrentSlide + 1) % 2);
+          }, (SLIDER_INTERVAL_SEC || 4) * 1000);
+        });
+      }
     }
   });
 

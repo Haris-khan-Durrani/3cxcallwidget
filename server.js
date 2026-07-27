@@ -1458,6 +1458,11 @@ app.get('/widget.js', async (req, res) => {
       '__BRANDING_URL__': (widget.branding_url || 'https://3cx.com').replace(/'/g, "\\'"),
       '__THEME_STYLE__': widget.theme_style || 'classic',
       '__AGENT_BG_URL__': widget.agent_bg_url || '',
+      '__AGENT_DISPLAY_MODE__': widget.agent_display_mode || 'circle',
+      '__AGENT_FULL_IMAGE_URL__': widget.agent_full_image_url || '',
+      '__SIDE_GRAPHIC_URL__': widget.side_graphic_url || '',
+      '__SLIDER_AUTO_PLAY__': widget.slider_auto_play !== false ? 'true' : 'false',
+      '__SLIDER_INTERVAL_SEC__': String(widget.slider_interval_sec ?? 4),
       '__WIDGET_WIDTH__': String(widget.widget_width ?? 345),
       '__WIDGET_HEIGHT__': widget.widget_height ? String(widget.widget_height) : 'auto',
       '__LOGO_HEIGHT__': widget.logo_height ? String(widget.logo_height) : '36',
@@ -3840,26 +3845,16 @@ async function startServer() {
     const queryInterface = sequelize.getQueryInterface();
     try {
       const tableInfo = await queryInterface.describeTable('Widgets');
-      if (tableInfo && !tableInfo.rate_limit_enabled) {
-        await queryInterface.addColumn('Widgets', 'rate_limit_enabled', {
-          type: Sequelize.BOOLEAN,
-          defaultValue: false,
-        });
-        console.log('[Migration] Added missing column rate_limit_enabled to Widgets table.');
-      }
-      if (tableInfo && !tableInfo.rate_limit_max_attempts) {
-        await queryInterface.addColumn('Widgets', 'rate_limit_max_attempts', {
-          type: Sequelize.INTEGER,
-          defaultValue: 5,
-        });
-        console.log('[Migration] Added missing column rate_limit_max_attempts to Widgets table.');
-      }
-      if (tableInfo && !tableInfo.rate_limit_cooldown_minutes) {
-        await queryInterface.addColumn('Widgets', 'rate_limit_cooldown_minutes', {
-          type: Sequelize.INTEGER,
-          defaultValue: 15,
-        });
-        console.log('[Migration] Added missing column rate_limit_cooldown_minutes to Widgets table.');
+      const widgetAttrs = Widget.rawAttributes;
+      for (const [colName, attrDef] of Object.entries(widgetAttrs)) {
+        if (tableInfo && !tableInfo[colName]) {
+          try {
+            await queryInterface.addColumn('Widgets', colName, attrDef);
+            console.log(`[Migration] Automatically added missing column '${colName}' to Widgets table.`);
+          } catch (colErr) {
+            console.warn(`[Migration] Notice for column '${colName}':`, colErr.message);
+          }
+        }
       }
     } catch (migErr) {
       console.warn('[Migration] Column auto-migration check notice:', migErr.message);

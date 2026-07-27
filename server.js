@@ -1132,6 +1132,10 @@ async function checkDialerCallControlStatus(dialer, extension, destination) {
     // Fallback if agentPart is not found but there are active participants
     return { active: true, connected: false, ringing: true };
   } catch (err) {
+    if (err.response?.status === 401 || err.response?.status === 403) {
+      console.log(`[3CX Dialer CC] Received ${err.response.status} for Ext ${extension}. Invalidating token cache...`);
+      invalidate3cxToken(dialer.id);
+    }
     console.error(`[3CX Dialer CC] Failed checking CallControl for Ext ${extension}:`, err.message);
     return null;
   }

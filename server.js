@@ -402,23 +402,8 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     const candidateUrls = [
       `https://${hostWithPort}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       `https://${hostWithPort}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings()`,
-      `https://${hostWithPort}/xapi/v1/recordings()`,
       `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings()?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Pbx.GetRecordings()?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}`,
-      `https://${hostOnly}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      ...(agentExt ? [
-        `https://${hostWithPort}/xapi/v1/Users(${agentExt})/Recordings()?access_token=${currentToken}`,
-        `https://${hostWithPort}/xapi/v1/Users('${agentExt}')/Recordings()?access_token=${currentToken}`,
-        `https://${hostWithPort}/callcontrol/${agentExt}/recordings?access_token=${currentToken}`,
-        `https://${hostWithPort}/xapi/v1/Users/${agentExt}/Recordings?access_token=${currentToken}`
-      ] : [])
+      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`
     ];
 
     let list = [];
@@ -1143,23 +1128,8 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     const candidateUrls = [
       `https://${hostWithPort}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       `https://${hostWithPort}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings()`,
-      `https://${hostWithPort}/xapi/v1/recordings()`,
       `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings()?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Pbx.GetRecordings()?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}`,
-      `https://${hostOnly}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      ...(agentExt ? [
-        `https://${hostWithPort}/xapi/v1/Users(${agentExt})/Recordings()?access_token=${currentToken}`,
-        `https://${hostWithPort}/xapi/v1/Users('${agentExt}')/Recordings()?access_token=${currentToken}`,
-        `https://${hostWithPort}/callcontrol/${agentExt}/recordings?access_token=${currentToken}`,
-        `https://${hostWithPort}/xapi/v1/Users/${agentExt}/Recordings?access_token=${currentToken}`
-      ] : [])
+      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`
     ];
 
     let list = [];
@@ -3216,58 +3186,44 @@ async function streamRecordingFrom3cx(widgetOrDialer, recId, res, isInline = fal
   const https = require('https');
   const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-  let recToken = null;
-  try {
-    recToken = await getRecordingToken(widgetOrDialer);
-  } catch (tErr) {
-    console.error('[3CX Stream] Recording token fetch failed:', tErr.message);
-  }
-
-  let appToken = null;
-  try {
-    appToken = await get3cxToken(widgetOrDialer);
-  } catch (aErr) {}
-
   const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
-  const hostOnly = sanitizeHostOnly(widgetOrDialer.fqdn_3cx);
 
-  const tokensToTry = Array.from(new Set([recToken, appToken].filter(Boolean)));
+  let token = await getRecordingToken(widgetOrDialer);
+
+  const candidateUrls = [
+    `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
+    `https://${fqdn}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`
+  ];
 
   let lastErr = null;
-  for (const token of tokensToTry) {
-    const candidateUrls = [
-      `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
-      `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
-      `https://${fqdn}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
-      `https://${hostOnly}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`
-    ];
+  for (const url of candidateUrls) {
+    try {
+      const response = await axios({
+        method: 'get',
+        url,
+        responseType: 'stream',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'audio/wav, audio/*, */*'
+        },
+        httpsAgent,
+        timeout: 5000
+      });
 
-    for (const url of candidateUrls) {
-      try {
-        const response = await axios({
-          method: 'get',
-          url,
-          responseType: 'stream',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'audio/wav, audio/*, */*'
-          },
-          httpsAgent,
-          timeout: 15000
-        });
-
-        res.setHeader('Content-Type', response.headers['content-type'] || 'audio/wav');
-        if (response.headers['content-length']) {
-          res.setHeader('Content-Length', response.headers['content-length']);
-        }
-        res.setHeader('Content-Disposition', isInline ? 'inline' : (response.headers['content-disposition'] || `attachment; filename="recording_${recId}.wav"`));
-
-        response.data.pipe(res);
-        return;
-      } catch (err) {
-        lastErr = err;
-        console.warn(`[3CX Recording Stream] Candidate ${url} returned ${err.response?.status || err.message}`);
+      res.setHeader('Content-Type', response.headers['content-type'] || 'audio/wav');
+      if (response.headers['content-length']) {
+        res.setHeader('Content-Length', response.headers['content-length']);
       }
+      res.setHeader('Content-Disposition', isInline ? 'inline' : (response.headers['content-disposition'] || `attachment; filename="recording_${recId}.wav"`));
+
+      response.data.pipe(res);
+      return;
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        invalidate3cxToken(widgetOrDialer.id);
+      }
+      lastErr = err;
+      console.warn(`[3CX Recording Stream] Candidate ${url} returned ${err.response?.status || err.message}`);
     }
   }
 

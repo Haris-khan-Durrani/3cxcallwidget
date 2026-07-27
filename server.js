@@ -7,6 +7,7 @@ const dns = require('dns');
 
 // Force DNS resolution to prefer IPv4 to prevent IPv6 Docker timeouts on dual-stack servers
 dns.setDefaultResultOrder('ipv4first');
+const { Sequelize } = require('sequelize');
 const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent, User, SystemSetting, AICallCampaign, AICallRecord, AIProviderCredential, SIPConfiguration, AIProject } = require('./db');
 const crypto = require('crypto');
 const { verifyInternalRequest } = require('./utils/jwt');
@@ -3762,6 +3763,34 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
+    const queryInterface = sequelize.getQueryInterface();
+    try {
+      const tableInfo = await queryInterface.describeTable('Widgets');
+      if (tableInfo && !tableInfo.rate_limit_enabled) {
+        await queryInterface.addColumn('Widgets', 'rate_limit_enabled', {
+          type: Sequelize.BOOLEAN,
+          defaultValue: false,
+        });
+        console.log('[Migration] Added missing column rate_limit_enabled to Widgets table.');
+      }
+      if (tableInfo && !tableInfo.rate_limit_max_attempts) {
+        await queryInterface.addColumn('Widgets', 'rate_limit_max_attempts', {
+          type: Sequelize.INTEGER,
+          defaultValue: 5,
+        });
+        console.log('[Migration] Added missing column rate_limit_max_attempts to Widgets table.');
+      }
+      if (tableInfo && !tableInfo.rate_limit_cooldown_minutes) {
+        await queryInterface.addColumn('Widgets', 'rate_limit_cooldown_minutes', {
+          type: Sequelize.INTEGER,
+          defaultValue: 15,
+        });
+        console.log('[Migration] Added missing column rate_limit_cooldown_minutes to Widgets table.');
+      }
+    } catch (migErr) {
+      console.warn('[Migration] Column auto-migration check notice:', migErr.message);
+    }
+
     await sequelize.sync();
     console.log('Database synced');
   } catch (err) {

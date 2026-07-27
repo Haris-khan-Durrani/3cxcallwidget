@@ -995,53 +995,29 @@ async function checkCallStatusViaCallControl(widget, extension, cxCallId, custom
         });
       }
 
-      if (filteredParticipants.length > 0) {
-        // Find the participant representing the agent's extension
-        const agentExtStr = String(extension).trim();
-        const agentPart = filteredParticipants.find(p => {
-          const pDn = String(p.PartyDn || p.partyDn || p.DN || p.dn || p.Number || p.number || '').trim();
-          return pDn === agentExtStr;
-        });
+      const targetParts = filteredParticipants.length > 0 ? filteredParticipants : (participants.length <= 2 ? participants : []);
 
-        if (agentPart) {
-          const state = String(agentPart.State || agentPart.state || agentPart.Status || agentPart.status || '').toLowerCase().trim();
-          const isConnected = state === 'connected' || state === 'talking' || state === 'established';
-          const isRinging = state === 'ringing' || state === 'dialing' || state === 'invited' || state === 'routing' || state === 'initiating';
-          console.log(`[3CX] Extension ${agentExtStr} CallControl status for Call ${cxCallId || 'any'}: "${state}" (connected=${isConnected}, ringing=${isRinging})`);
-          return { active: true, connected: isConnected, ringing: isRinging };
-        }
+      if (targetParts.length > 0) {
+        let connectedCount = 0;
+        let hasRingingPart = false;
 
-        // Fallback: if agent participant is not found in the list, check if any participant in the filtered list is connected
-        let isConnected = false;
-        let isRinging = false;
-        for (const p of filteredParticipants) {
+        for (const p of targetParts) {
           const state = String(p.State || p.state || p.Status || p.status || '').toLowerCase().trim();
-          if (state === 'connected' || state === 'talking' || state === 'established') {
-            isConnected = true;
-          } else if (state === 'ringing' || state === 'dialing' || state === 'invited' || state === 'routing' || state === 'initiating') {
-            isRinging = true;
-          }
+          const isConn = state === 'connected' || state === 'talking' || state === 'established';
+          const isRing = state === 'ringing' || state === 'dialing' || state === 'invited' || state === 'routing' || state === 'initiating';
+
+          if (isConn) connectedCount++;
+          if (isRing) hasRingingPart = true;
         }
+
+        // Outbound call is ONLY connected (Answered) when BOTH legs (Agent + Customer) are connected,
+        // OR when at least 2 participants are connected and neither party is currently ringing/dialing.
+        const isConnected = connectedCount >= 2 || (connectedCount >= 1 && !hasRingingPart && targetParts.length >= 2);
+        const isRinging = hasRingingPart || connectedCount < 2;
+
+        console.log(`[3CX] Extension ${extension} CallControl status for Call ${cxCallId || 'any'}: connectedParts=${connectedCount}/${targetParts.length}, hasRinging=${hasRingingPart} -> connected=${isConnected}, ringing=${isRinging}`);
         return { active: true, connected: isConnected, ringing: isRinging };
       } else {
-        // Active participants exist on extension, but filtering by phone suffix didn't match.
-        // If there is only 1 active call session on this extension (2 participants max: agent + 1 other party),
-        // treat it as active to prevent false negatives caused by 3CX format variations.
-        if (participants.length <= 2) {
-          let isConnected = false;
-          let isRinging = false;
-          for (const p of participants) {
-            const state = String(p.State || p.state || p.Status || p.status || '').toLowerCase().trim();
-            if (state === 'connected' || state === 'talking' || state === 'established') {
-              isConnected = true;
-            } else if (state === 'ringing' || state === 'dialing' || state === 'invited' || state === 'routing' || state === 'initiating') {
-              isRinging = true;
-            }
-          }
-          console.log(`[3CX] Extension ${extension} active call detected (single call on extension). connected=${isConnected}, ringing=${isRinging}`);
-          return { active: true, connected: isConnected, ringing: isRinging };
-        }
-
         console.log(`[3CX] Extension ${extension} is busy on another call (active call participants present but do not match CallId ${cxCallId}).`);
         return { active: false, busy: true };
       }

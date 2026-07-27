@@ -31,6 +31,7 @@ require('dotenv').config();
 // ─── 3CX OAuth Token Cache ───────────────────────────────────────────────────
 // Stores { [widgetId]: { token: string, expiresAt: number } }
 const tokenCache = {};
+const unactiveTicksMap = {};
 
 /**
  * Strip any accidental http:// or https:// prefix from the FQDN field.
@@ -1347,7 +1348,7 @@ async function pollActiveCalls() {
 
               if (ccState) {
                 if (ccState.active) {
-                  record._unactive_ticks = 0; // Reset transient counter when active
+                  delete unactiveTicksMap[record.id]; // Reset transient counter when active
                   if (ccState.connected && record.status !== 'Answered') {
                     console.log(`[3CX] Call ${record.id} answered (detected via extension ${lastExt} participants fallback).`);
                     record.status = 'Answered';
@@ -1375,12 +1376,14 @@ async function pollActiveCalls() {
                   if (record.status === 'Answered') {
                     // Require at least 2 consecutive unactive polling ticks (8s) before declaring call completed
                     // to prevent transient 1-tick 3CX bridge/handshake blips from terminating live calls
-                    record._unactive_ticks = (record._unactive_ticks || 0) + 1;
-                    if (record._unactive_ticks < 2) {
+                    const ticks = (unactiveTicksMap[record.id] || 0) + 1;
+                    unactiveTicksMap[record.id] = ticks;
+                    if (ticks < 2) {
                       console.log(`[3CX] Call ${record.id} answered call unactive tick 1. Verifying on next poll before marking completed...`);
                       continue;
                     }
 
+                    delete unactiveTicksMap[record.id];
                     console.log(`[3CX] Call ${record.id} ended talking. Marking Completed.`);
                     record.status = 'Completed';
                     record.outcome = 'Answered';

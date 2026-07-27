@@ -370,12 +370,21 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
 
     console.log(`[3CX Dialer] Searching call recording for destination ${record.destination} / call ${record.id} (Attempt ${attempt}/10)...`);
 
-    const token = await get3cxToken(dialer);
+    let currentToken = await get3cxToken(dialer);
     const fqdn = sanitizeFqdn(dialer.fqdn_3cx);
+    const agentExt = record.agent_extension ? encodeURIComponent(String(record.agent_extension).trim().split(':')[0]) : '';
 
     const candidateUrls = [
       `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
       `https://${fqdn}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
+      `https://${fqdn}/xapi/v1/Recording?$top=45&$orderby=Id desc`,
+      `https://${fqdn}/xapi/v1/recording?$top=45&$orderby=Id desc`,
+      ...(agentExt ? [
+        `https://${fqdn}/callcontrol/${agentExt}/recordings`,
+        `https://${fqdn}/xapi/v1/CallControl/${agentExt}/recordings`,
+        `https://${fqdn}/xapi/v1/Users/${agentExt}/Recordings`,
+        `https://${fqdn}/xapi/v1/Users/${agentExt}/recordings`
+      ] : []),
       `https://${fqdn}/xapi/v1/Recordings`,
       `https://${fqdn}/xapi/v1/recordings`
     ];
@@ -386,18 +395,25 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     for (const url of candidateUrls) {
       try {
         const resp = await axios.get(url, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${currentToken}` },
           timeout: 6000
         });
         const data = resp.data;
-        list = Array.isArray(data) ? data : (data?.value || []);
-        if (list.length > 0) break;
+        const items = Array.isArray(data) ? data : (data?.value || data?.items || data?.result || []);
+        if (items.length > 0) {
+          console.log(`[3CX Dialer Recordings] Successfully fetched ${items.length} recordings from endpoint: ${url}`);
+          list = items;
+          break;
+        }
       } catch (err) {
         lastErr = err;
-        if (err.response?.status === 401 || err.response?.status === 403) {
-          console.warn(`[3CX Dialer Recordings] Received ${err.response.status} from ${url}. Invalidating token cache...`);
+        const status = err.response?.status;
+        console.log(`[3CX Dialer Recordings] Candidate ${url} returned status ${status || err.message}`);
+        if (status === 401 || status === 403) {
           invalidate3cxToken(dialer.id);
-          break;
+          try {
+            currentToken = await get3cxToken(dialer);
+          } catch (tErr) { /* ignore */ }
         }
       }
     }
@@ -1091,12 +1107,24 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
 
     console.log(`[3CX] Searching call recording for customer ${record.customer_phone} / call ${record.id} (Attempt ${attempt}/20)...`);
 
-    const token = await get3cxToken(widget);
+    let currentToken = await get3cxToken(widget);
     const fqdn = sanitizeFqdn(widget.fqdn_3cx);
+
+    const triedExts = (record.agent_extension || '').split(',').map(x => x.trim().split(':')[0]).filter(Boolean);
+    const lastExt = triedExts[triedExts.length - 1];
+    const agentExt = lastExt ? encodeURIComponent(lastExt) : '';
 
     const candidateUrls = [
       `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`,
       `https://${fqdn}/xapi/v1/recordings?$top=45&$orderby=Id desc`,
+      `https://${fqdn}/xapi/v1/Recording?$top=45&$orderby=Id desc`,
+      `https://${fqdn}/xapi/v1/recording?$top=45&$orderby=Id desc`,
+      ...(agentExt ? [
+        `https://${fqdn}/callcontrol/${agentExt}/recordings`,
+        `https://${fqdn}/xapi/v1/CallControl/${agentExt}/recordings`,
+        `https://${fqdn}/xapi/v1/Users/${agentExt}/Recordings`,
+        `https://${fqdn}/xapi/v1/Users/${agentExt}/recordings`
+      ] : []),
       `https://${fqdn}/xapi/v1/Recordings`,
       `https://${fqdn}/xapi/v1/recordings`
     ];
@@ -1107,18 +1135,25 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     for (const url of candidateUrls) {
       try {
         const resp = await axios.get(url, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${currentToken}` },
           timeout: 6000
         });
         const data = resp.data;
-        list = Array.isArray(data) ? data : (data?.value || []);
-        if (list.length > 0) break;
+        const items = Array.isArray(data) ? data : (data?.value || data?.items || data?.result || []);
+        if (items.length > 0) {
+          console.log(`[3CX Recordings] Successfully fetched ${items.length} recordings from endpoint: ${url}`);
+          list = items;
+          break;
+        }
       } catch (err) {
         lastErr = err;
-        if (err.response?.status === 401 || err.response?.status === 403) {
-          console.warn(`[3CX Recordings] Received ${err.response.status} from ${url}. Invalidating token cache...`);
+        const status = err.response?.status;
+        console.log(`[3CX Recordings] Candidate ${url} returned status ${status || err.message}`);
+        if (status === 401 || status === 403) {
           invalidate3cxToken(widget.id);
-          break;
+          try {
+            currentToken = await get3cxToken(widget);
+          } catch (tErr) { /* ignore */ }
         }
       }
     }

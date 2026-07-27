@@ -20,6 +20,8 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    volumes:
+      - uploads_data:/app/uploads
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -59,6 +61,15 @@ services:
     container_name: 3cxwidget-redis
     restart: unless-stopped
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: 3cxwidget-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
   ai-runner:
     build: ./ai-runner
     container_name: 3cxwidget-ai-runner
@@ -68,6 +79,8 @@ services:
     depends_on:
       - redis
     restart: unless-stopped
+    volumes:
+      - uploads_data:/app/uploads
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -75,3 +88,5 @@ services:
 
 volumes:
   3cxwidget_mysql_data:
+  qdrant_data:
+  uploads_data:

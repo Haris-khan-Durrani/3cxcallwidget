@@ -34,6 +34,7 @@
               <th>Language</th>
               <th>LLM Model</th>
               <th>System Prompt</th>
+              <th>Knowledge Base</th>
               <th>Created</th>
               <th class="text-right">Actions</th>
             </tr>
@@ -44,11 +45,18 @@
               <td><span class="badge badge-outline">{{ c.language }}</span></td>
               <td><span class="badge badge-outline highlight-blue">{{ c.llm_model }}</span></td>
               <td class="text-muted"><div class="truncate-text">{{ c.system_prompt }}</div></td>
+              <td>
+                <span v-if="c.knowledge_base_status === 'Pending'" class="badge badge-outline highlight-blue">Indexing...</span>
+                <span v-else-if="c.knowledge_base_status === 'Indexed'" class="badge badge-outline highlight-green">Indexed ({{ c.knowledge_base_file }})</span>
+                <span v-else-if="c.knowledge_base_status === 'Failed'" class="badge badge-outline text-red">Failed</span>
+                <span v-else class="text-muted">None</span>
+              </td>
               <td class="text-muted">{{ new Date(c.createdAt).toLocaleDateString() }}</td>
               <td class="text-right">
                 <div style="display: flex; gap: 8px; justify-content: flex-end;">
                   <button class="btn btn-sm btn-ghost" @click="editCampaign(c)">Edit</button>
                   <button class="btn btn-sm btn-ghost text-red" @click="deleteCampaign(c.id)">Delete</button>
+                  <button class="btn btn-sm btn-primary" @click="testCampaign(c)">Test Campaign</button>
                 </div>
               </td>
             </tr>
@@ -87,6 +95,43 @@
                   <option value="fr-FR">French</option>
                   <option value="de-DE">German</option>
                   <option value="ar-AE">Arabic (UAE)</option>
+                  <option value="hi-IN">Hindi</option>
+                  <option value="zh-CN">Chinese (Mandarin)</option>
+                  <option value="ja-JP">Japanese</option>
+                  <option value="pt-BR">Portuguese (Brazil)</option>
+                  <option value="ru-RU">Russian</option>
+                  <option value="it-IT">Italian</option>
+                  <option value="ko-KR">Korean</option>
+                  <option value="nl-NL">Dutch</option>
+                  <option value="pl-PL">Polish</option>
+                  <option value="sv-SE">Swedish</option>
+                  <option value="tr-TR">Turkish</option>
+                  <option value="tl-PH">Tagalog</option>
+                  <option value="bg-BG">Bulgarian</option>
+                  <option value="ro-RO">Romanian</option>
+                  <option value="cs-CZ">Czech</option>
+                  <option value="el-GR">Greek</option>
+                  <option value="fi-FI">Finnish</option>
+                  <option value="hr-HR">Croatian</option>
+                  <option value="ms-MY">Malay</option>
+                  <option value="sk-SK">Slovak</option>
+                  <option value="da-DK">Danish</option>
+                  <option value="ta-IN">Tamil</option>
+                  <option value="uk-UA">Ukrainian</option>
+                  <option value="hu-HU">Hungarian</option>
+                  <option value="no-NO">Norwegian</option>
+                  <option value="vi-VN">Vietnamese</option>
+                  <option value="bn-IN">Bengali</option>
+                  <option value="th-TH">Thai</option>
+                  <option value="he-IL">Hebrew</option>
+                  <option value="id-ID">Indonesian</option>
+                  <option value="ka-GE">Georgian</option>
+                  <option value="te-IN">Telugu</option>
+                  <option value="gu-IN">Gujarati</option>
+                  <option value="kn-IN">Kannada</option>
+                  <option value="ml-IN">Malayalam</option>
+                  <option value="mr-IN">Marathi</option>
+                  <option value="pa-IN">Punjabi</option>
                 </select>
               </div>
               <div class="form-group">
@@ -104,6 +149,12 @@
               <label class="form-label">System Prompt / Instructions</label>
               <textarea v-model="form.system_prompt" class="input textarea" rows="8" placeholder="You are a helpful assistant for 3CX. Your goal is to..."></textarea>
               <p class="help-text">This is the core "brain" of the AI. Be specific about its persona, rules, and goals.</p>
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;">
+              <label class="form-label">Enterprise Knowledge Base (PDF)</label>
+              <input type="file" @change="handleFileUpload" accept="application/pdf" multiple class="input" />
+              <p class="help-text">Upload PDFs up to 20MB. The AI will strictly answer based on this context (RAG).</p>
             </div>
           </div>
           <div class="modal-footer">
@@ -131,6 +182,7 @@ const loading = ref(true)
 const showModal = ref(false)
 const isEditing = ref(false)
 const saving = ref(false)
+const selectedFiles = ref([])
 
 const form = ref({
   id: null,
@@ -178,12 +230,18 @@ const openCreateModal = () => {
     tts_provider: 'cartesia',
     language: 'en-US'
   }
+  selectedFiles.value = []
   showModal.value = true
+}
+
+const handleFileUpload = (event) => {
+  selectedFiles.value = Array.from(event.target.files)
 }
 
 const editCampaign = (c) => {
   isEditing.value = true
   form.value = { ...c }
+  selectedFiles.value = []
   showModal.value = true
 }
 
@@ -198,13 +256,31 @@ const saveCampaign = async () => {
   
   saving.value = true
   try {
+    let campaignId = form.value.id;
     if (isEditing.value) {
-      await axios.put(`/api/admin/ai-campaigns/${form.value.id}`, form.value)
+      const res = await axios.put(`/api/admin/ai-campaigns/${campaignId}`, form.value)
       toast('Campaign updated!', 'success')
     } else {
-      await axios.post('/api/admin/ai-campaigns', form.value)
+      const res = await axios.post('/api/admin/ai-campaigns', form.value)
+      campaignId = res.data.id;
       toast('Campaign created!', 'success')
     }
+    
+    if (selectedFiles.value.length > 0 && campaignId) {
+      toast('Uploading knowledge base...', 'info')
+      const formData = new FormData()
+      selectedFiles.value.forEach(f => formData.append('files', f))
+      
+      const token = localStorage.getItem('jwt')
+      await axios.post(`/api/campaigns/${campaignId}/knowledge-base`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      toast('Knowledge base uploaded! Indexing started.', 'success')
+    }
+    
     closeModal()
     fetchCampaigns()
   } catch (err) {
@@ -222,6 +298,23 @@ const deleteCampaign = async (id) => {
     fetchCampaigns()
   } catch (err) {
     toast(err.response?.data?.error || 'Failed to delete campaign', 'error')
+  }
+}
+
+const testCampaign = async (c) => {
+  const destination = prompt(`Enter phone number or extension to test Campaign: ${c.name}`);
+  if (!destination) return;
+  
+  try {
+    toast('Triggering AI test call...', 'info');
+    const res = await axios.post('/api/admin/test-call', {
+      ai_project_id: c.ai_project_id,
+      campaign_id: c.id,
+      destination
+    });
+    toast(`Test call initiated! Call ID: ${res.data.call_id}`, 'success');
+  } catch (err) {
+    toast(err.response?.data?.error || 'Failed to trigger test call', 'error');
   }
 }
 

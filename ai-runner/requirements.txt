@@ -4,3 +4,9 @@ requests
 pydantic
 redis
 bullmq
+
+qdrant-client
+langchain
+langchain-huggingface
+pypdf
+sentence-transformers

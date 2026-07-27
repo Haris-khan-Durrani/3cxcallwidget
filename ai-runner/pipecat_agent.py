@@ -3,24 +3,68 @@ import os
 import logging
 import requests
 import json
+import time
 from bullmq import Worker, Queue
 
 # Pipecat imports
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.task import PipelineTask
+from pipecat.pipeline.task import PipelineTask, PipelineParams
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.processors.aggregators.llm_response import LLMAssistantResponseAggregator, LLMUserResponseAggregator
+from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_response_universal import LLMUserAggregator, LLMAssistantAggregator
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.frames.frames import EndFrame, TextFrame, SystemFrame
 from pipecat.transports.daily.transport import DailyTransport, DailyParams
-from pipecat.frames.frames import EndFrame, TextFrame
 # Services
-from pipecat.services.deepgram import DeepgramSTTService
-from pipecat.services.openrouter import OpenRouterLLMService
-from pipecat.services.cartesia import CartesiaTTSService
+from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.openrouter.llm import OpenRouterLLMService
+from pipecat.services.cartesia.tts import CartesiaTTSService
 
 logger = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 NODE_BACKEND_URL = os.getenv("NODE_BACKEND_URL", "http://node:3000")
+QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
+
+from qdrant_client import QdrantClient
+from langchain_huggingface import HuggingFaceEmbeddings
+try:
+    qdrant_client = QdrantClient(url=QDRANT_URL)
+    embeddings_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+except Exception as e:
+    logger.error(f"RAG init error: {e}")
+    qdrant_client = None
+    embeddings_model = None
+
+class RAGContextInjector(FrameProcessor):
+    def __init__(self, campaign_id):
+        super().__init__()
+        self.campaign_id = campaign_id
+
+    async def process_frame(self, frame, direction):
+        await super().process_frame(frame, direction)
+        
+        if isinstance(frame, TextFrame) and direction == FrameDirection.DOWNSTREAM:
+            try:
+                if qdrant_client and embeddings_model:
+                    vector = embeddings_model.embed_query(frame.text)
+                    results = qdrant_client.search(
+                        collection_name="knowledge_base",
+                        query_vector=vector,
+                        query_filter={"must": [{"key": "campaign_id", "match": {"value": self.campaign_id}}]},
+                        limit=3
+                    )
+                    
+                    if results:
+                        context = "\\n".join([f"- {res.payload.get('content')}" for res in results])
+                        # Append context strictly behind the scenes to guide the LLM
+                        frame.text = f"{frame.text}\\n\\n[Strict System Instruction: You MUST answer the preceding user query using ONLY the following verified context. If the context does not contain the answer, politely decline and say you do not know. Context:\\n{context}]"
+            except Exception as e:
+                logger.error(f"RAG Retrieval Error: {e}")
+                
+            await self.push_frame(frame, direction)
+        else:
+            await self.push_frame(frame, direction)
 
 async def fetch_credentials(call_id, jwt_token):
     headers = {"Authorization": f"Bearer {jwt_token}"}
@@ -40,9 +84,7 @@ def create_daily_room(daily_api_key):
     # Create a private, expirable room
     payload = {
         "properties": {
-            "exp": int(asyncio.get_event_loop().time()) + 3600, # expires in 1 hour
-            "is_locked": False, # Open for SIP dial-out
-            "enable_sip": True
+            "exp": int(time.time()) + 3600 # expires in 1 hour
         }
     }
     response = requests.post(url, headers=headers, json=payload)
@@ -65,6 +107,7 @@ async def process_call_job(job, job_token):
     sip_config = creds.get("sip", {})
     providers_config = creds.get("providers", {})
     campaign_config = creds.get("campaign", {})
+    campaign_id = campaign_config.get("id")
     daily_key = providers_config.get("daily")
     
     logger.info(f"Loaded credentials for PBX: {sip_config.get('server_url')}")
@@ -95,9 +138,9 @@ async def process_call_job(job, job_token):
     messages = [{"role": "system", "content": system_prompt}]
     
     # We initialize the Context
-    # Pipecat 1.x uses standard message lists
-    tma_in = LLMUserResponseAggregator(messages)
-    tma_out = LLMAssistantResponseAggregator(messages)
+    context = LLMContext(messages)
+    tma_in = LLMUserAggregator(context)
+    tma_out = LLMAssistantAggregator(context)
 
     # 4. Setup Daily Transport
     logger.info(f"Initializing Daily SIP Transport")
@@ -113,10 +156,13 @@ async def process_call_job(job, job_token):
         )
     )
 
+    rag_injector = RAGContextInjector(campaign_id=campaign_id)
+
     # 5. Build Pipeline
     pipeline = Pipeline([
         transport.input(),
         stt,
+        rag_injector,
         tma_in,
         llm,
         tts,
@@ -124,7 +170,7 @@ async def process_call_job(job, job_token):
         tma_out
     ])
 
-    task = PipelineTask(pipeline, params=PipelineTask.Params(allow_interruptions=True))
+    task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
     
     # Event Handlers
     @transport.event_handler("on_joined")
@@ -199,6 +245,9 @@ async def main():
     
     redis_opts = {"url": REDIS_URL} if "://" in REDIS_URL else {"host": "localhost", "port": 6379}
     worker = Worker("ai-call-initiation", process_call_job, {"connection": REDIS_URL})
+    
+    from knowledge_indexer import process_ingestion_job
+    indexer_worker = Worker("ai-knowledge-ingestion", process_ingestion_job, {"connection": REDIS_URL})
     
     logger.info("Waiting for jobs on ai-call-initiation...")
     while True:

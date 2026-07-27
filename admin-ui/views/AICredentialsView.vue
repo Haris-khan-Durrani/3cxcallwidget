@@ -142,6 +142,7 @@
                 <div style="display: flex; gap: 8px;">
                   <button class="btn btn-sm btn-ghost" @click="editCredential(c)">Edit / Add</button>
                   <button class="btn btn-sm btn-primary" @click="testCall(c.ai_project_id)" v-if="c.has_sip && c.has_deepgram && c.has_cartesia && c.has_openrouter">Test Call</button>
+                  <button class="btn btn-sm btn-ghost" style="color: #ef4444;" @click="deleteProject(c.ai_project_id)">Delete</button>
                 </div>
               </td>
             </tr>
@@ -265,10 +266,27 @@ const createAiProject = async () => {
     newProjectForm.name = ''
     newProjectForm.fqdn_3cx = ''
     toast('AI Project created!', 'success')
+    fetchCredentials() // refresh table
   } catch (err) {
     toast(err.response?.data?.error || 'Failed to create project', 'error')
   } finally {
     creatingProject.value = false
+  }
+}
+
+const deleteProject = async (id) => {
+  if (!confirm('Are you sure you want to delete this AI Project? This will delete all credentials, campaigns, and call records associated with it!')) return;
+  
+  try {
+    await axios.delete(`/api/admin/ai-projects/${id}`)
+    toast('AI Project deleted', 'success')
+    if (form.ai_project_id === id) {
+      form.ai_project_id = '' // clear form if deleted
+    }
+    fetchAiProjects()
+    fetchCredentials()
+  } catch (err) {
+    toast(err.response?.data?.error || 'Failed to delete project', 'error')
   }
 }
 
@@ -309,16 +327,25 @@ const fetchCartesiaVoices = async (silent = false) => {
     if (!silent) toast('Please select an AI Project first', 'error')
     return
   }
+  if (!form.cartesia_key && !silent) {
+    toast('Please enter a Cartesia API Key to fetch voices', 'error')
+    // Don't return here if silent is true, we might just be loading saved keys
+  }
+  
   fetchingVoices.value = true
   try {
-    const res = await axios.get(`/api/admin/ai-projects/${form.ai_project_id}/cartesia/voices`)
+    const config = {}
+    if (form.cartesia_key) {
+      config.headers = { 'x-cartesia-key-override': form.cartesia_key }
+    }
+    const res = await axios.get(`/api/admin/ai-projects/${form.ai_project_id}/cartesia/voices`, config)
     cartesiaVoices.value = res.data || []
     if (cartesiaVoices.value.length > 0 && !form.cartesia_voice_id) {
       form.cartesia_voice_id = cartesiaVoices.value[0].id
     }
     if (!silent) toast('Cartesia voices loaded!', 'success')
   } catch (err) {
-    if (!silent) toast(err.response?.data?.error || 'Failed to fetch voices. Ensure Cartesia key is saved first.', 'error')
+    if (!silent) toast(err.response?.data?.error || 'Failed to fetch voices. Ensure Cartesia key is valid.', 'error')
   } finally {
     fetchingVoices.value = false
   }
@@ -380,11 +407,16 @@ const previewCartesiaVoice = async () => {
   previewingVoice.value = true
   toast('Generating preview...', 'info')
   try {
-    const res = await axios.post(`/api/admin/ai-projects/${form.ai_project_id}/cartesia/preview`, {
+    const payload = {
       voice_id: form.cartesia_voice_id,
       text: previewText,
       language: lang
-    }, { responseType: 'blob' })
+    }
+    if (form.cartesia_key) {
+      payload.cartesia_key = form.cartesia_key
+    }
+    
+    const res = await axios.post(`/api/admin/ai-projects/${form.ai_project_id}/cartesia/preview`, payload, { responseType: 'blob' })
     
     if (audioPlayer) {
       audioPlayer.pause()

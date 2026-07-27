@@ -1606,13 +1606,7 @@ app.post('/api/call', async (req, res) => {
     return res.status(403).json({ error: 'Access denied. Unauthorized origin.' });
   }
 
-  // 3. IP Rate Limiting: Max 5 call requests per 15 minutes per IP
-  if (isIpRateLimited(clientIp, 5, 15 * 60 * 1000)) {
-    console.warn(`[Security] IP Rate limit exceeded for IP ${clientIp}`);
-    return res.status(429).json({ error: 'Too many call attempts from this IP. Please try again in 15 minutes.' });
-  }
-
-  // 4. Honeypot Anti-Bot Protection: Real human visitors cannot see or fill hidden fields
+  // 3. Honeypot Anti-Bot Protection: Real human visitors cannot see or fill hidden fields
   const honeypotTriggered = (website_hp_confirm && String(website_hp_confirm).trim() !== '') ||
     (website && String(website).trim() !== '') ||
     (fax && String(fax).trim() !== '');
@@ -1623,7 +1617,7 @@ app.post('/api/call', async (req, res) => {
     return res.json({ success: true, message: 'Call initiated successfully', callId: null });
   }
 
-  // 5. Spam Pattern Check: Reject inputs with embedded spam website URLs
+  // 4. Spam Pattern Check: Reject inputs with embedded spam website URLs
   const containsUrlPattern = /(https?:\/\/|www\.|[a-zA-Z0-9-]+\.(com|ru|xyz|top|online|site|info))/i;
   if (containsUrlPattern.test(firstName) || containsUrlPattern.test(lastName || '') || containsUrlPattern.test(phone)) {
     console.warn(`[Security] Spam URL detected in form input from IP ${clientIp}`);
@@ -1642,6 +1636,18 @@ app.post('/api/call', async (req, res) => {
     const widget = await Widget.findByPk(widgetId);
     if (!widget) {
       return res.status(404).json({ error: 'Widget not found' });
+    }
+
+    // 5. Configurable IP Rate Limiting (Managed in Widget Settings)
+    if (widget.rate_limit_enabled === true) {
+      const maxAttempts = widget.rate_limit_max_attempts || 5;
+      const cooldownMins = widget.rate_limit_cooldown_minutes || 15;
+      if (isIpRateLimited(clientIp, maxAttempts, cooldownMins * 60 * 1000)) {
+        console.warn(`[Security] IP Rate limit exceeded for IP ${clientIp} on Widget ${widget.id}`);
+        return res.status(429).json({
+          error: `Too many call attempts from this IP. Please try again in ${cooldownMins} minute${cooldownMins > 1 ? 's' : ''}.`
+        });
+      }
     }
 
     const pageUrl = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
@@ -2768,7 +2774,8 @@ app.put('/api/admin/widgets/:id', authenticateToken, async (req, res) => {
     const data = { ...req.body };
     const intFields = [
       'border_radius', 'btn_size', 'widget_width', 'widget_height',
-      'logo_height', 'logo_width', 'ring_timeout_seconds', 'overlay_blur'
+      'logo_height', 'logo_width', 'ring_timeout_seconds', 'overlay_blur',
+      'rate_limit_max_attempts', 'rate_limit_cooldown_minutes'
     ];
     intFields.forEach(field => {
       if (data[field] === '' || data[field] === undefined) {

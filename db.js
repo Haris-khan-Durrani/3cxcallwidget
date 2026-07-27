@@ -136,6 +136,10 @@ const Widget = sequelize.define('Widget', {
   max_concurrent_calls: { type: DataTypes.INTEGER, defaultValue: 5 },
   monthly_call_minutes: { type: DataTypes.INTEGER, defaultValue: 1000 },
   max_campaigns:        { type: DataTypes.INTEGER, defaultValue: 10 },
+  // Rate limiting & IP protection settings
+  rate_limit_enabled:          { type: DataTypes.BOOLEAN, defaultValue: false },
+  rate_limit_max_attempts:     { type: DataTypes.INTEGER, defaultValue: 5 },
+  rate_limit_cooldown_minutes: { type: DataTypes.INTEGER, defaultValue: 15 },
 });
 
 const CallRecord = sequelize.define('CallRecord', {

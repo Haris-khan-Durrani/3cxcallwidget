@@ -933,9 +933,10 @@ async function checkCallStatusViaCallControl(widget, extension, cxCallId, custom
         }
         return { active: true, connected: isConnected, ringing: isRinging };
       } else {
-        // Active participants exist on extension, but none belong to this call id (agent is busy on another call)
-        console.log(`[3CX] Extension ${extension} is busy on another call (active call participants present but do not match CallId ${cxCallId}).`);
-        return { active: false, busy: true };
+        // Active participants exist on extension, but none belong to this call id yet.
+        // It could be the initial leg of our call before the customer is dialed.
+        // Returning active: false (without busy: true) lets the polling loop wait up to 12s before failing over.
+        return { active: false };
       }
     }
     return { active: false };
@@ -1002,7 +1003,7 @@ function updateLastAgentStatus(agentExtensionStr, status) {
 
 /**
  * Searches the 3CX recordings list for a match and links it to the call record.
- * Retries up to 4 times with a 5-second delay to handle PBX write latency.
+ * Retries up to 20 times with a 5-second delay to handle PBX write latency.
  */
 async function fetchAndLinkRecording(recordId, attempt = 1) {
   try {
@@ -1012,7 +1013,7 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     const widget = record.Widget;
     if (!widget.client_id_3cx || !widget.client_secret_3cx) return;
 
-    console.log(`[3CX] Searching call recording for customer ${record.customer_phone} / call ${record.id} (Attempt ${attempt}/4)...`);
+    console.log(`[3CX] Searching call recording for customer ${record.customer_phone} / call ${record.id} (Attempt ${attempt}/20)...`);
 
     const token = await get3cxToken(widget);
     const fqdn = sanitizeFqdn(widget.fqdn_3cx);
@@ -1086,8 +1087,8 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
         await triggerUserWebhook(record, widget);
       }
     } else {
-      if (attempt < 4) {
-        console.log(`[3CX] Recording not found yet. Retrying search (attempt ${attempt + 1}/4) in 5s...`);
+      if (attempt < 20) {
+        console.log(`[3CX] Recording not found yet. Retrying search (attempt ${attempt + 1}/20) in 5s...`);
         setTimeout(() => fetchAndLinkRecording(recordId, attempt + 1), 5000);
       } else {
         console.log(`[3CX] Max recording search attempts reached. No matching recording found in the recent recordings list for call ${record.id}.`);
@@ -1095,8 +1096,8 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     }
   } catch (err) {
     console.error('[3CX] Error fetching recordings list:', err.response?.data || err.message);
-    if (attempt < 4) {
-      console.log(`[3CX] Retrying search due to error (attempt ${attempt + 1}/4) in 5s...`);
+    if (attempt < 20) {
+      console.log(`[3CX] Retrying search due to error (attempt ${attempt + 1}/20) in 5s...`);
       setTimeout(() => fetchAndLinkRecording(recordId, attempt + 1), 5000);
     }
   }

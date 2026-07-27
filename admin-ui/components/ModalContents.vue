@@ -111,18 +111,35 @@
         <img :src="f.logo_url" alt="logo" :style="{ maxHeight: f.logo_height ? f.logo_height + 'px' : '36px', maxWidth: f.logo_width ? f.logo_width + 'px' : 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)' }"/>
       </div>
 
-      <div class="mc-av-container">
-        <svg v-if="f.agent_rotation_enabled" class="mc-av-ring-svg" viewBox="0 0 76 76">
-          <circle class="mc-av-ring-bg" :style="{ stroke: f.theme_style === 'split' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.06)' }" cx="38" cy="38" r="33" />
-          <circle class="mc-av-ring-progress" :style="{ stroke: f.theme_style === 'split' ? f.color_button_text || '#ffffff' : f.color_primary }" cx="38" cy="38" r="33" />
-        </svg>
-        <img
-          :style="{ borderRadius: f.avatar_shape === 'circle' ? '50%' : f.avatar_shape === 'rounded' ? '12px' : '0' }"
-          src="https://ui-avatars.com/api/?name=John+D&background=1f6feb&color=fff&size=128"
-          alt="Agent"
-          class="mc-av"
-        />
-      </div>
+      <template v-if="f.agent_display_mode === 'full_graphic' || f.agent_display_mode === 'auto_slider'">
+        <div class="mc-full-graphic-wrap" style="position: relative; width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 10px;">
+          <img
+            :src="(slideIdx === 1 && f.agent_display_mode === 'auto_slider' && f.side_graphic_url) ? f.side_graphic_url : (f.agent_full_image_url || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80')"
+            alt="Graphic"
+            style="width: 100%; max-height: 180px; object-fit: cover; display: block; border-radius: 8px;"
+          />
+          <div v-if="f.agent_display_mode === 'auto_slider'" style="display:flex; justify-content:center; gap:6px; margin-top:6px;">
+            <span :style="{ width: '8px', height: '8px', borderRadius: '50%', background: slideIdx === 0 ? (f.theme_style==='split'? (f.color_button_text || '#fff') : f.color_primary) : '#ccc', cursor:'pointer' }" @click.stop="slideIdx = 0"></span>
+            <span :style="{ width: '8px', height: '8px', borderRadius: '50%', background: slideIdx === 1 ? (f.theme_style==='split'? (f.color_button_text || '#fff') : f.color_primary) : '#ccc', cursor:'pointer' }" @click.stop="slideIdx = 1"></span>
+          </div>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="mc-av-container">
+          <svg v-if="f.agent_rotation_enabled" class="mc-av-ring-svg" viewBox="0 0 76 76">
+            <circle class="mc-av-ring-bg" :style="{ stroke: f.theme_style === 'split' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.06)' }" cx="38" cy="38" r="33" />
+            <circle class="mc-av-ring-progress" :style="{ stroke: f.theme_style === 'split' ? f.color_button_text || '#ffffff' : f.color_primary }" cx="38" cy="38" r="33" />
+          </svg>
+          <img
+            :style="{ borderRadius: f.avatar_shape === 'circle' ? '50%' : f.avatar_shape === 'rounded' ? '12px' : '0' }"
+            src="https://ui-avatars.com/api/?name=John+D&background=1f6feb&color=fff&size=128"
+            alt="Agent"
+            class="mc-av"
+          />
+        </div>
+      </template>
+
       <div class="mc-av-name">John Doe</div>
       
       <!-- Inline editable Agent Status -->
@@ -244,8 +261,26 @@
 </template>
 
 <script setup>
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+
 const props = defineProps({ f: Object, success: Boolean, isClosedPreview: Boolean, tab: String })
 defineEmits(['close', 'submit', 'back', 'select-tab'])
+
+const slideIdx = ref(0)
+let sliderTimer = null
+
+const startSlider = () => {
+  if (sliderTimer) clearInterval(sliderTimer)
+  if (props.f?.agent_display_mode === 'auto_slider' && props.f?.slider_auto_play !== false) {
+    sliderTimer = setInterval(() => {
+      slideIdx.value = (slideIdx.value + 1) % 2
+    }, (props.f?.slider_interval_sec || 4) * 1000)
+  }
+}
+
+onMounted(() => { startSlider() })
+onUnmounted(() => { if (sliderTimer) clearInterval(sliderTimer) })
+watch(() => [props.f?.agent_display_mode, props.f?.slider_auto_play, props.f?.slider_interval_sec], startSlider)
 
 const parseIconStyle = (styleStr) => {
   if (!styleStr) return ''

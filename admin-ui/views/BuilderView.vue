@@ -357,25 +357,63 @@
               </div>
               <div v-if="f.show_agent">
                 <div class="ps-field" style="margin-top:14px">
-                  <label>Avatar Shape</label>
-                  <div class="avatar-shape-opts">
-                    <div v-for="sh in avatarShapes" :key="sh.val" :class="['av-opt', {active: f.avatar_shape===sh.val}]" @click="f.avatar_shape=sh.val">
-                      <div class="av-demo" :style="{borderRadius: sh.radius, background: f.color_primary}">
-                        <img src="https://ui-avatars.com/api/?name=John&background=transparent&color=fff&size=64" style="width:100%;height:100%;object-fit:cover;"/>
+                  <label>Agent Graphic Display Style</label>
+                  <div class="pos-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div v-for="m in agentDisplayModes" :key="m.val" :class="['pos-opt', {active: (f.agent_display_mode || 'circle')===m.val}]" @click="f.agent_display_mode=m.val" style="padding: 10px 4px; font-size: 11px;">
+                      <span style="font-size:18px;">{{ m.icon }}</span><br/><span>{{ m.label }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <template v-if="(f.agent_display_mode || 'circle') === 'circle'">
+                  <div class="ps-field" style="margin-top:10px">
+                    <label>Avatar Shape</label>
+                    <div class="avatar-shape-opts">
+                      <div v-for="sh in avatarShapes" :key="sh.val" :class="['av-opt', {active: f.avatar_shape===sh.val}]" @click="f.avatar_shape=sh.val">
+                        <div class="av-demo" :style="{borderRadius: sh.radius, background: f.color_primary}">
+                          <img src="https://ui-avatars.com/api/?name=John&background=transparent&color=fff&size=64" style="width:100%;height:100%;object-fit:cover;"/>
+                        </div>
+                        <span>{{ sh.label }}</span>
                       </div>
-                      <span>{{ sh.label }}</span>
                     </div>
                   </div>
-                </div>
-                <div class="ps-field">
-                  <label>Avatar Border Color</label>
-                  <div class="cp-wrap">
-                    <div class="cp-swatch" :style="{background: f.avatar_border_color}" @click="$refs.cpAvatar.click()">
-                      <input ref="cpAvatar" type="color" :value="f.avatar_border_color" @input="e=>f.avatar_border_color=e.target.value" class="cp-native"/>
+                  <div class="ps-field">
+                    <label>Avatar Border Color</label>
+                    <div class="cp-wrap">
+                      <div class="cp-swatch" :style="{background: f.avatar_border_color}" @click="$refs.cpAvatar.click()">
+                        <input ref="cpAvatar" type="color" :value="f.avatar_border_color" @input="e=>f.avatar_border_color=e.target.value" class="cp-native"/>
+                      </div>
+                      <input class="cp-hex" :value="f.avatar_border_color" @change="e=>{ if(/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) f.avatar_border_color=e.target.value }" maxlength="7"/>
                     </div>
-                    <input class="cp-hex" :value="f.avatar_border_color" @change="e=>{ if(/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) f.avatar_border_color=e.target.value }" maxlength="7"/>
                   </div>
-                </div>
+                </template>
+
+                <template v-if="f.agent_display_mode === 'full_graphic' || f.agent_display_mode === 'auto_slider'">
+                  <div class="ps-field" style="margin-top:10px">
+                    <label>Big Agent Graphic Image URL</label>
+                    <input v-model="f.agent_full_image_url" class="inp" type="url" placeholder="https://example.com/agent-full-graphic.jpg"/>
+                    <span class="hint">Upload or link a full-height agent graphic / portrait image.</span>
+                  </div>
+                </template>
+
+                <template v-if="f.agent_display_mode === 'auto_slider'">
+                  <div class="ps-field">
+                    <label>Side / Banner Graphic Image URL (Slide 2)</label>
+                    <input v-model="f.side_graphic_url" class="inp" type="url" placeholder="https://example.com/side-banner-graphic.jpg"/>
+                    <span class="hint">Upload or link a secondary promotional banner graphic.</span>
+                  </div>
+                  <div class="ps-field" style="margin: 10px 0;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-weight: 600;">
+                      <input type="checkbox" v-model="f.slider_auto_play" style="width: 16px; height: 16px; accent-color: var(--primary);" />
+                      <span>Enable Auto-Sliding Carousel</span>
+                    </label>
+                  </div>
+                  <div class="ps-field" v-if="f.slider_auto_play">
+                    <label>Slide Duration (Seconds)</label>
+                    <input v-model.number="f.slider_interval_sec" class="inp" type="number" min="2" max="15" placeholder="4"/>
+                  </div>
+                </template>
+
                 <div class="ps-field">
                   <label>Agent Status Label</label>
                   <input v-model="f.agent_status_text" class="inp" type="text" placeholder="Will answer your call"/>
@@ -387,7 +425,7 @@
                   </label>
                   <span class="hint" style="margin-left: 24px; margin-top: 4px; display: block;">When enabled, the widget cycles through all active agents every 15 seconds. If disabled, a random agent is loaded statically.</span>
                 </div>
-                <div class="ps-field" v-if="f.theme_style === 'split'">
+                <div class="ps-field" v-if="f.theme_style === 'split' && f.agent_display_mode === 'circle'">
                   <label>Agent Panel Background Image URL <span class="opt-tag">optional</span></label>
                   <input v-model="f.agent_bg_url" class="inp" type="url" placeholder="https://example.com/bg.jpg"/>
                   <span class="hint">Applies a premium background image to the agent column.</span>
@@ -887,6 +925,11 @@ const popupStyles = [
   { val:'corner', label:'Corner Popup',   css:'border-radius:10px 10px 0 10px;width:36px;height:36px;background:#e5e7eb;' },
   { val:'center', label:'Center Modal',   css:'border-radius:10px;width:44px;height:32px;background:#e5e7eb;margin:0 auto;' },
 ]
+const agentDisplayModes = [
+  { val: 'circle', label: 'Circle Avatar', icon: '👤' },
+  { val: 'full_graphic', label: 'Big Full-Graphic', icon: '🖼️' },
+  { val: 'auto_slider', label: 'Dual Auto-Slider', icon: '🎞️' }
+]
 const avatarShapes = [
   { val:'circle',  label:'Circle',  radius:'50%' },
   { val:'rounded', label:'Rounded', radius:'10px' },
@@ -956,6 +999,7 @@ const f = reactive({
   logo_url:'', position:'bottom-right', popup_style:'corner', tooltip_style:'classic',
   border_radius:16, btn_size:60, font_family:'Inter',
   show_agent:true, avatar_shape:'circle', avatar_border_color:'', agent_status_text:'Will answer your call',
+  agent_display_mode:'circle', agent_full_image_url:'', side_graphic_url:'', slider_auto_play:true, slider_interval_sec:4,
   fields_order:'first_name,last_name,email,phone',
   animation_style:'pulse', overlay_blur:3, custom_css:'', show_branding:true,
   branding_text:'Powered by 3CX Widget', branding_url:'https://3cx.com',
@@ -1050,6 +1094,7 @@ onMounted(async () => {
       'widget_success_title','widget_success_msg','tooltip_text','country_code','country_flag',
       'require_email','require_lastname','logo_url','position','popup_style','border_radius','btn_size',
       'font_family','show_agent','avatar_shape','avatar_border_color','agent_status_text','fields_order',
+      'agent_display_mode','agent_full_image_url','side_graphic_url','slider_auto_play','slider_interval_sec',
       'animation_style','overlay_blur','custom_css','show_branding','branding_text','branding_url',
       'theme_style','agent_bg_url','widget_width','widget_height',
       'logo_height','logo_width','icon_success_html','icon_failed_html','icon_success_style','icon_failed_style',

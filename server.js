@@ -398,14 +398,13 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     const now = new Date();
     const pastIso = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
     const futureIso = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
-    const filterParam = encodeURIComponent(`(StartTime ge ${pastIso} and StartTime lt ${futureIso})`);
+    const rawFilter = `(StartTime ge ${pastIso} and StartTime lt ${futureIso})`;
 
     const candidateUrls = [
-      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$skip=0&$filter=${filterParam}&$count=true&$orderby=StartTime desc&$select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn`,
+      `https://${hostWithPort}/xapi/v1/Recordings?%24top=50&%24skip=0&%24filter=${encodeURI(rawFilter)}&%24count=true&%24orderby=StartTime%20desc&%24select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn,SentimentScore,Summary,IsTranscribed,TranscriptionResult,CanBeTranscribed`,
       `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`,
       `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$skip=0&$filter=${filterParam}&$count=true&$orderby=StartTime desc&$select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn`,
-      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`
+      `https://${hostWithPort}/xapi/v1/Recordings`
     ];
 
     const https = require('https');
@@ -416,20 +415,25 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
 
     for (const url of candidateUrls) {
       try {
+        console.log(`[3CX Dialer Recordings] Querying: ${url}`);
         const resp = await axios.get(url, {
           headers: { Authorization: `Bearer ${token}` },
           httpsAgent,
-          timeout: 4000
+          timeout: 5000
         });
         const data = resp.data;
         const items = Array.isArray(data) ? data : (data?.value || data?.items || data?.result || []);
+        console.log(`[3CX Dialer Recordings] Status: ${resp.status} | Total Items Returned: ${items.length}`);
         if (items.length > 0) {
-          console.log(`[3CX Dialer Recordings] Successfully fetched ${items.length} recordings from endpoint: ${url}`);
+          console.log('[3CX Dialer Recordings Response Sample]:', JSON.stringify(items.slice(0, 3), null, 2));
           list = items;
           break;
+        } else {
+          console.log('[3CX Dialer Recordings Raw Response Data]:', JSON.stringify(data, null, 2));
         }
       } catch (err) {
         lastErr = err;
+        console.error(`[3CX Dialer Recordings Error] Candidate ${url} returned ${err.response?.status || err.message}:`, err.response?.data || '');
       }
     }
 
@@ -1118,14 +1122,13 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     const now = new Date();
     const pastIso = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
     const futureIso = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
-    const filterParam = encodeURIComponent(`(StartTime ge ${pastIso} and StartTime lt ${futureIso})`);
+    const rawFilter = `(StartTime ge ${pastIso} and StartTime lt ${futureIso})`;
 
     const candidateUrls = [
-      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$skip=0&$filter=${filterParam}&$count=true&$orderby=StartTime desc&$select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn`,
+      `https://${hostWithPort}/xapi/v1/Recordings?%24top=50&%24skip=0&%24filter=${encodeURI(rawFilter)}&%24count=true&%24orderby=StartTime%20desc&%24select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn,SentimentScore,Summary,IsTranscribed,TranscriptionResult,CanBeTranscribed`,
       `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`,
       `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$skip=0&$filter=${filterParam}&$count=true&$orderby=StartTime desc&$select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn`,
-      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`
+      `https://${hostWithPort}/xapi/v1/Recordings`
     ];
 
     const https = require('https');
@@ -1136,20 +1139,25 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
 
     for (const url of candidateUrls) {
       try {
+        console.log(`[3CX Recordings] Querying: ${url}`);
         const resp = await axios.get(url, {
           headers: { Authorization: `Bearer ${token}` },
           httpsAgent,
-          timeout: 4000
+          timeout: 5000
         });
         const data = resp.data;
         const items = Array.isArray(data) ? data : (data?.value || data?.items || data?.result || []);
+        console.log(`[3CX Recordings] Status: ${resp.status} | Total Items Returned: ${items.length}`);
         if (items.length > 0) {
-          console.log(`[3CX Recordings] Successfully fetched ${items.length} recordings from endpoint: ${url}`);
+          console.log('[3CX Recordings Response Sample]:', JSON.stringify(items.slice(0, 3), null, 2));
           list = items;
           break;
+        } else {
+          console.log('[3CX Recordings Raw Response Data]:', JSON.stringify(data, null, 2));
         }
       } catch (err) {
         lastErr = err;
+        console.error(`[3CX Recordings Error] Candidate ${url} returned ${err.response?.status || err.message}:`, err.response?.data || '');
       }
     }
 

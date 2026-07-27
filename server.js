@@ -948,7 +948,16 @@ async function triggerFailoverCall(callRecord, widget) {
     await triggerUserWebhook(callRecord, widget);
     return true;
   } catch (err) {
-    console.error(`[3CX] Failover call to Ext failed:`, err.message);
+    console.error(`[3CX] Failover call to Ext ${newAgent?.extension || ''} failed:`, err.message);
+    if (newAgent?.extension) {
+      callRecord.agent_extension = updateLastAgentStatus(`${callRecord.agent_extension || ''}, ${newAgent.extension}`, 'failed');
+      await callRecord.save();
+      const nextAgents = agents.filter(a => !callRecord.agent_extension.includes(String(a.extension)));
+      if (nextAgents.length > 0 && (callRecord.retry_count || 0) < 3) {
+        console.log(`[3CX] Retrying failover with next available agent (${nextAgents.length} left)...`);
+        return await triggerFailoverCall(callRecord, widget);
+      }
+    }
     callRecord.status = 'Failed';
     callRecord.outcome = 'Failed';
     callRecord.ended_at = new Date();
@@ -1027,6 +1036,10 @@ async function checkCallStatusViaCallControl(widget, extension, cxCallId, custom
     }
     return { active: false };
   } catch (err) {
+    if (err.response?.status === 401 || err.response?.status === 403) {
+      console.log(`[3CX CallControl] Received ${err.response.status} for Ext ${extension}. Invalidating token cache...`);
+      invalidate3cxToken(widget.id);
+    }
     console.error(`[3CX] Failed checkCallStatusViaCallControl for Ext ${extension}:`, err.message);
     return null; // Return null to indicate the check itself failed
   }

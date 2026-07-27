@@ -3847,21 +3847,30 @@ const PORT = process.env.PORT || 3000;
 async function startServer() {
   try {
     const queryInterface = sequelize.getQueryInterface();
-    try {
-      const tableInfo = await queryInterface.describeTable('Widgets');
-      const widgetAttrs = Widget.rawAttributes;
-      for (const [colName, attrDef] of Object.entries(widgetAttrs)) {
-        if (tableInfo && !tableInfo[colName]) {
-          try {
-            await queryInterface.addColumn('Widgets', colName, attrDef);
-            console.log(`[Migration] Automatically added missing column '${colName}' to Widgets table.`);
-          } catch (colErr) {
-            console.warn(`[Migration] Notice for column '${colName}':`, colErr.message);
+    const tablesToMigrate = [
+      { name: 'Widgets', model: Widget },
+      { name: 'DialerWidgets', model: DialerWidget },
+      { name: 'CallRecords', model: CallRecord },
+      { name: 'DialerCallRecords', model: DialerCallRecord }
+    ];
+
+    for (const target of tablesToMigrate) {
+      try {
+        const tableInfo = await queryInterface.describeTable(target.name);
+        const attrs = target.model.rawAttributes;
+        for (const [colName, attrDef] of Object.entries(attrs)) {
+          if (tableInfo && !tableInfo[colName]) {
+            try {
+              await queryInterface.addColumn(target.name, colName, attrDef);
+              console.log(`[Migration] Automatically added missing column '${colName}' to ${target.name} table.`);
+            } catch (colErr) {
+              console.warn(`[Migration] Notice for column '${colName}' on ${target.name}:`, colErr.message);
+            }
           }
         }
+      } catch (migErr) {
+        console.warn(`[Migration] Column auto-migration check notice for ${target.name}:`, migErr.message);
       }
-    } catch (migErr) {
-      console.warn('[Migration] Column auto-migration check notice:', migErr.message);
     }
 
     await sequelize.sync();

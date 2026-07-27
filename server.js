@@ -386,10 +386,13 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     const candidateUrls = [
       `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings()?access_token=${currentToken}`,
+      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings?access_token=${currentToken}`,
+      `https://${hostWithPort}/xapi/v1/Pbx.GetRecordings()?access_token=${currentToken}`,
       `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}`,
       `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}`,
+      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}`,
       `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}`,
       ...(agentExt ? [
@@ -404,7 +407,12 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     for (const url of candidateUrls) {
       try {
         const resp = await axios.get(url, {
-          headers: { Authorization: `Bearer ${currentToken}` },
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+            Accept: 'application/json, text/plain, */*',
+            'OData-Version': '4.0',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
           timeout: 6000
         });
         const data = resp.data;
@@ -1127,10 +1135,13 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     const candidateUrls = [
       `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings()?access_token=${currentToken}`,
+      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings?access_token=${currentToken}`,
+      `https://${hostWithPort}/xapi/v1/Pbx.GetRecordings()?access_token=${currentToken}`,
       `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}`,
       `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}`,
+      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}`,
       `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}`,
       ...(agentExt ? [
@@ -1145,7 +1156,12 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     for (const url of candidateUrls) {
       try {
         const resp = await axios.get(url, {
-          headers: { Authorization: `Bearer ${currentToken}` },
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+            Accept: 'application/json, text/plain, */*',
+            'OData-Version': '4.0',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
           timeout: 6000
         });
         const data = resp.data;

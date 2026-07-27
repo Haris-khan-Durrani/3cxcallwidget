@@ -1930,10 +1930,9 @@ app.get('/api/call/:callId/status', async (req, res) => {
     const currentExt = currentExtRaw ? currentExtRaw.split(':')[0] : null;
 
     let agent = null;
-    if (currentExt) {
-      agent = await Agent.findOne({
-        where: { widgetId: callRecord.widgetId, extension: currentExt }
-      });
+    if (currentExt && callRecord.widgetId) {
+      const allAgents = await Agent.findAll({ where: { widgetId: callRecord.widgetId } });
+      agent = allAgents.find(a => String(a.extension).trim() === String(currentExt).trim());
     }
 
     res.json({
@@ -1941,7 +1940,7 @@ app.get('/api/call/:callId/status', async (req, res) => {
       status: callRecord.status,
       outcome: callRecord.outcome,
       agentExtension: currentExt,
-      agentName: agent ? `${agent.first_name} ${agent.last_name || ''}`.trim() : null,
+      agentName: agent ? `${agent.first_name} ${agent.last_name || ''}`.trim() : (currentExt ? `Agent (Ext ${currentExt})` : null),
       agentAvatarUrl: agent ? agent.avatar_url : null
     });
   } catch (err) {

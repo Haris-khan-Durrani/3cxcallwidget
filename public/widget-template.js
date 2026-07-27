@@ -1690,17 +1690,20 @@
               const $name = document.getElementById('cx-av-name');
               const $sub = document.getElementById('cx-av-sub');
               
-              if ($av && statusData.agentAvatarUrl) {
-                $av.src = statusData.agentAvatarUrl;
-              } else if ($av && statusData.agentName) {
-                $av.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(statusData.agentName)}&background=${PRIMARY.replace('#','')}&color=fff&size=128`;
+              if ($av) {
+                $av.style.display = 'block';
+                if (statusData.agentAvatarUrl) {
+                  $av.src = statusData.agentAvatarUrl;
+                } else if (statusData.agentName) {
+                  $av.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(statusData.agentName)}&background=${PRIMARY.replace('#','')}&color=fff&size=128`;
+                }
               }
               
               if ($name && statusData.agentName) {
                 $name.textContent = statusData.agentName;
               }
               if ($sub) {
-                $sub.textContent = `Dialing (Ext ${statusData.agentExtension})...`;
+                $sub.textContent = `Calling ${statusData.agentName || ('Ext ' + statusData.agentExtension)}...`;
               }
             }
           }

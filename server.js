@@ -1388,14 +1388,16 @@ async function pollActiveCalls() {
                     // Search and link recording after 5s settle delay
                     setTimeout(() => fetchAndLinkRecording(record.id), 5000);
                   } else {
-                    const timeoutLimit = widget.ring_timeout_seconds || 40;
-                    if (ageSeconds < timeoutLimit) {
-                      console.log(`[3CX] Call ${record.id} not active on extension ${lastExt} yet (age ${Math.round(ageSeconds)}s < ${timeoutLimit}s timeout). Waiting.`);
+                    // Call was NEVER answered by customer (status is Initiated or Ringing)
+                    // If agent hung up / declined call (or extension became inactive), trigger immediate failover!
+                    // Wait 3s on initial setup to avoid race condition during CTI dispatch
+                    if (ageSeconds < 3) {
+                      console.log(`[3CX] Call ${record.id} initial setup on extension ${lastExt} (age ${Math.round(ageSeconds)}s). Waiting.`);
                       continue;
                     }
                     const isBusy = ccState.busy === true;
-                    const outcomeStatus = isBusy ? 'busy' : 'missed';
-                    console.log(`[3CX] Call ${record.id} went unanswered/busy (${outcomeStatus}) after ${Math.round(ageSeconds)}s on extension ${lastExt}. Triggering failover.`);
+                    const outcomeStatus = isBusy ? 'busy' : 'declined';
+                    console.log(`[3CX] Call ${record.id} explicitly ${outcomeStatus}/hung up on extension ${lastExt} after ${Math.round(ageSeconds)}s. Triggering immediate failover.`);
                     record.agent_extension = updateLastAgentStatus(record.agent_extension, outcomeStatus);
                     await record.save();
                     await triggerFailoverCall(record, widget);

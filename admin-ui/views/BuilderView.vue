@@ -709,6 +709,32 @@
               </div>
 
               <div class="ps-divider"></div>
+              <div class="ps-head">Security & IP Protection</div>
+              <div class="toggle-row" style="margin-top:10px">
+                <div class="tr-info">
+                  <strong>Enable IP Rate Limiting</strong>
+                  <span>Limit call attempts per IP address to protect against spam & abuse</span>
+                </div>
+                <label class="sw">
+                  <input type="checkbox" v-model="f.rate_limit_enabled"/>
+                  <span class="sw-t"></span>
+                </label>
+              </div>
+
+              <div v-if="f.rate_limit_enabled" style="margin-top: 14px; display: flex; flex-direction: column; gap: 12px;">
+                <div class="ps-field">
+                  <label>Max Call Attempts Per IP</label>
+                  <input v-model.number="f.rate_limit_max_attempts" class="inp" type="number" min="1" max="100" placeholder="5"/>
+                  <span class="hint">Maximum number of call attempts allowed before triggering cooldown</span>
+                </div>
+                <div class="ps-field">
+                  <label>Cooldown Duration (Minutes)</label>
+                  <input v-model.number="f.rate_limit_cooldown_minutes" class="inp" type="number" min="1" max="1440" placeholder="15"/>
+                  <span class="hint">Time visitors must wait before trying to initiate calls again</span>
+                </div>
+              </div>
+
+              <div class="ps-divider"></div>
               <div class="ps-head">Developer styling</div>
               <div class="ps-field" style="margin-top:10px">
                 <label>Custom CSS Overrides</label>
@@ -953,9 +979,11 @@ const f = reactive({
   office_hours_out_subtitle:'We are currently offline. Please leave your details below and we will contact you during business hours!',
   office_hours_out_msg:  'We have received your inquiry. You will be contacted shortly during business hours!',
   office_hours_out_status:"We're Offline",
-  office_hours_out_sub:  "Leave a message and we'll reply during business hours!",
   ring_timeout_seconds:  40,
   agent_rotation_enabled:true,
+  rate_limit_enabled:          false,
+  rate_limit_max_attempts:     5,
+  rate_limit_cooldown_minutes: 15,
 })
 
 const unifiedIconSize = computed({
@@ -1028,7 +1056,8 @@ onMounted(async () => {
       'office_hours_enabled','office_hours_start','office_hours_end','office_hours_timezone',
       'office_hours_days','office_hours_out_title','office_hours_out_subtitle','office_hours_out_msg',
       'office_hours_out_status','office_hours_out_sub','ring_timeout_seconds','agent_rotation_enabled',
-      'tooltip_autohide','tooltip_autohide_seconds']
+      'tooltip_autohide','tooltip_autohide_seconds',
+      'rate_limit_enabled','rate_limit_max_attempts','rate_limit_cooldown_minutes']
     fields.forEach(k => { if (w[k] !== undefined && w[k] !== null) f[k] = w[k] })
     Object.assign(cf, {
       name:               w.name                || '',

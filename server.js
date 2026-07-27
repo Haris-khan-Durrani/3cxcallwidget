@@ -7,6 +7,7 @@ const dns = require('dns');
 
 // Force DNS resolution to prefer IPv4 to prevent IPv6 Docker timeouts on dual-stack servers
 dns.setDefaultResultOrder('ipv4first');
+const { Sequelize } = require('sequelize');
 const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent, User, SystemSetting, AICallCampaign, AICallRecord, AIProviderCredential, SIPConfiguration, AIProject } = require('./db');
 const crypto = require('crypto');
 const { verifyInternalRequest } = require('./utils/jwt');
@@ -600,49 +601,78 @@ function invalidate3cxToken(widgetId) {
  */
 async function execute3cxMakeCall(widgetOrDialer, extension, destination) {
   const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
-  const callUrl = `https://${fqdn}/callcontrol/${encodeURIComponent(extension)}/makecall`;
-  const payload = { destination: String(destination) };
+  const ext  = encodeURIComponent(extension);
+  const dest = String(destination);
 
-  let token = await get3cxToken(widgetOrDialer);
+  // Endpoint candidates for 3CX v18 and v20 compatibility
+  const candidateUrls = [
+    `https://${fqdn}/callcontrol/${ext}/makecall`,
+    `https://${fqdn}/xapi/v1/CallControl/${ext}/makecall`,
+    `https://${fqdn}/xapi/v1/callcontrol/${ext}/makecall`,
+    `https://${fqdn}/callcontrol/${ext}/makeCall`,
+    `https://${fqdn}/callcontrol/makecall`,
+  ];
 
-  try {
-    const res = await axios.post(callUrl, payload, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      timeout: 8000
-    });
-    return res.data;
-  } catch (err) {
-    if (err.response?.status === 403) {
-      console.error(`[3CX 403 Forbidden Error] 3CX denied permission to place call from Extension ${extension}.`, err.response?.data || '');
-      console.error(`[3CX Fix Instruction] To resolve 403 Forbidden:\n` +
-        ` 1. In 3CX Console, go to Admin -> Integrations / System API Credentials.\n` +
-        ` 2. Ensure the Client ID is assigned 'System Owner' or 'System Administrator' role.\n` +
-        ` 3. In Users -> Ext ${extension} -> Rights, ensure Call Control / CTI operations are allowed.`);
-    } else if (err.response?.status === 401) {
-      console.warn(`[3CX CallControl] 401 Unauthorized for Ext ${extension}. Clearing token cache & retrying...`);
-      invalidate3cxToken(widgetOrDialer.id);
+  let lastError = null;
+
+  // Attempt up to 2 times: if 401 or 403 occurs on attempt 0, invalidate token cache and re-authenticate
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let token;
+    try {
       token = await get3cxToken(widgetOrDialer);
+    } catch (tErr) {
+      console.error(`[3CX CallControl] Token fetch failed for widget/dialer: ${tErr.message}`);
+      throw tErr;
+    }
+
+    for (const url of candidateUrls) {
+      const payload = url.endsWith('/callcontrol/makecall')
+        ? { dn: String(extension), destination: dest }
+        : { destination: dest };
+
       try {
-        const resRetry = await axios.post(callUrl, payload, {
+        const res = await axios.post(url, payload, {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
           timeout: 8000
         });
-        return resRetry.data;
-      } catch (retryErr) {
-        if (retryErr.response?.status === 401) {
-          console.error(`[3CX 401 Unauthorized Error] 3CX rejected API token for extension ${extension}. Verify that Client ID/Secret has 'System Owner' permissions in 3CX and extension ${extension} is valid.`);
+        return res.data;
+      } catch (err) {
+        lastError = err;
+        const status = err.response?.status;
+
+        // If 404, silently try next endpoint candidate
+        if (status === 404) continue;
+
+        // If 401 or 403 on attempt 0, invalidate token cache and fetch a fresh token
+        if ((status === 401 || status === 403) && attempt === 0) {
+          console.warn(`[3CX CallControl] Received ${status} from ${url} for Ext ${extension}. Invalidating token cache and retrying with fresh OAuth token...`);
+          invalidate3cxToken(widgetOrDialer.id);
+          break; // break endpoint loop to proceed to attempt 1 with fresh token
         }
-        throw retryErr;
+
+        // For other errors or attempt 1, break endpoint loop
+        break;
       }
     }
-    throw err;
   }
+
+  // Handle final error reporting if all attempts failed
+  if (lastError?.response?.status === 403) {
+    const respDetail = lastError.response?.data ? JSON.stringify(lastError.response.data) : 'No detail returned by 3CX';
+    console.error(`[3CX 403 Forbidden Error] 3CX denied permission to place call from Extension ${extension}. Detail: ${respDetail}`);
+    console.error(`[3CX Fix Instructions for 403 Forbidden on Ext ${extension}]:\n` +
+      ` 1. [Token Cache Reset]: Token cache was cleared. Fresh OAuth token was requested.\n` +
+      ` 2. [Extension Online/Registered]: Ensure Extension ${extension} is REGISTERED & ONLINE (logged into 3CX WebClient, 3CX Desktop App, Mobile App, or IP Phone). Unregistered/offline extensions cannot initiate CTI calls.\n` +
+      ` 3. [Extension Rights]: In 3CX Admin Console -> Users -> Ext ${extension} -> Options / Rights, ensure 'Perform CTI operations' / 'Can control other extensions' is ENABLED.\n` +
+      ` 4. [Outbound Rules]: In 3CX Admin Console -> Outbound Rules, ensure Extension ${extension} is permitted to dial ${dest}.`);
+  } else if (lastError?.response?.status === 401) {
+    console.error(`[3CX 401 Unauthorized Error] 3CX rejected API token for Extension ${extension}. Verify Client ID / Secret in Widget Settings.`);
+  }
+
+  throw lastError;
 }
 
 /**
@@ -1606,13 +1636,7 @@ app.post('/api/call', async (req, res) => {
     return res.status(403).json({ error: 'Access denied. Unauthorized origin.' });
   }
 
-  // 3. IP Rate Limiting: Max 5 call requests per 15 minutes per IP
-  if (isIpRateLimited(clientIp, 5, 15 * 60 * 1000)) {
-    console.warn(`[Security] IP Rate limit exceeded for IP ${clientIp}`);
-    return res.status(429).json({ error: 'Too many call attempts from this IP. Please try again in 15 minutes.' });
-  }
-
-  // 4. Honeypot Anti-Bot Protection: Real human visitors cannot see or fill hidden fields
+  // 3. Honeypot Anti-Bot Protection: Real human visitors cannot see or fill hidden fields
   const honeypotTriggered = (website_hp_confirm && String(website_hp_confirm).trim() !== '') ||
     (website && String(website).trim() !== '') ||
     (fax && String(fax).trim() !== '');
@@ -1623,7 +1647,7 @@ app.post('/api/call', async (req, res) => {
     return res.json({ success: true, message: 'Call initiated successfully', callId: null });
   }
 
-  // 5. Spam Pattern Check: Reject inputs with embedded spam website URLs
+  // 4. Spam Pattern Check: Reject inputs with embedded spam website URLs
   const containsUrlPattern = /(https?:\/\/|www\.|[a-zA-Z0-9-]+\.(com|ru|xyz|top|online|site|info))/i;
   if (containsUrlPattern.test(firstName) || containsUrlPattern.test(lastName || '') || containsUrlPattern.test(phone)) {
     console.warn(`[Security] Spam URL detected in form input from IP ${clientIp}`);
@@ -1642,6 +1666,18 @@ app.post('/api/call', async (req, res) => {
     const widget = await Widget.findByPk(widgetId);
     if (!widget) {
       return res.status(404).json({ error: 'Widget not found' });
+    }
+
+    // 5. Configurable IP Rate Limiting (Managed in Widget Settings)
+    if (widget.rate_limit_enabled === true) {
+      const maxAttempts = widget.rate_limit_max_attempts || 5;
+      const cooldownMins = widget.rate_limit_cooldown_minutes || 15;
+      if (isIpRateLimited(clientIp, maxAttempts, cooldownMins * 60 * 1000)) {
+        console.warn(`[Security] IP Rate limit exceeded for IP ${clientIp} on Widget ${widget.id}`);
+        return res.status(429).json({
+          error: `Too many call attempts from this IP. Please try again in ${cooldownMins} minute${cooldownMins > 1 ? 's' : ''}.`
+        });
+      }
     }
 
     const pageUrl = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
@@ -2808,7 +2844,8 @@ app.put('/api/admin/widgets/:id', authenticateToken, async (req, res) => {
     const data = { ...req.body };
     const intFields = [
       'border_radius', 'btn_size', 'widget_width', 'widget_height',
-      'logo_height', 'logo_width', 'ring_timeout_seconds', 'overlay_blur'
+      'logo_height', 'logo_width', 'ring_timeout_seconds', 'overlay_blur',
+      'rate_limit_max_attempts', 'rate_limit_cooldown_minutes'
     ];
     intFields.forEach(field => {
       if (data[field] === '' || data[field] === undefined) {
@@ -3799,6 +3836,34 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
+    const queryInterface = sequelize.getQueryInterface();
+    try {
+      const tableInfo = await queryInterface.describeTable('Widgets');
+      if (tableInfo && !tableInfo.rate_limit_enabled) {
+        await queryInterface.addColumn('Widgets', 'rate_limit_enabled', {
+          type: Sequelize.BOOLEAN,
+          defaultValue: false,
+        });
+        console.log('[Migration] Added missing column rate_limit_enabled to Widgets table.');
+      }
+      if (tableInfo && !tableInfo.rate_limit_max_attempts) {
+        await queryInterface.addColumn('Widgets', 'rate_limit_max_attempts', {
+          type: Sequelize.INTEGER,
+          defaultValue: 5,
+        });
+        console.log('[Migration] Added missing column rate_limit_max_attempts to Widgets table.');
+      }
+      if (tableInfo && !tableInfo.rate_limit_cooldown_minutes) {
+        await queryInterface.addColumn('Widgets', 'rate_limit_cooldown_minutes', {
+          type: Sequelize.INTEGER,
+          defaultValue: 15,
+        });
+        console.log('[Migration] Added missing column rate_limit_cooldown_minutes to Widgets table.');
+      }
+    } catch (migErr) {
+      console.warn('[Migration] Column auto-migration check notice:', migErr.message);
+    }
+
     await sequelize.sync();
     console.log('Database synced');
   } catch (err) {

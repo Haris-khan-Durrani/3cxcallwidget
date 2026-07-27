@@ -1220,10 +1220,19 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
       }
     }
   } catch (err) {
-    if ((err.response?.status === 401 || err.response?.status === 403) && widgetIdForToken) {
+    const is403 = err.response?.status === 403 || err.response?.status === 401;
+    if (is403 && widgetIdForToken) {
       invalidate3cxToken(widgetIdForToken);
     }
     console.error('[3CX] Error fetching recordings list:', err.response?.data || err.message);
+    if (is403) {
+      console.warn(`[3CX Fix Instructions for 403 Forbidden on Recordings]:
+ 1. Open 3CX Admin Console (https://ebmsdxb.3cx.ae:3081 or WebClient).
+ 2. Go to Admin -> System / Users -> Select your API User / Extension.
+ 3. Click the 'Rights' tab (or 'Group Roles').
+ 4. Under Rights, check ENABLE 'Show Call Recordings' / 'Can see group recordings' / 'Perform Management'.
+ 5. Save changes in 3CX Admin Console.`);
+    }
     if (attempt < 20) {
       console.log(`[3CX] Retrying search due to error (attempt ${attempt + 1}/20) in 5s...`);
       setTimeout(() => fetchAndLinkRecording(recordId, attempt + 1), 5000);

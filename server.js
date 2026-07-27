@@ -384,6 +384,10 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     const agentExt = record.agent_extension ? encodeURIComponent(String(record.agent_extension).trim().split(':')[0]) : '';
 
     const candidateUrls = [
+      `https://${hostWithPort}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings()`,
+      `https://${hostWithPort}/xapi/v1/recordings()`,
       `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings()?access_token=${currentToken}`,
@@ -391,11 +395,11 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
       `https://${hostWithPort}/xapi/v1/Pbx.GetRecordings()?access_token=${currentToken}`,
       `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}`,
       `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}`,
-      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}`,
-      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}`,
+      `https://${hostOnly}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       ...(agentExt ? [
+        `https://${hostWithPort}/xapi/v1/Users(${agentExt})/Recordings()?access_token=${currentToken}`,
+        `https://${hostWithPort}/xapi/v1/Users('${agentExt}')/Recordings()?access_token=${currentToken}`,
         `https://${hostWithPort}/callcontrol/${agentExt}/recordings?access_token=${currentToken}`,
         `https://${hostWithPort}/xapi/v1/Users/${agentExt}/Recordings?access_token=${currentToken}`
       ] : [])
@@ -1108,6 +1112,10 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     const agentExt = lastExt ? encodeURIComponent(lastExt) : '';
 
     const candidateUrls = [
+      `https://${hostWithPort}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings()`,
+      `https://${hostWithPort}/xapi/v1/recordings()`,
       `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings()?access_token=${currentToken}`,
@@ -1115,11 +1123,11 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
       `https://${hostWithPort}/xapi/v1/Pbx.GetRecordings()?access_token=${currentToken}`,
       `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}`,
       `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}`,
-      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recordings?access_token=${currentToken}`,
-      `https://${hostOnly}/xapi/v1/recordings?access_token=${currentToken}`,
+      `https://${hostOnly}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
+      `https://${hostOnly}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
       ...(agentExt ? [
+        `https://${hostWithPort}/xapi/v1/Users(${agentExt})/Recordings()?access_token=${currentToken}`,
+        `https://${hostWithPort}/xapi/v1/Users('${agentExt}')/Recordings()?access_token=${currentToken}`,
         `https://${hostWithPort}/callcontrol/${agentExt}/recordings?access_token=${currentToken}`,
         `https://${hostWithPort}/xapi/v1/Users/${agentExt}/Recordings?access_token=${currentToken}`
       ] : [])

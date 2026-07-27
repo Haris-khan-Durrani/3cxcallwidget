@@ -1010,10 +1010,9 @@ async function checkCallStatusViaCallControl(widget, extension, cxCallId, custom
           if (isRing) hasRingingPart = true;
         }
 
-        // Outbound call is ONLY connected (Answered) when BOTH legs (Agent + Customer) are connected,
-        // OR when at least 2 participants are connected and neither party is currently ringing/dialing.
-        const isConnected = connectedCount >= 2 || (connectedCount >= 1 && !hasRingingPart && targetParts.length >= 2);
-        const isRinging = hasRingingPart || connectedCount < 2;
+        // Outbound call is connected (Answered) when at least 1 participant is connected AND no participant is currently ringing/dialing.
+        const isConnected = connectedCount >= 1 && !hasRingingPart;
+        const isRinging = hasRingingPart || connectedCount === 0;
 
         console.log(`[3CX] Extension ${extension} CallControl status for Call ${cxCallId || 'any'}: connectedParts=${connectedCount}/${targetParts.length}, hasRinging=${hasRingingPart} -> connected=${isConnected}, ringing=${isRinging}`);
         return { active: true, connected: isConnected, ringing: isRinging };

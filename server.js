@@ -3208,8 +3208,8 @@ app.get('/recordings/:token/download', async (req, res) => {
     }
 
     const cxToken = await get3cxToken(widgetOrDialer);
-    const hostOnly = sanitizeHostOnly(widgetOrDialer.fqdn_3cx);
-    const downloadUrl = `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
+    const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
+    const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
 
     console.log(`[3CX Share] Streaming download for recording ${record.recording_id}...`);
 
@@ -3265,8 +3265,8 @@ app.get('/recordings/:token/listen', async (req, res) => {
     }
 
     const cxToken = await get3cxToken(widgetOrDialer);
-    const hostOnly = sanitizeHostOnly(widgetOrDialer.fqdn_3cx);
-    const downloadUrl = `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
+    const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
+    const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${record.recording_id})?access_token=${cxToken}`;
 
     console.log(`[3CX Share] Streaming inline playback for recording ${record.recording_id}...`);
 
@@ -3310,8 +3310,8 @@ app.get('/api/admin/widgets/:widgetId/recordings/:recId/download', async (req, r
         if (!widget) return res.status(404).json({ error: 'Widget not found' });
 
         const cxToken = await get3cxToken(widget);
-        const hostOnly = sanitizeHostOnly(widget.fqdn_3cx);
-        const downloadUrl = `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
+        const fqdn = sanitizeFqdn(widget.fqdn_3cx);
+        const downloadUrl = `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${req.params.recId})?access_token=${cxToken}`;
 
         console.log(`[3CX] Streaming recording ${req.params.recId} for widget ${widget.id}...`);
 

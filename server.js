@@ -393,14 +393,17 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     console.log(`[3CX Dialer] Searching call recording for destination ${record.destination} / call ${record.id} (Attempt ${attempt}/10)...`);
 
     const token = await getRecordingToken(dialer);
-    const hostWithPort = sanitizeFqdn(dialer.fqdn_3cx);
-    const hostOnly = sanitizeHostOnly(dialer.fqdn_3cx);
+    const now = new Date();
+    const pastIso = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+    const futureIso = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const filterParam = encodeURIComponent(`(StartTime ge ${pastIso} and StartTime lt ${futureIso})`);
 
     const candidateUrls = [
-      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc&$select=Id,IsArchived,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDidNumber,ToDisplayName,ToDn`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$skip=0&$filter=${filterParam}&$count=true&$orderby=StartTime desc&$select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`,
       `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`,
-      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=Id desc`
+      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$skip=0&$filter=${filterParam}&$count=true&$orderby=StartTime desc&$select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn`,
+      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`
     ];
 
     const https = require('https');
@@ -433,7 +436,7 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
       return;
     }
 
-    console.log(`[3CX Dialer] Total recordings fetched: ${list.length}.`);
+    console.log(`[3CX Dialer] Total recordings fetched: ${list.length}. Sample:`, JSON.stringify(list.slice(0, 2), null, 2));
 
     const cleanPhone = record.destination.replace(/\D/g, '');
     const phoneSuffix = cleanPhone.length >= 7 ? cleanPhone.slice(-7) : cleanPhone;
@@ -1108,14 +1111,17 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     console.log(`[3CX] Searching call recording for customer ${record.customer_phone} / call ${record.id} (Attempt ${attempt}/20)...`);
 
     const token = await getRecordingToken(widget);
-    const hostWithPort = sanitizeFqdn(widget.fqdn_3cx);
-    const hostOnly = sanitizeHostOnly(widget.fqdn_3cx);
+    const now = new Date();
+    const pastIso = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+    const futureIso = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const filterParam = encodeURIComponent(`(StartTime ge ${pastIso} and StartTime lt ${futureIso})`);
 
     const candidateUrls = [
-      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc&$select=Id,IsArchived,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDidNumber,ToDisplayName,ToDn`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$skip=0&$filter=${filterParam}&$count=true&$orderby=StartTime desc&$select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`,
       `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`,
-      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=Id desc`
+      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$skip=0&$filter=${filterParam}&$count=true&$orderby=StartTime desc&$select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn`,
+      `https://${hostOnly}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`
     ];
 
     const https = require('https');

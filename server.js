@@ -383,79 +383,50 @@ async function getRecordingToken(widgetOrDialer) {
  * Retries up to 4 times with a 5-second delay.
  */
 async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
-  let dialerIdForToken = null;
   try {
     const record = await DialerCallRecord.findByPk(recordId, { include: [DialerWidget] });
     if (!record || !record.DialerWidget) return;
 
     const dialer = record.DialerWidget;
-    dialerIdForToken = dialer.id;
     if (!dialer.client_id_3cx || !dialer.client_secret_3cx) return;
 
     console.log(`[3CX Dialer] Searching call recording for destination ${record.destination} / call ${record.id} (Attempt ${attempt}/10)...`);
 
-    let currentToken = await getRecordingToken(dialer);
-    const hostWithPort = sanitizeFqdn(dialer.fqdn_3cx);
-    const hostOnly = sanitizeHostOnly(dialer.fqdn_3cx);
-    const agentExt = record.agent_extension ? encodeURIComponent(String(record.agent_extension).trim().split(':')[0]) : '';
+    const token = await getRecordingToken(dialer);
+    const fqdn = sanitizeFqdn(dialer.fqdn_3cx);
+    const url = `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`;
 
-    const candidateUrls = [
-      `https://${hostWithPort}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`
-    ];
+    const resp = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 5000
+    });
 
-    let list = [];
-    let lastErr = null;
-
-    for (const url of candidateUrls) {
-      try {
-        const resp = await axios.get(url, {
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-            Accept: 'application/json, text/plain, */*',
-            'OData-Version': '4.0',
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          timeout: 6000
-        });
-        const data = resp.data;
-        const items = Array.isArray(data) ? data : (data?.value || data?.items || data?.result || []);
-        if (items.length > 0) {
-          console.log(`[3CX Dialer Recordings] Successfully fetched ${items.length} recordings from endpoint: ${url}`);
-          list = items;
-          break;
-        }
-      } catch (err) {
-        lastErr = err;
-        const status = err.response?.status;
-        console.log(`[3CX Dialer Recordings] Candidate ${url} returned status ${status || err.message}`);
-        if (status === 401 || status === 403) {
-          invalidate3cxToken(dialer.id);
-          try {
-            currentToken = await get3cxToken(dialer);
-          } catch (tErr) { /* ignore */ }
-        }
-      }
-    }
-
-    if (list.length === 0 && lastErr) {
-      throw lastErr;
-    }
+    const list = Array.isArray(resp.data) ? resp.data : (resp.data?.value || []);
 
     console.log(`[3CX Dialer] Total recordings fetched: ${list.length}.`);
 
-    const cleanPhone = record.destination.replace(/\D/g, '');
-    const phoneSuffix = cleanPhone.length >= 7 ? cleanPhone.slice(-7) : cleanPhone;
-
     const matches = list.filter(r => {
-      const pStr = JSON.stringify(r);
-      const digitsInRecord = pStr.replace(/\D/g, '');
-      const phoneMatch = phoneSuffix && digitsInRecord.includes(phoneSuffix);
-      if (!phoneMatch) return false;
+      const fields = [
+        r.FromCallerNumber,
+        r.ToCallerNumber,
+        r.FromDisplayName,
+        r.ToDisplayName,
+        r.RecordingUrl,
+        r.FromDn,
+        r.ToDn
+      ];
 
-      const recDateStr = r.Date || r.date || r.StartTime || r.startTime || r.DateTime || r.dateTime || r.Created || r.created;
+      const callerText = fields.filter(Boolean).map(String).join(' | ').replace(/\D/g, '');
+      const cleanPhone = record.destination.replace(/\D/g, '');
+      const agentExt = record.agent_extension ? record.agent_extension.replace(/\D/g, '') : '';
+
+      const phoneSuffix = cleanPhone.slice(-8);
+      const phoneMatch = phoneSuffix && callerText.includes(phoneSuffix);
+      const extMatch = agentExt && callerText.includes(agentExt);
+
+      if (!phoneMatch || !extMatch) return false;
+
+      const recDateStr = r.Date || r.date || r.StartTime || r.startTime || r.DateTime || r.dateTime;
       let timeMatch = true;
       if (recDateStr) {
         const recTime = new Date(recDateStr).getTime();
@@ -485,8 +456,6 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
         const crypto = require('crypto');
         record.recording_token = crypto.randomBytes(32).toString('hex');
         await record.save();
-
-        // Push update to webhook
         await triggerDialerWebhook(record, dialer);
       }
     } else {
@@ -494,7 +463,7 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
         console.log(`[3CX Dialer] Recording not found yet. Retrying search (attempt ${attempt + 1}/10) in 5s...`);
         setTimeout(() => fetchAndLinkDialerRecording(recordId, attempt + 1), 5000);
       } else {
-        console.log(`[3CX Dialer] Max recording search attempts reached. No matching recording found in the recent recordings list for call ${record.id}.`);
+        console.log(`[3CX Dialer] Max recording search attempts reached. No matching recording found for call ${record.id}.`);
       }
     }
   } catch (err) {
@@ -1106,84 +1075,52 @@ function updateLastAgentStatus(agentExtensionStr, status) {
  * Retries up to 20 times with a 5-second delay to handle PBX write latency.
  */
 async function fetchAndLinkRecording(recordId, attempt = 1) {
-  let widgetIdForToken = null;
   try {
     const record = await CallRecord.findByPk(recordId, { include: [Widget] });
     if (!record || !record.Widget) return;
 
     const widget = record.Widget;
-    widgetIdForToken = widget.id;
     if (!widget.client_id_3cx || !widget.client_secret_3cx) return;
 
     console.log(`[3CX] Searching call recording for customer ${record.customer_phone} / call ${record.id} (Attempt ${attempt}/20)...`);
 
-    let currentToken = await getRecordingToken(widget);
-    const hostWithPort = sanitizeFqdn(widget.fqdn_3cx);
-    const hostOnly = sanitizeHostOnly(widget.fqdn_3cx);
+    const token = await getRecordingToken(widget);
+    const fqdn = sanitizeFqdn(widget.fqdn_3cx);
+    // Fetch recent recordings (limit to top 45, sorted descending by ID so we get the newest ones first)
+    const url = `https://${fqdn}/xapi/v1/Recordings?$top=45&$orderby=Id desc`;
 
-    const triedExts = (record.agent_extension || '').split(',').map(x => x.trim().split(':')[0]).filter(Boolean);
-    const lastExt = triedExts[triedExts.length - 1];
-    const agentExt = lastExt ? encodeURIComponent(lastExt) : '';
+    const resp = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 5000
+    });
 
-    const candidateUrls = [
-      `https://${hostWithPort}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`
-    ];
+    const list = Array.isArray(resp.data) ? resp.data : (resp.data?.value || []);
 
-    let list = [];
-    let lastErr = null;
-
-    for (const url of candidateUrls) {
-      try {
-        const resp = await axios.get(url, {
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-            Accept: 'application/json, text/plain, */*',
-            'OData-Version': '4.0',
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          timeout: 6000
-        });
-        const data = resp.data;
-        const items = Array.isArray(data) ? data : (data?.value || data?.items || data?.result || []);
-        if (items.length > 0) {
-          console.log(`[3CX Recordings] Successfully fetched ${items.length} recordings from endpoint: ${url}`);
-          list = items;
-          break;
-        }
-      } catch (err) {
-        lastErr = err;
-        const status = err.response?.status;
-        console.log(`[3CX Recordings] Candidate ${url} returned status ${status || err.message}`);
-        if (status === 401 || status === 403) {
-          invalidate3cxToken(widget.id);
-          try {
-            currentToken = await get3cxToken(widget);
-          } catch (tErr) { /* ignore */ }
-        }
-      }
-    }
-
-    if (list.length === 0 && lastErr) {
-      throw lastErr;
-    }
-
-    console.log(`[3CX] Total recordings fetched: ${list.length}.`);
+    console.log(`[3CX] Total recordings fetched: ${list.length}. Sample:`, JSON.stringify(list.slice(0, 2), null, 2));
 
     // Find matching recordings using multi-factor criteria:
-    const cleanPhone = record.customer_phone.replace(/\D/g, '');
-    const phoneSuffix = cleanPhone.length >= 7 ? cleanPhone.slice(-7) : cleanPhone;
-
     const matches = list.filter(r => {
-      const pStr = JSON.stringify(r);
-      const digitsInRecord = pStr.replace(/\D/g, '');
-      const phoneMatch = phoneSuffix && digitsInRecord.includes(phoneSuffix);
+      // Aggregate all V20 caller/participant and URL properties into a single searchable string
+      const fields = [
+        r.FromCallerNumber,
+        r.ToCallerNumber,
+        r.FromDisplayName,
+        r.ToDisplayName,
+        r.RecordingUrl,
+        r.FromDn,
+        r.ToDn
+      ];
+
+      const callerText = fields.filter(Boolean).map(String).join(' | ').replace(/\D/g, '');
+      const cleanPhone = record.customer_phone.replace(/\D/g, '');
+
+      // Compare the last 8 digits to handle international/local country code prefix differences (e.g. +971 vs 0 vs no prefix)
+      const phoneSuffix = cleanPhone.slice(-8);
+      const phoneMatch = phoneSuffix && callerText.includes(phoneSuffix);
       if (!phoneMatch) return false;
 
       // Time match (ensures the recording timestamp is close to call end time, timezone-tolerant 12h window)
-      const recDateStr = r.Date || r.date || r.StartTime || r.startTime || r.DateTime || r.dateTime || r.Created || r.created;
+      const recDateStr = r.Date || r.date || r.StartTime || r.startTime || r.DateTime || r.dateTime;
       let timeMatch = true;
       if (recDateStr) {
         const recTime = new Date(recDateStr).getTime();
@@ -1227,26 +1164,13 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
       }
     }
   } catch (err) {
-    const is403 = err.response?.status === 403 || err.response?.status === 401;
-    if (is403 && widgetIdForToken) {
-      invalidate3cxToken(widgetIdForToken);
-    }
     console.error('[3CX] Error fetching recordings list:', err.response?.data || err.message);
-    if (is403) {
-      console.warn(`[3CX Fix Instructions for 403 Forbidden on Recordings]:
- 1. Open 3CX Admin Console (https://ebmsdxb.3cx.ae:3081 or WebClient).
- 2. Go to Admin -> System / Users -> Select your API User / Extension.
- 3. Click the 'Rights' tab (or 'Group Roles').
- 4. Under Rights, check ENABLE 'Show Call Recordings' / 'Can see group recordings' / 'Perform Management'.
- 5. Save changes in 3CX Admin Console.`);
-    }
     if (attempt < 20) {
       console.log(`[3CX] Retrying search due to error (attempt ${attempt + 1}/20) in 5s...`);
       setTimeout(() => fetchAndLinkRecording(recordId, attempt + 1), 5000);
     }
   }
 }
-
 
 /**
  * Polls 3CX ActiveCalls API every 4s to track live calls and handle state transitions.

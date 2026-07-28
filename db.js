@@ -78,6 +78,12 @@ const Widget = sequelize.define('Widget', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  webhook_tags_n8n: { type: DataTypes.STRING, allowNull: true },
+  webhook_tags_initiated: { type: DataTypes.STRING, allowNull: true },
+  webhook_tags_answered: { type: DataTypes.STRING, allowNull: true },
+  webhook_tags_completed: { type: DataTypes.STRING, allowNull: true },
+  webhook_tags_failed: { type: DataTypes.STRING, allowNull: true },
+  webhook_tags_lead: { type: DataTypes.STRING, allowNull: true },
   // Visual customization - NOTE: no emoji in SQL defaults (MySQL strict mode incompatibility)
   color_primary: { type: DataTypes.STRING, defaultValue: '#0b4526' },
   color_button_text: { type: DataTypes.STRING, defaultValue: '#ffffff' },

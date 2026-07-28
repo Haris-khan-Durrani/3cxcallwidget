@@ -575,44 +575,50 @@
               <div class="ps-divider"></div>
               <div class="ps-head">Webhook Settings</div>
               <div class="ps-field">
-                <label>Dynamic Webhook Tags <span class="opt-tag">optional</span></label>
-                <input v-model="cf.webhook_tags" class="inp" type="text" placeholder="e.g. 3cx, my-campaign"/>
-                <span class="hint">Comma-separated tags to automatically append to all leads and contacts</span>
+                <label>Global Webhook Tags <span class="opt-tag">optional</span></label>
+                <input v-model="cf.webhook_tags" class="inp" type="text" placeholder="e.g. global-tag, 3cx"/>
+                <span class="hint">Tags added here will automatically apply to ALL webhooks below</span>
               </div>
 
               <div class="ps-field">
                 <label>n8n / GHL Webhook URL (Global) <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_url_n8n" class="inp" type="url" placeholder="https://…"/>
+                <input v-model="cf.webhook_tags_n8n" class="inp" style="margin-top: 8px;" type="text" placeholder="Tags for this webhook (e.g. all-events)"/>
                 <span class="hint">POST request sent on every status update/change</span>
               </div>
 
               <div class="ps-field">
                 <label>Call Dialing / Initiated Webhook <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_initiated" class="inp" type="url" placeholder="https://…"/>
+                <input v-model="cf.webhook_tags_initiated" class="inp" style="margin-top: 8px;" type="text" placeholder="Tags for this webhook (e.g. call-started)"/>
                 <span class="hint">POST request sent when the call starts dialing/ringing</span>
               </div>
 
               <div class="ps-field">
                 <label>Call Answered Webhook <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_answered" class="inp" type="url" placeholder="https://…"/>
+                <input v-model="cf.webhook_tags_answered" class="inp" style="margin-top: 8px;" type="text" placeholder="Tags for this webhook (e.g. call-answered)"/>
                 <span class="hint">POST request sent when the agent answers the call</span>
               </div>
 
               <div class="ps-field">
                 <label>Call Completed Webhook <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_completed" class="inp" type="url" placeholder="https://…"/>
+                <input v-model="cf.webhook_tags_completed" class="inp" style="margin-top: 8px;" type="text" placeholder="Tags for this webhook (e.g. call-completed)"/>
                 <span class="hint">POST request sent when call connects and finishes talking successfully</span>
               </div>
 
               <div class="ps-field">
                 <label>Call Failed / Busy Webhook <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_failed" class="inp" type="url" placeholder="https://…"/>
+                <input v-model="cf.webhook_tags_failed" class="inp" style="margin-top: 8px;" type="text" placeholder="Tags for this webhook (e.g. call-failed)"/>
                 <span class="hint">POST request sent if the call goes unanswered, busy, or fails</span>
               </div>
 
               <div class="ps-field">
                 <label>Offline Lead Webhook <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_lead" class="inp" type="url" placeholder="https://…"/>
+                <input v-model="cf.webhook_tags_lead" class="inp" style="margin-top: 8px;" type="text" placeholder="Tags for this webhook (e.g. offline-lead)"/>
                 <span class="hint">POST request sent when an offline lead form is submitted</span>
               </div>
             </template>
@@ -1063,6 +1069,12 @@ const cf = reactive({
   grant_type_3cx: 'client_credentials',
   agent_extension_3cx: '',
   webhook_tags: '',
+  webhook_tags_n8n: '',
+  webhook_tags_initiated: '',
+  webhook_tags_answered: '',
+  webhook_tags_completed: '',
+  webhook_tags_failed: '',
+  webhook_tags_lead: '',
   webhook_url_n8n: '',
   webhook_initiated: '',
   webhook_answered: '',
@@ -1120,6 +1132,12 @@ onMounted(async () => {
       grant_type_3cx:     w.grant_type_3cx      || 'client_credentials',
       agent_extension_3cx:w.agent_extension_3cx || '',
       webhook_tags:       w.webhook_tags        || '',
+      webhook_tags_n8n:   w.webhook_tags_n8n    || '',
+      webhook_tags_initiated: w.webhook_tags_initiated || '',
+      webhook_tags_answered: w.webhook_tags_answered || '',
+      webhook_tags_completed: w.webhook_tags_completed || '',
+      webhook_tags_failed: w.webhook_tags_failed || '',
+      webhook_tags_lead:  w.webhook_tags_lead   || '',
       webhook_url_n8n:    w.webhook_url_n8n     || '',
       webhook_initiated:  w.webhook_initiated   || '',
       webhook_answered:   w.webhook_answered    || '',

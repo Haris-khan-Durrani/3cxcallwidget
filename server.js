@@ -105,31 +105,50 @@ async function triggerUserWebhook(callRecord, widget) {
     if (fetched) freshWidget = fetched;
   } catch (e) { /* use passed widget if refetch fails */ }
 
-  const urls = [];
-  if (freshWidget.webhook_url_n8n) urls.push(freshWidget.webhook_url_n8n);
+  const targets = [];
+
+  const parseTags = (tagStr) => tagStr ? tagStr.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+  if (freshWidget.webhook_url_n8n) {
+    targets.push({ url: freshWidget.webhook_url_n8n, tags: parseTags(freshWidget.webhook_tags_n8n) });
+  }
 
   // Add event-specific webhook URLs if configured
   if (callRecord.status === 'Initiated' || callRecord.status === 'Ringing') {
-    if (freshWidget.webhook_initiated) urls.push(freshWidget.webhook_initiated);
+    if (freshWidget.webhook_initiated) targets.push({ url: freshWidget.webhook_initiated, tags: parseTags(freshWidget.webhook_tags_initiated) });
   } else if (callRecord.status === 'Answered') {
-    if (freshWidget.webhook_answered) urls.push(freshWidget.webhook_answered);
+    if (freshWidget.webhook_answered) targets.push({ url: freshWidget.webhook_answered, tags: parseTags(freshWidget.webhook_tags_answered) });
   } else if (callRecord.status === 'Completed') {
     if (callRecord.outcome === 'Lead') {
-      if (freshWidget.webhook_lead) urls.push(freshWidget.webhook_lead);
+      if (freshWidget.webhook_lead) targets.push({ url: freshWidget.webhook_lead, tags: parseTags(freshWidget.webhook_tags_lead) });
     } else {
-      if (freshWidget.webhook_completed) urls.push(freshWidget.webhook_completed);
+      if (freshWidget.webhook_completed) targets.push({ url: freshWidget.webhook_completed, tags: parseTags(freshWidget.webhook_tags_completed) });
     }
   } else if (['Failed', 'Missed', 'Abandoned'].includes(callRecord.status) || ['Failed', 'Missed', 'Abandoned'].includes(callRecord.outcome)) {
-    if (freshWidget.webhook_failed) urls.push(freshWidget.webhook_failed);
+    if (freshWidget.webhook_failed) targets.push({ url: freshWidget.webhook_failed, tags: parseTags(freshWidget.webhook_tags_failed) });
   }
 
-  console.log(`[Webhook] triggerUserWebhook called | call=${callRecord.id} | status=${callRecord.status} | outcome=${callRecord.outcome} | widgetId=${freshWidget.id} | webhook_url_n8n=${freshWidget.webhook_url_n8n || 'none'} | webhook_initiated=${freshWidget.webhook_initiated || 'none'} | webhook_answered=${freshWidget.webhook_answered || 'none'} | webhook_completed=${freshWidget.webhook_completed || 'none'} | webhook_failed=${freshWidget.webhook_failed || 'none'} | urls_found=${urls.length}`);
+  console.log(`[Webhook] triggerUserWebhook called | call=${callRecord.id} | status=${callRecord.status} | outcome=${callRecord.outcome} | targets_found=${targets.length}`);
 
-  if (urls.length === 0) {
+  if (targets.length === 0) {
     console.warn(`[Webhook] No webhook URLs configured for widget ${freshWidget.id} (status: ${callRecord.status}). Nothing to send.`);
     return;
   }
-  const uniqueUrls = [...new Set(urls)];
+
+  // Deduplicate URLs and merge tags if the same URL is configured for multiple events
+  const targetMap = new Map();
+  const globalTags = parseTags(freshWidget.webhook_tags); // Backwards compatibility for old tags
+  
+  for (const t of targets) {
+    if (targetMap.has(t.url)) {
+      const existing = targetMap.get(t.url);
+      t.tags.forEach(tag => existing.tags.add(tag));
+    } else {
+      targetMap.set(t.url, { url: t.url, tags: new Set([...globalTags, ...t.tags]) });
+    }
+  }
+  
+  const uniqueTargets = Array.from(targetMap.values()).map(t => ({ url: t.url, tags: Array.from(t.tags) }));
 
   try {
     const appUrl = getAppUrl();
@@ -171,37 +190,37 @@ async function triggerUserWebhook(callRecord, widget) {
       }
     }
 
-    const payload = {
-      callId: callRecord.id,
-      widgetId: widget.id,
-      widgetName: widget.name,
-      locationId: widget.location_id || '',
-      customerName: callRecord.customer_name,
-      customerPhone: callRecord.customer_phone,
-      customerEmail: callRecord.customer_email || '',
-      agentExtension: targetExt || callRecord.agent_extension || '',
-      agentId: agentId,
-      agentEmail: agentEmail,
-      agentName: agentName,
-      status: callRecord.status,
-      outcome: callRecord.outcome || callRecord.status,
-      durationSeconds: callRecord.duration_seconds || 0,
-      retryCount: callRecord.retry_count || 0,
-      recordingId: callRecord.recording_id || null,
-      recordingUrl: recordingUrl,
-      recordingListenUrl: recordingListenUrl,
-      pageUrl: callRecord.page_url || '',
-      ipAddress: callRecord.ip_address || '',
-      tags: widget.webhook_tags ? widget.webhook_tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-      timestamp: new Date()
-    };
+    for (const target of uniqueTargets) {
+      const payload = {
+        callId: callRecord.id,
+        widgetId: widget.id,
+        widgetName: widget.name,
+        locationId: widget.location_id || '',
+        customerName: callRecord.customer_name,
+        customerPhone: callRecord.customer_phone,
+        customerEmail: callRecord.customer_email || '',
+        agentExtension: targetExt || callRecord.agent_extension || '',
+        agentId: agentId,
+        agentEmail: agentEmail,
+        agentName: agentName,
+        status: callRecord.status,
+        outcome: callRecord.outcome || callRecord.status,
+        durationSeconds: callRecord.duration_seconds || 0,
+        retryCount: callRecord.retry_count || 0,
+        recordingId: callRecord.recording_id || null,
+        recordingUrl: recordingUrl,
+        recordingListenUrl: recordingListenUrl,
+        pageUrl: callRecord.page_url || '',
+        ipAddress: callRecord.ip_address || '',
+        tags: target.tags,
+        timestamp: new Date()
+      };
 
-    for (const url of uniqueUrls) {
       try {
-        await axios.post(url, payload, { timeout: 5000 });
-        console.log(`[Webhook] Sent call lifecycle update for ${callRecord.id} to ${url}`);
+        await axios.post(target.url, payload, { timeout: 5000 });
+        console.log(`[Webhook] Sent call lifecycle update for ${callRecord.id} to ${target.url} with tags: ${JSON.stringify(target.tags)}`);
       } catch (err) {
-        console.error(`[Webhook] Failed to send update to ${url}:`, err.message);
+        console.error(`[Webhook] Failed to send update to ${target.url}:`, err.message);
       }
     }
   } catch (err) {

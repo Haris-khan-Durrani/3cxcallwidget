@@ -1,180 +1,257 @@
 (function () {
   'use strict';
 
-  // ── 1. Read config from this script tag's src params ──────────────────────
-  var me = document.currentScript ||
-    (function () {
-      var scripts = document.getElementsByTagName('script');
-      return scripts[scripts.length - 1];
-    })();
+  // ── 1. Global Registry & Shared Asset Loader ──────────────────────────────────
+  window.__3cxRegistry__ = window.__3cxRegistry__ || {
+    instances: {},
+    assetsLoaded: false,
+    loadingPromise: null,
+    loadAssets: function (cb) {
+      if (this.assetsLoaded) return cb();
+      if (this.loadingPromise) return this.loadingPromise.then(cb);
 
-  var src    = me ? me.src : '';
-  var params = new URLSearchParams(src.split('?')[1] || '');
-  var ORIGIN  = src.split('/dialer-embed.js')[0];
-  var DIALER_ID = params.get('id')       || '';
-  var USERID    = params.get('userid')   || '';
-  var EXT       = params.get('ext')      || '';
-  var PHONE     = params.get('phone')    || '';
+      var self = this;
+      this.loadingPromise = new Promise(function (resolve) {
+        function injectCSS(href) {
+          if (!document.querySelector('link[href="' + href + '"]')) {
+            var l = document.createElement('link');
+            l.rel = 'stylesheet';
+            l.href = href;
+            document.head.appendChild(l);
+          }
+        }
+        injectCSS('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        injectCSS('https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/css/intlTelInput.css');
 
-  // Don't load if no dialer id or both userid/ext are template tags (un-replaced)
-  var isTemplate = function(v) { return !v || !v.trim() || v === 'undefined' || v === 'null' || v.includes('{{') || v.includes('}}'); };
-  if (!DIALER_ID || (isTemplate(USERID) && isTemplate(EXT))) return;
+        function loadScript(src, done) {
+          if (document.querySelector('script[src="' + src + '"]')) {
+            if (window.intlTelInput) return done();
+          }
+          var s = document.createElement('script');
+          s.src = src;
+          s.onload = done;
+          document.head.appendChild(s);
+        }
 
-  var NS = '__3cxDialer__';
-  if (window[NS]) return; // already loaded
-  window[NS] = true;
+        loadScript('https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/intlTelInput.min.js', function () {
+          loadScript('https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js', function () {
+            self.assetsLoaded = true;
+            resolve();
+          });
+        });
+      });
 
-  // ── 2. Inject Google Font + intl-tel-input CSS ───────────────────────────
-  function injectCSS(href) {
-    var l = document.createElement('link');
-    l.rel = 'stylesheet'; l.href = href;
-    document.head.appendChild(l);
+      this.loadingPromise.then(cb);
+    },
+    stopAllAudio: function (exceptCallId) {
+      var insts = this.instances;
+      Object.keys(insts).forEach(function (id) {
+        if (insts[id] && typeof insts[id].stopAudio === 'function') {
+          insts[id].stopAudio(exceptCallId);
+        }
+      });
+    },
+    // Shared GHL SPA Auto-detect Observer
+    sharedObserverStarted: false,
+    startSharedObserver: function () {
+      if (this.sharedObserverStarted) return;
+      this.sharedObserverStarted = true;
+
+      var _lastHref = window.location.href;
+      setInterval(function () {
+        if (window.location.href !== _lastHref) {
+          _lastHref = window.location.href;
+          Object.keys(window.__3cxRegistry__.instances).forEach(function (id) {
+            var inst = window.__3cxRegistry__.instances[id];
+            if (inst && inst.applyGhlAutoDetect) {
+              setTimeout(inst.applyGhlAutoDetect, 600);
+            }
+          });
+        }
+      }, 500);
+
+      var observer = new MutationObserver(function () {
+        Object.keys(window.__3cxRegistry__.instances).forEach(function (id) {
+          var inst = window.__3cxRegistry__.instances[id];
+          if (inst && inst.applyGhlAutoDetect) {
+            inst.applyGhlAutoDetect();
+          }
+        });
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+  };
+
+  // ── 2. Read parameters from current script tag ──────────────────────────────
+  var me = document.currentScript || (function () {
+    var scripts = document.getElementsByTagName('script');
+    return scripts[scripts.length - 1];
+  })();
+
+  var src         = me ? me.src : '';
+  var params      = new URLSearchParams(src.split('?')[1] || '');
+  var ORIGIN      = src.split('/dialer-embed.js')[0];
+  var DIALER_ID   = params.get('id')          || '';
+  var USERID      = params.get('userid')      || '';
+  var EXT         = params.get('ext')         || '';
+  var PHONE       = params.get('phone')       || '';
+  var LOCATION_ID = params.get('location_id') || params.get('locationid') || params.get('location') || '';
+
+  var isTemplate = function (v) {
+    return !v || !v.trim() || v === 'undefined' || v === 'null' || v.includes('{{') || v.includes('}}');
+  };
+
+  if (!DIALER_ID) return;
+  if (isTemplate(USERID) && isTemplate(EXT)) return;
+
+  var instanceKey = DIALER_ID + '_' + (isTemplate(USERID) ? (isTemplate(EXT) ? 'anon' : EXT) : USERID);
+  if (window.__3cxRegistry__.instances[instanceKey]) return; // Prevent duplicate instantiation for same config
+
+  // ── 3. Inject CSS Styles (Once per document) ───────────────────────────────
+  if (!document.getElementById('_3cx_dialer_shared_styles')) {
+    var style = document.createElement('style');
+    style.id = '_3cx_dialer_shared_styles';
+    style.textContent = [
+      '._3cx_fab{display:none;position:fixed;bottom:20px;right:20px;height:38px;padding:0 14px;border-radius:19px;',
+      'background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;align-items:center;',
+      'gap:7px;font-size:12px;font-weight:600;font-family:Inter,sans-serif;border:none;outline:none;',
+      'cursor:grab;user-select:none;box-shadow:0 4px 14px rgba(37,99,235,.45);z-index:2147483646;',
+      'transition:box-shadow .2s,bottom .2s ease;}',
+      '._3cx_fab:hover{box-shadow:0 6px 18px rgba(37,99,235,.55);}',
+      '._3cx_fab:active{cursor:grabbing;}',
+      '._3cx_fab svg{width:16px;height:16px;}',
+
+      '._3cx_popup{display:none;position:fixed;bottom:66px;right:20px;width:285px;height:430px;',
+      'background:#fff;border-radius:18px;box-shadow:0 12px 48px rgba(0,0,0,.18);',
+      'flex-direction:column;overflow:hidden;border:1px solid rgba(0,0,0,.07);',
+      'z-index:2147483645;opacity:0;transform:translateY(10px) scale(.96);pointer-events:none;',
+      'transition:opacity .22s ease,transform .22s cubic-bezier(.16,1,.3,1);font-family:Inter,sans-serif;}',
+      '._3cx_popup._3cx_active{opacity:1;transform:translateY(0) scale(1);pointer-events:all;}',
+
+      '._3cx_tabs{display:flex;background:linear-gradient(135deg,#1e40af,#2563eb);padding:0 4px;}',
+      '._3cx_tab{flex:1;padding:11px 0;text-align:center;font-size:12px;font-weight:600;',
+      'color:rgba(255,255,255,.6);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;}',
+      '._3cx_tab._3cx_tab_active{color:#fff;border-bottom-color:#fff;}',
+      '._3cx_close{background:transparent;border:none;color:rgba(255,255,255,0.6);font-size:14px;font-weight:500;padding:0 10px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color 0.15s;}',
+      '._3cx_close:hover{color:#fff;}',
+
+      '._3cx_tc{display:none;flex:1;flex-direction:column;position:relative;}',
+      '._3cx_tc._3cx_tc_active{display:flex;}',
+      '._3cx_tab_dialer{overflow:hidden;}',
+      '._3cx_tab_history{overflow-y:auto;max-height:385px;scrollbar-width:thin;scrollbar-color:rgba(0,0,0,0.15) transparent;}',
+      '._3cx_tab_history::-webkit-scrollbar{width:4px;}',
+      '._3cx_tab_history::-webkit-scrollbar-track{background:transparent;}',
+      '._3cx_tab_history::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15);border-radius:4px;}',
+      '._3cx_tab_history::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.3);}',
+
+      '._3cx_status{display:flex;align-items:center;justify-content:center;gap:5px;',
+      'padding:8px 0 4px;font-size:11px;font-weight:500;color:#6b7280;}',
+      '._3cx_dot{width:7px;height:7px;border-radius:50%;background:#22c55e;',
+      'box-shadow:0 0 0 2px rgba(34,197,94,.25);animation:_3cx_blink 2s infinite;}',
+      '@keyframes _3cx_blink{0%,100%{opacity:1}50%{opacity:.5}}',
+
+      '._3cx_dc{flex:1;padding:8px 14px 12px;display:flex;flex-direction:column;}',
+      '._3cx_iw{margin-bottom:10px;width:100%;}',
+      '._3cx_iw .iti{width:100%;}',
+      '._3cx_iw .iti__selected-flag{padding:0 2px 0 4px!important;}',
+      '._3cx_iw .iti__selected-dial-code{font-size:11px!important;font-weight:600!important;margin-left:2px!important;}',
+      '._3cx_iw .iti__flag{transform:scale(.75);}',
+      '._3cx_iw .iti__country-list{border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);border:1px solid #e5e7eb;font-size:13px;}',
+      '._3cx_iw .iti__arrow{border-top-width:3px!important;margin-left:1px!important;}',
+      '._3cx_phone{width:100%;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;border:none;',
+      'border-bottom:1.5px solid #e5e7eb;padding:4px 4px 4px 62px;color:#111827;outline:none;',
+      'background:transparent;transition:border-color .18s;letter-spacing:.5px;}',
+      '._3cx_phone:focus{border-bottom-color:#2563eb;}',
+      '._3cx_phone::placeholder{color:#d1d5db;font-weight:400;}',
+
+      '._3cx_kp{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px;}',
+      '._3cx_key{background:#f3f4f6;border:none;border-radius:10px;height:42px;display:flex;',
+      'flex-direction:column;align-items:center;justify-content:center;cursor:pointer;',
+      'transition:background .1s,transform .1s;user-select:none;}',
+      '._3cx_key:hover{background:#e5e7eb;}',
+      '._3cx_key:active{transform:scale(.92);background:#d1d5db;}',
+      '._3cx_kn{font-size:17px;font-weight:700;color:#111827;line-height:1;}',
+      '._3cx_kl{font-size:8px;font-weight:600;color:#6b7280;letter-spacing:1.2px;margin-top:1px;height:9px;}',
+
+      '._3cx_ar{display:flex;justify-content:center;align-items:center;gap:16px;}',
+      '._3cx_sp{width:36px;}',
+      '._3cx_call{width:46px;height:46px;border-radius:50%;border:none;',
+      'background:linear-gradient(145deg,#22c55e,#16a34a);color:#fff;display:flex;',
+      'align-items:center;justify-content:center;cursor:pointer;',
+      'box-shadow:0 4px 14px rgba(34,197,94,.4);transition:transform .15s,box-shadow .15s;}',
+      '._3cx_call:hover{transform:scale(1.07);box-shadow:0 6px 18px rgba(34,197,94,.5);}',
+      '._3cx_call:active{transform:scale(.94);}',
+      '._3cx_call.disabled{opacity:.4;pointer-events:none;}',
+      '._3cx_call svg{width:20px;height:20px;fill:currentColor;}',
+      '._3cx_del{background:#f3f4f6;border:none;border-radius:50%;width:36px;height:36px;',
+      'display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6b7280;',
+      'transition:background .15s,color .15s;}',
+      '._3cx_del:hover{background:#e5e7eb;color:#111827;}',
+      '._3cx_del svg{width:16px;height:16px;}',
+
+      '._3cx_overlay{position:absolute;inset:0;background:linear-gradient(160deg,#eff6ff,#fff 60%);',
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;',
+      'opacity:0;pointer-events:none;transition:opacity .28s;z-index:10;}',
+      '._3cx_overlay._3cx_active{opacity:1;pointer-events:all;}',
+      '._3cx_pc{width:64px;height:64px;border-radius:50%;background:rgba(37,99,235,.1);',
+      'display:flex;align-items:center;justify-content:center;margin-bottom:16px;',
+      'animation:_3cx_pulse 2s infinite;}',
+      '._3cx_pc svg{width:28px;height:28px;color:#2563eb;}',
+      '._3cx_pc._3cx_conn{background:rgba(34,197,94,.12);animation:_3cx_pg 2s infinite;}',
+      '._3cx_pc._3cx_conn svg{color:#22c55e;}',
+      '@keyframes _3cx_pulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,.4)}70%{box-shadow:0 0 0 16px transparent}100%{box-shadow:0 0 0 0 transparent}}',
+      '@keyframes _3cx_pg{0%{box-shadow:0 0 0 0 rgba(34,197,94,.4)}70%{box-shadow:0 0 0 16px transparent}100%{box-shadow:0 0 0 0 transparent}}',
+      '._3cx_stitle{font-size:15px;font-weight:700;color:#111827;margin-bottom:6px;}',
+      '._3cx_sdesc{font-size:11px;color:#6b7280;text-align:center;padding:0 20px;line-height:1.5;}',
+      '._3cx_timer{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;color:#22c55e;margin-top:10px;}',
+
+      '._3cx_hl{list-style:none;padding:8px;margin:0;display:flex;flex-direction:column;gap:6px;}',
+      '._3cx_hi{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:9px 11px;display:flex;flex-direction:column;gap:6px;box-shadow:0 1px 3px rgba(0,0,0,0.03);transition:all .15s ease;}',
+      '._3cx_hi:hover{border-color:#cbd5e1;box-shadow:0 4px 12px rgba(0,0,0,0.05);background:#f8fafc;}',
+      '._3cx_hi_top{display:flex;align-items:center;justify-content:space-between;gap:6px;}',
+      '._3cx_hnum{font-size:13px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}',
+      '._3cx_actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}',
+      '._3cx_rd,._3cx_rec_btn{border:none;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s ease;}',
+      '._3cx_rd{background:rgba(37,99,235,.08);color:#2563eb;}',
+      '._3cx_rd:hover{background:#2563eb;color:#fff;transform:scale(1.06);}',
+      '._3cx_rec_btn{background:rgba(124,58,237,.1);color:#7c3aed;}',
+      '._3cx_rec_btn:hover{background:#7c3aed;color:#fff;transform:scale(1.06);}',
+      '._3cx_rec_btn._3cx_playing{background:#7c3aed;color:#fff;box-shadow:0 0 0 3px rgba(124,58,237,.25);}',
+      '._3cx_hi_sub{display:flex;align-items:center;gap:8px;font-size:10.5px;color:#64748b;white-space:nowrap;}',
+      '._3cx_hs{font-weight:600;font-size:9.5px;padding:2px 8px;border-radius:10px;display:inline-flex;align-items:center;line-height:1;white-space:nowrap;}',
+      '._3cx_hs._3cx_conn{background:#dcfce7;color:#15803d;}',
+      '._3cx_hs._3cx_miss{background:#fee2e2;color:#b91c1c;}',
+      '._3cx_htime{font-size:10.5px;color:#64748b;white-space:nowrap;}',
+      '._3cx_player_box{display:none;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;align-items:center;gap:5px;margin-top:4px;width:100%;box-sizing:border-box;overflow:hidden;}',
+      '._3cx_player_box._3cx_open{display:flex;}',
+      '._3cx_player_toggle{background:#7c3aed;color:#fff;border:none;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s;}',
+      '._3cx_player_toggle:hover{background:#6d28d9;}',
+      '._3cx_player_toggle svg{width:10px;height:10px;fill:currentColor;}',
+      '._3cx_player_seek{flex:1;min-width:0;width:0;height:4px;border-radius:2px;accent-color:#7c3aed;cursor:pointer;margin:0;}',
+      '._3cx_player_time{font-size:9.5px;font-weight:600;font-variant-numeric:tabular-nums;color:#475569;white-space:nowrap;flex-shrink:0;}',
+      '._3cx_player_dl{color:#64748b;background:transparent;border:none;padding:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s;flex-shrink:0;}',
+      '._3cx_player_dl:hover{color:#0f172a;}',
+      '._3cx_empty{padding:36px 20px;text-align:center;color:#6b7280;font-size:12px;}',
+      '._3cx_err{display:none;background:#fee2e2;color:#991b1b;padding:8px 12px;border-radius:8px;',
+      'font-size:11px;text-align:center;margin-bottom:10px;font-weight:500;}',
+    ].join('');
+    document.head.appendChild(style);
   }
-  injectCSS('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-  injectCSS('https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/css/intlTelInput.css');
 
-  // ── 3. Inject widget CSS ──────────────────────────────────────────────────
-  var style = document.createElement('style');
-  style.textContent = [
-    '#_3cx_fab{display:none;position:fixed;bottom:20px;right:20px;height:38px;padding:0 14px;border-radius:19px;',
-    'background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;align-items:center;',
-    'gap:7px;font-size:12px;font-weight:600;font-family:Inter,sans-serif;border:none;outline:none;',
-    'cursor:grab;user-select:none;box-shadow:0 4px 14px rgba(37,99,235,.45);z-index:2147483646;',
-    'transition:box-shadow .2s;}',
-    '#_3cx_fab:hover{box-shadow:0 6px 18px rgba(37,99,235,.55);}',
-    '#_3cx_fab:active{cursor:grabbing;}',
-    '#_3cx_fab svg{width:16px;height:16px;}',
-
-    '#_3cx_popup{display:none;position:fixed;bottom:66px;right:20px;width:285px;height:430px;',
-    'background:#fff;border-radius:18px;box-shadow:0 12px 48px rgba(0,0,0,.18);',
-    'flex-direction:column;overflow:hidden;border:1px solid rgba(0,0,0,.07);',
-    'z-index:2147483645;opacity:0;transform:translateY(10px) scale(.96);pointer-events:none;',
-    'transition:opacity .22s ease,transform .22s cubic-bezier(.16,1,.3,1);font-family:Inter,sans-serif;}',
-    '#_3cx_popup._3cx_active{opacity:1;transform:translateY(0) scale(1);pointer-events:all;}',
-
-    '._3cx_tabs{display:flex;background:linear-gradient(135deg,#1e40af,#2563eb);padding:0 4px;}',
-    '._3cx_tab{flex:1;padding:11px 0;text-align:center;font-size:12px;font-weight:600;',
-    'color:rgba(255,255,255,.6);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;}',
-    '._3cx_tab._3cx_tab_active{color:#fff;border-bottom-color:#fff;}',
-    '._3cx_close{background:transparent;border:none;color:rgba(255,255,255,0.6);font-size:14px;font-weight:500;padding:0 10px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color 0.15s;}',
-    '._3cx_close:hover{color:#fff;}',
-
-    '._3cx_tc{display:none;flex:1;flex-direction:column;position:relative;}',
-    '._3cx_tc._3cx_tc_active{display:flex;}',
-    '#_3cx_tab_dialer{overflow:hidden;}',
-    '#_3cx_tab_history{overflow-y:auto;max-height:385px;scrollbar-width:thin;scrollbar-color:rgba(0,0,0,0.15) transparent;}',
-    '#_3cx_tab_history::-webkit-scrollbar{width:4px;}',
-    '#_3cx_tab_history::-webkit-scrollbar-track{background:transparent;}',
-    '#_3cx_tab_history::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15);border-radius:4px;}',
-    '#_3cx_tab_history::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.3);}',
-
-    '._3cx_status{display:flex;align-items:center;justify-content:center;gap:5px;',
-    'padding:8px 0 4px;font-size:11px;font-weight:500;color:#6b7280;}',
-    '._3cx_dot{width:7px;height:7px;border-radius:50%;background:#22c55e;',
-    'box-shadow:0 0 0 2px rgba(34,197,94,.25);animation:_3cx_blink 2s infinite;}',
-    '@keyframes _3cx_blink{0%,100%{opacity:1}50%{opacity:.5}}',
-
-    '._3cx_dc{flex:1;padding:8px 14px 12px;display:flex;flex-direction:column;}',
-    '._3cx_iw{margin-bottom:10px;width:100%;}',
-    '._3cx_iw .iti{width:100%;}',
-    '._3cx_iw .iti__selected-flag{padding:0 2px 0 4px!important;}',
-    '._3cx_iw .iti__selected-dial-code{font-size:11px!important;font-weight:600!important;margin-left:2px!important;}',
-    '._3cx_iw .iti__flag{transform:scale(.75);}',
-    '._3cx_iw .iti__country-list{border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);border:1px solid #e5e7eb;font-size:13px;}',
-    '._3cx_iw .iti__arrow{border-top-width:3px!important;margin-left:1px!important;}',
-    '#_3cx_phone{width:100%;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;border:none;',
-    'border-bottom:1.5px solid #e5e7eb;padding:4px 4px 4px 62px;color:#111827;outline:none;',
-    'background:transparent;transition:border-color .18s;letter-spacing:.5px;}',
-    '#_3cx_phone:focus{border-bottom-color:#2563eb;}',
-    '#_3cx_phone::placeholder{color:#d1d5db;font-weight:400;}',
-
-    '._3cx_kp{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px;}',
-    '._3cx_key{background:#f3f4f6;border:none;border-radius:10px;height:42px;display:flex;',
-    'flex-direction:column;align-items:center;justify-content:center;cursor:pointer;',
-    'transition:background .1s,transform .1s;user-select:none;}',
-    '._3cx_key:hover{background:#e5e7eb;}',
-    '._3cx_key:active{transform:scale(.92);background:#d1d5db;}',
-    '._3cx_kn{font-size:17px;font-weight:700;color:#111827;line-height:1;}',
-    '._3cx_kl{font-size:8px;font-weight:600;color:#6b7280;letter-spacing:1.2px;margin-top:1px;height:9px;}',
-
-    '._3cx_ar{display:flex;justify-content:center;align-items:center;gap:16px;}',
-    '._3cx_sp{width:36px;}',
-    '#_3cx_call{width:46px;height:46px;border-radius:50%;border:none;',
-    'background:linear-gradient(145deg,#22c55e,#16a34a);color:#fff;display:flex;',
-    'align-items:center;justify-content:center;cursor:pointer;',
-    'box-shadow:0 4px 14px rgba(34,197,94,.4);transition:transform .15s,box-shadow .15s;}',
-    '#_3cx_call:hover{transform:scale(1.07);box-shadow:0 6px 18px rgba(34,197,94,.5);}',
-    '#_3cx_call:active{transform:scale(.94);}',
-    '#_3cx_call.disabled{opacity:.4;pointer-events:none;}',
-    '#_3cx_call svg{width:20px;height:20px;fill:currentColor;}',
-    '#_3cx_del{background:#f3f4f6;border:none;border-radius:50%;width:36px;height:36px;',
-    'display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6b7280;',
-    'transition:background .15s,color .15s;}',
-    '#_3cx_del:hover{background:#e5e7eb;color:#111827;}',
-    '#_3cx_del svg{width:16px;height:16px;}',
-
-    '#_3cx_overlay{position:absolute;inset:0;background:linear-gradient(160deg,#eff6ff,#fff 60%);',
-    'display:flex;flex-direction:column;align-items:center;justify-content:center;',
-    'opacity:0;pointer-events:none;transition:opacity .28s;z-index:10;}',
-    '#_3cx_overlay._3cx_active{opacity:1;pointer-events:all;}',
-    '._3cx_pc{width:64px;height:64px;border-radius:50%;background:rgba(37,99,235,.1);',
-    'display:flex;align-items:center;justify-content:center;margin-bottom:16px;',
-    'animation:_3cx_pulse 2s infinite;}',
-    '._3cx_pc svg{width:28px;height:28px;color:#2563eb;}',
-    '._3cx_pc._3cx_conn{background:rgba(34,197,94,.12);animation:_3cx_pg 2s infinite;}',
-    '._3cx_pc._3cx_conn svg{color:#22c55e;}',
-    '@keyframes _3cx_pulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,.4)}70%{box-shadow:0 0 0 16px transparent}100%{box-shadow:0 0 0 0 transparent}}',
-    '@keyframes _3cx_pg{0%{box-shadow:0 0 0 0 rgba(34,197,94,.4)}70%{box-shadow:0 0 0 16px transparent}100%{box-shadow:0 0 0 0 transparent}}',
-    '#_3cx_stitle{font-size:15px;font-weight:700;color:#111827;margin-bottom:6px;}',
-    '#_3cx_sdesc{font-size:11px;color:#6b7280;text-align:center;padding:0 20px;line-height:1.5;}',
-    '#_3cx_timer{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;color:#22c55e;margin-top:10px;}',
-
-    '._3cx_hl{list-style:none;padding:8px;margin:0;display:flex;flex-direction:column;gap:6px;}',
-    '._3cx_hi{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:9px 11px;display:flex;flex-direction:column;gap:6px;box-shadow:0 1px 3px rgba(0,0,0,0.03);transition:all .15s ease;}',
-    '._3cx_hi:hover{border-color:#cbd5e1;box-shadow:0 4px 12px rgba(0,0,0,0.05);background:#f8fafc;}',
-    '._3cx_hi_top{display:flex;align-items:center;justify-content:space-between;gap:6px;}',
-    '._3cx_hnum{font-size:13px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}',
-    '._3cx_actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}',
-    '._3cx_rd,._3cx_rec_btn{border:none;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s ease;}',
-    '._3cx_rd{background:rgba(37,99,235,.08);color:#2563eb;}',
-    '._3cx_rd:hover{background:#2563eb;color:#fff;transform:scale(1.06);}',
-    '._3cx_rec_btn{background:rgba(124,58,237,.1);color:#7c3aed;}',
-    '._3cx_rec_btn:hover{background:#7c3aed;color:#fff;transform:scale(1.06);}',
-    '._3cx_rec_btn._3cx_playing{background:#7c3aed;color:#fff;box-shadow:0 0 0 3px rgba(124,58,237,.25);}',
-    '._3cx_hi_sub{display:flex;align-items:center;gap:8px;font-size:10.5px;color:#64748b;white-space:nowrap;}',
-    '._3cx_hs{font-weight:600;font-size:9.5px;padding:2px 8px;border-radius:10px;display:inline-flex;align-items:center;line-height:1;white-space:nowrap;}',
-    '._3cx_hs._3cx_conn{background:#dcfce7;color:#15803d;}',
-    '._3cx_hs._3cx_miss{background:#fee2e2;color:#b91c1c;}',
-    '._3cx_htime{font-size:10.5px;color:#64748b;white-space:nowrap;}',
-    '._3cx_player_box{display:none;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;align-items:center;gap:5px;margin-top:4px;width:100%;box-sizing:border-box;overflow:hidden;}',
-    '._3cx_player_box._3cx_open{display:flex;}',
-    '._3cx_player_toggle{background:#7c3aed;color:#fff;border:none;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s;}',
-    '._3cx_player_toggle:hover{background:#6d28d9;}',
-    '._3cx_player_toggle svg{width:10px;height:10px;fill:currentColor;}',
-    '._3cx_player_seek{flex:1;min-width:0;width:0;height:4px;border-radius:2px;accent-color:#7c3aed;cursor:pointer;margin:0;}',
-    '._3cx_player_time{font-size:9.5px;font-weight:600;font-variant-numeric:tabular-nums;color:#475569;white-space:nowrap;flex-shrink:0;}',
-    '._3cx_player_dl{color:#64748b;background:transparent;border:none;padding:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s;flex-shrink:0;}',
-    '._3cx_player_dl:hover{color:#0f172a;}',
-    '._3cx_empty{padding:36px 20px;text-align:center;color:#6b7280;font-size:12px;}',
-    '#_3cx_err{display:none;background:#fee2e2;color:#991b1b;padding:8px 12px;border-radius:8px;',
-    'font-size:11px;text-align:center;margin-bottom:10px;font-weight:500;}',
-  ].join('');
-  document.head.appendChild(style);
-
-  // ── 4. Inject HTML ────────────────────────────────────────────────────────
+  // ── 4. Build Instance DOM Container ────────────────────────────────────────
   var html = [
-    '<div id="_3cx_popup">',
+    '<div class="_3cx_popup">',
     '  <div class="_3cx_tabs">',
     '    <div class="_3cx_tab _3cx_tab_active" data-tab="dialer">Dialpad</div>',
-    '    <div class="_3cx_tab" data-tab="history" id="_3cx_tab_hist_btn">History</div>',
-    '    <button class="_3cx_close" id="_3cx_close_btn" title="Close">✕</button>',
+    '    <div class="_3cx_tab _3cx_tab_hist_btn" data-tab="history">History</div>',
+    '    <button class="_3cx_close _3cx_close_btn" title="Close">✕</button>',
     '  </div>',
 
-    '  <div id="_3cx_tab_dialer" class="_3cx_tc _3cx_tc_active">',
+    '  <div class="_3cx_tc _3cx_tab_dialer _3cx_tc_active">',
     '    <div class="_3cx_dc">',
-    '      <div id="_3cx_err"></div>',
-    '      <div class="_3cx_status"><div class="_3cx_dot"></div><span id="_3cx_ext_txt">Loading...</span></div>',
-    '      <div class="_3cx_iw"><input type="tel" id="_3cx_phone" placeholder="Phone number" autocomplete="off"/></div>',
+    '      <div class="_3cx_err"></div>',
+    '      <div class="_3cx_status"><div class="_3cx_dot"></div><span class="_3cx_ext_txt">Loading...</span></div>',
+    '      <div class="_3cx_iw"><input type="tel" class="_3cx_phone" placeholder="Phone number" autocomplete="off"/></div>',
     '      <div class="_3cx_kp">',
     '        <div class="_3cx_key" data-val="1"><span class="_3cx_kn">1</span><span class="_3cx_kl"></span></div>',
     '        <div class="_3cx_key" data-val="2"><span class="_3cx_kn">2</span><span class="_3cx_kl">ABC</span></div>',
@@ -191,60 +268,65 @@
     '      </div>',
     '      <div class="_3cx_ar">',
     '        <div class="_3cx_sp"></div>',
-    '        <button id="_3cx_call"><svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg></button>',
-    '        <button id="_3cx_del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6H5a2 2 0 00-2 2v8a2 2 0 002 2h7l5-6-5-6z"/></svg></button>',
+    '        <button class="_3cx_call"><svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg></button>',
+    '        <button class="_3cx_del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6H5a2 2 0 00-2 2v8a2 2 0 002 2h7l5-6-5-6z"/></svg></button>',
     '      </div>',
     '    </div>',
-    '    <div id="_3cx_overlay">',
-    '      <div class="_3cx_pc" id="_3cx_pc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg></div>',
-    '      <div id="_3cx_stitle">Connecting...</div>',
-    '      <div id="_3cx_sdesc"></div>',
-    '      <div id="_3cx_timer" style="display:none">00:00</div>',
-    '      <button id="_3cx_hangup" style="margin-top:20px;width:46px;height:46px;border-radius:50%;border:none;background:linear-gradient(145deg,#ef4444,#dc2626);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(239,68,68,.4);">',
+    '    <div class="_3cx_overlay">',
+    '      <div class="_3cx_pc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg></div>',
+    '      <div class="_3cx_stitle">Connecting...</div>',
+    '      <div class="_3cx_sdesc"></div>',
+    '      <div class="_3cx_timer" style="display:none">00:00</div>',
+    '      <button class="_3cx_hangup" style="margin-top:20px;width:46px;height:46px;border-radius:50%;border:none;background:linear-gradient(145deg,#ef4444,#dc2626);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(239,68,68,.4);">',
     '        <svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" transform="rotate(135 12 12)"/></svg>',
     '      </button>',
     '    </div>',
     '  </div>',
 
-    '  <div id="_3cx_tab_history" class="_3cx_tc">',
-    '    <ul class="_3cx_hl" id="_3cx_hist"><li class="_3cx_empty">Loading history...</li></ul>',
+    '  <div class="_3cx_tc _3cx_tab_history">',
+    '    <ul class="_3cx_hl _3cx_hist"><li class="_3cx_empty">Loading history...</li></ul>',
     '  </div>',
     '</div>',
 
-    '<button id="_3cx_fab">',
+    '<button class="_3cx_fab">',
     '  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">',
     '    <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>',
     '  </svg>',
-    '  <span>Dialer</span>',
+    '  <span class="_3cx_fab_txt">Dialer</span>',
     '</button>',
   ].join('\n');
 
   var wrap = document.createElement('div');
+  wrap.className = '_3cx_instance_wrap';
+  wrap.setAttribute('data-instance-key', instanceKey);
+  wrap.setAttribute('data-dialer-id', DIALER_ID);
   wrap.innerHTML = html;
-  while (wrap.firstChild) document.body.appendChild(wrap.firstChild);
+  document.body.appendChild(wrap);
 
-  // ── 5. Load intl-tel-input JS then boot ──────────────────────────────────
-  function loadScript(src, cb) {
-    var s = document.createElement('script');
-    s.src = src; s.onload = cb;
-    document.head.appendChild(s);
-  }
-
-  loadScript('https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/intlTelInput.min.js', function () {
-    loadScript('https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js', function () {
-      boot();
-    });
+  // ── 5. Load Libraries then Initialize ─────────────────────────────────────
+  window.__3cxRegistry__.loadAssets(function () {
+    bootInstance();
   });
 
-  // ── 6. Main boot logic ───────────────────────────────────────────────────
-  function boot() {
-    var fab       = document.getElementById('_3cx_fab');
-    var popup     = document.getElementById('_3cx_popup');
-    var input     = document.getElementById('_3cx_phone');
-    var btnCall   = document.getElementById('_3cx_call');
-    var btnDel    = document.getElementById('_3cx_del');
-    var overlay   = document.getElementById('_3cx_overlay');
-    var errBanner = document.getElementById('_3cx_err');
+  // ── 6. Boot Instance Logic ────────────────────────────────────────────────
+  function bootInstance() {
+    var fab       = wrap.querySelector('._3cx_fab');
+    var popup     = wrap.querySelector('._3cx_popup');
+    var input     = wrap.querySelector('._3cx_phone');
+    var btnCall   = wrap.querySelector('._3cx_call');
+    var btnDel    = wrap.querySelector('._3cx_del');
+    var overlay   = wrap.querySelector('._3cx_overlay');
+    var errBanner = wrap.querySelector('._3cx_err');
+    var fabText   = wrap.querySelector('._3cx_fab_txt');
+    var extTxt    = wrap.querySelector('._3cx_ext_txt');
+    var pcEl      = wrap.querySelector('._3cx_pc');
+    var stitleEl  = wrap.querySelector('._3cx_stitle');
+    var sdescEl   = wrap.querySelector('._3cx_sdesc');
+    var timerEl   = wrap.querySelector('._3cx_timer');
+
+    var extension   = '';
+    var dialerLabel = 'Dialer';
+    var apiBase     = ORIGIN;
 
     // ── intl-tel-input ──────────────────────────────────────────────────────
     var iti = window.intlTelInput(input, {
@@ -253,7 +335,6 @@
       separateDialCode: true
     });
 
-    // Filter out non-phone characters and auto-detect country as user types
     input.addEventListener('input', function () {
       input.value = input.value.replace(/[^\d\+\-\s\(\)\.]/g, '');
       var num = iti.getNumber();
@@ -262,91 +343,125 @@
       }
     });
 
-    // ── Resolve extension via API ────────────────────────────────────────────
-    var extension = '';
-    var apiBase   = ORIGIN;
-
-    function resolveAgent() {
-      if (USERID && !isTemplate(USERID)) {
-        return fetch(apiBase + '/api/dialer/resolve-agent?dialerId=' + DIALER_ID + '&userid=' + encodeURIComponent(USERID))
-          .then(function(r){
-            if (!r.ok) return null;
-            return r.json();
-          })
-          .then(function(d){
-            if (d && d.extension && !isTemplate(d.extension)) {
-              extension = d.extension;
-            } else {
-              extension = '';
-            }
-          })
-          .catch(function(){
-            extension = '';
-          });
-      }
-      if (EXT && !isTemplate(EXT)) {
-        extension = EXT;
-        return Promise.resolve();
-      }
-      extension = '';
-      return Promise.resolve();
+    // ── Helper: Extract GHL Location ID & Contact ID ──────────────────────
+    function extractGhlLocationId() {
+      var m = window.location.href.match(/\/location\/([A-Za-z0-9_-]+)/);
+      return m ? m[1] : '';
     }
 
-    resolveAgent().then(function () {
-      if (!extension || isTemplate(extension)) {
-        fab.style.display   = 'none';
-        popup.style.display = 'none';
-        return;
-      }
-      fab.style.display   = 'flex';
-      popup.style.display = 'flex';
-      document.getElementById('_3cx_ext_txt').textContent = 'Agent Extension: ' + extension;
-
-      // pre-fill phone
-      if (PHONE && !isTemplate(PHONE)) {
-        setTimeout(function(){ try { iti.setNumber(PHONE); } catch(e){} }, 400);
-      }
-    });
-
-    // ── GHL Auto-detect: phone + contactId from page URL/DOM ──────────────────
-    var ghlContactId = '';
-
     function extractGhlContactId() {
-      // Matches: /contacts/detail/<id> anywhere in the URL
       var m = window.location.href.match(/\/contacts\/detail\/([A-Za-z0-9_-]+)/);
       return m ? m[1] : '';
     }
 
     function readGhlPhone() {
-      // GoHighLevel renders the phone in: input[id="contact.phone"] or .hr-input-phone
       var el = document.querySelector('input[id="contact.phone"], input.hr-input-phone[type="tel"]');
       return el ? (el.value || '').trim() : '';
     }
+
+    // ── Sub-Account Location Matching & Agent Resolution ──────────────────
+    function resolveAgent() {
+      var currentLocId = LOCATION_ID && !isTemplate(LOCATION_ID) ? LOCATION_ID : extractGhlLocationId();
+      var query = '?dialerId=' + encodeURIComponent(DIALER_ID) +
+                  '&location_id=' + encodeURIComponent(currentLocId);
+
+      if (USERID && !isTemplate(USERID)) {
+        query += '&userid=' + encodeURIComponent(USERID);
+      } else if (EXT && !isTemplate(EXT)) {
+        query += '&ext=' + encodeURIComponent(EXT);
+      }
+
+      return fetch(apiBase + '/api/dialer/resolve-agent' + query)
+        .then(function (r) {
+          if (!r.ok) return null;
+          return r.json();
+        })
+        .then(function (d) {
+          if (!d || d.active === false || !d.extension) {
+            // Mismatch or unassigned -> Keep hidden
+            fab.style.display   = 'none';
+            popup.style.display = 'none';
+            wrap.style.display  = 'none';
+            return false;
+          }
+
+          extension   = d.extension;
+          dialerLabel = d.companyName || d.dialerName || 'Dialer';
+
+          if (fabText) fabText.textContent = dialerLabel;
+          if (extTxt) extTxt.textContent = 'Agent Extension: ' + extension + ' (' + dialerLabel + ')';
+
+          // Stack FAB button cleanly based on number of active instances
+          registerInstanceInStack();
+
+          fab.style.display   = 'flex';
+          popup.style.display = 'flex';
+          wrap.style.display  = 'block';
+
+          if (PHONE && !isTemplate(PHONE)) {
+            setTimeout(function () { try { iti.setNumber(PHONE); } catch (e) {} }, 400);
+          }
+
+          return true;
+        })
+        .catch(function () {
+          fab.style.display   = 'none';
+          popup.style.display = 'none';
+          wrap.style.display  = 'none';
+          return false;
+        });
+    }
+
+    // ── Vertical Stacking Calculation ─────────────────────────────────────
+    function registerInstanceInStack() {
+      var registry = window.__3cxRegistry__.instances;
+      registry[instanceKey] = {
+        key: instanceKey,
+        dialerId: DIALER_ID,
+        fab: fab,
+        popup: popup,
+        applyGhlAutoDetect: applyGhlAutoDetect,
+        stopAudio: function(exceptId) { stopActiveAudio(exceptId); }
+      };
+
+      var keys = Object.keys(registry);
+      var index = keys.indexOf(instanceKey);
+      if (index < 0) index = keys.length - 1;
+
+      var bottomOffset = 20 + (index * 48); // Stack 48px apart
+      fab.style.bottom = bottomOffset + 'px';
+      fab.style.right  = '20px';
+
+      // Restore stored position if custom dragged
+      try {
+        var storageKey = '_3cx_fab_pos_' + DIALER_ID;
+        var sp = JSON.parse(localStorage.getItem(storageKey) || 'null');
+        if (sp) applyFabPos(sp.left, sp.top);
+      } catch (e) {}
+    }
+
+    resolveAgent();
+
+    // ── GHL Auto-detect ───────────────────────────────────────────────────
+    var ghlContactId = '';
 
     function applyGhlAutoDetect() {
       var newContactId = extractGhlContactId();
       if (newContactId) ghlContactId = newContactId;
 
-      // Only auto-fill phone when on a contact detail page
       if (!newContactId) return;
 
-      // Wait briefly for the SPA to render the input
       var attempts = 0;
       var tryFill = function () {
         var phone = readGhlPhone();
         if (phone) {
           try { iti.setNumber(phone); } catch (e) {}
-          // Show a subtle "auto-filled" badge on FAB for 2s
-          var fab = document.getElementById('_3cx_fab');
-          if (fab) {
-            var span = fab.querySelector('span');
-            if (span) {
-              var orig = span.textContent;
-              span.textContent = 'Ready ✓';
-              setTimeout(function () { span.textContent = orig; }, 2000);
-            }
+          if (fabText) {
+            var orig = fabText.textContent;
+            fabText.textContent = 'Ready ✓';
+            setTimeout(function () { fabText.textContent = orig; }, 2000);
           }
-        } else if (attempts < 20) {
+        } else if (attempts < 15) {
           attempts++;
           setTimeout(tryFill, 250);
         }
@@ -354,54 +469,30 @@
       tryFill();
     }
 
-    // Run on load
     applyGhlAutoDetect();
+    window.__3cxRegistry__.startSharedObserver();
 
-    // Observe SPA navigation via URL polling (GHL uses History API)
-    var _ghlLastHref = window.location.href;
-    setInterval(function () {
-      if (window.location.href !== _ghlLastHref) {
-        _ghlLastHref = window.location.href;
-        // Small delay to let SPA render the new page
-        setTimeout(applyGhlAutoDetect, 600);
-      }
-    }, 500);
-
-    // Also watch DOM for the phone input being added/changed (handles in-page re-renders)
-    var _ghlObserver = new MutationObserver(function () {
-      if (extractGhlContactId()) {
-        var phone = readGhlPhone();
-        if (phone) {
-          var cur = '';
-          try { cur = iti.getNumber(); } catch (e) {}
-          if (!cur || cur.replace(/[^\d]/g, '').length < 4) {
-            try { iti.setNumber(phone); } catch (e) {}
-          }
-        }
-      }
-    });
-    _ghlObserver.observe(document.body, { childList: true, subtree: true });
-
-    // ── Tabs ─────────────────────────────────────────────────────────────────
-    var tabBtns = document.querySelectorAll('#_3cx_popup ._3cx_tab');
-    var tabContents = document.querySelectorAll('#_3cx_popup ._3cx_tc');
-    tabBtns.forEach(function(tab) {
-      tab.addEventListener('click', function() {
-        var target = tab.dataset.tab;
-        tabBtns.forEach(function(t){ t.classList.remove('_3cx_tab_active'); });
-        tabContents.forEach(function(tc){ tc.classList.remove('_3cx_tc_active'); });
+    // ── Tabs ───────────────────────────────────────────────────────────────
+    var tabBtns     = wrap.querySelectorAll('._3cx_tab');
+    var tabContents = wrap.querySelectorAll('._3cx_tc');
+    tabBtns.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var target = tab.getAttribute('data-tab');
+        tabBtns.forEach(function (t) { t.classList.remove('_3cx_tab_active'); });
+        tabContents.forEach(function (tc) { tc.classList.remove('_3cx_tc_active'); });
         tab.classList.add('_3cx_tab_active');
-        var tcEl = document.getElementById('_3cx_tab_' + target);
+
+        var tcEl = wrap.querySelector('._3cx_tab_' + target);
         if (tcEl) tcEl.classList.add('_3cx_tc_active');
         if (target === 'history') loadHistory();
       });
     });
 
-    // ── Keypad Logic ─────────────────────────────────────────────────────────
+    // ── Keypad Logic ───────────────────────────────────────────────────────
     var pressTimer;
     var isLongPress = false;
 
-    document.querySelectorAll('._3cx_key').forEach(function (key) {
+    wrap.querySelectorAll('._3cx_key').forEach(function (key) {
       var handlePressStart = function () {
         if (!extension) return;
         isLongPress = false;
@@ -442,11 +533,11 @@
       key.addEventListener('touchend', function (e) { e.preventDefault(); handlePressEnd(); });
     });
 
-    btnDel.addEventListener('click', function() {
+    btnDel.addEventListener('click', function () {
       input.value = input.value.slice(0, -1);
     });
 
-    // ── Call & Status Polling Logic ──────────────────────────────────────────
+    // ── Call & Status Polling Logic ────────────────────────────────────────
     var pollInterval;
     var callTimerInterval;
     var secondsElapsed = 0;
@@ -457,11 +548,12 @@
       return m + ':' + sec;
     }
 
-    btnCall.addEventListener('click', function() {
+    btnCall.addEventListener('click', function () {
       if (btnCall.classList.contains('disabled')) return;
       var rawVal = input.value.trim();
       var cleanDigits = rawVal.replace(/[\s\-\+\(\)\.]/g, '');
       var destination = (iti && iti.getNumber) ? iti.getNumber() : cleanDigits;
+
       if (!rawVal || /[a-zA-Z]/.test(rawVal) || !/^\d{7,15}$/.test(cleanDigits) || (iti && iti.isValidNumber && !iti.isValidNumber())) {
         showErr('Please enter a valid phone number (7 to 15 digits).');
         return;
@@ -472,74 +564,80 @@
       fetch(apiBase + '/api/dialer/call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dialerId: DIALER_ID, extension: extension, destination: destination, pageUrl: window.location.href || document.referrer, contactId: ghlContactId || '' })
+        body: JSON.stringify({
+          dialerId: DIALER_ID,
+          extension: extension,
+          destination: destination,
+          pageUrl: window.location.href || document.referrer,
+          contactId: ghlContactId || ''
+        })
       })
-      .then(function(r){ return r.json(); })
-      .then(function(d){
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
         if (d.error) {
           resetDialer();
           showErr(d.error);
           return;
         }
 
-        // Start Polling
         var wasConnected = false;
         var idleCount = 0;
 
         pollInterval = setInterval(function () {
           fetch(apiBase + '/api/dialer/status?dialerId=' + DIALER_ID + '&extension=' + extension + '&destination=' + encodeURIComponent(destination) + '&duration=' + secondsElapsed + '&callId=' + (d.callId || ''))
-            .then(function(r) { return r.json(); })
-            .then(function(statusData) {
+            .then(function (r) { return r.json(); })
+            .then(function (statusData) {
               if (statusData.state === 'connected') {
                 idleCount = 0;
                 if (!wasConnected) {
                   wasConnected = true;
-                  document.getElementById('_3cx_pc').classList.add('_3cx_conn');
-                  document.getElementById('_3cx_stitle').textContent = 'Call Connected';
-                  document.getElementById('_3cx_sdesc').textContent = 'Conversation started.';
-                  document.getElementById('_3cx_timer').style.display = 'block';
+                  pcEl.classList.add('_3cx_conn');
+                  stitleEl.textContent = 'Call Connected';
+                  sdescEl.textContent = 'Conversation started.';
+                  timerEl.style.display = 'block';
                   secondsElapsed = 0;
-                  document.getElementById('_3cx_timer').textContent = '00:00';
+                  timerEl.textContent = '00:00';
 
                   clearInterval(callTimerInterval);
                   callTimerInterval = setInterval(function () {
                     secondsElapsed++;
-                    document.getElementById('_3cx_timer').textContent = formatTime(secondsElapsed);
+                    timerEl.textContent = formatTime(secondsElapsed);
                   }, 1000);
                 }
               } else if (statusData.state === 'idle') {
                 idleCount++;
                 if (wasConnected || idleCount >= 2) {
-                  document.getElementById('_3cx_pc').classList.remove('_3cx_conn');
-                  document.getElementById('_3cx_stitle').textContent = wasConnected ? 'Call Ended' : 'Call Ended / Cancelled';
-                  document.getElementById('_3cx_sdesc').textContent = wasConnected ? ('Duration: ' + formatTime(secondsElapsed)) : 'The call did not connect.';
+                  pcEl.classList.remove('_3cx_conn');
+                  stitleEl.textContent = wasConnected ? 'Call Ended' : 'Call Ended / Cancelled';
+                  sdescEl.textContent = wasConnected ? ('Duration: ' + formatTime(secondsElapsed)) : 'The call did not connect.';
                   clearInterval(callTimerInterval);
                   clearInterval(pollInterval);
 
                   setTimeout(function () {
                     resetDialer();
-                    if (document.querySelector('[data-tab="history"]').classList.contains('_3cx_tab_active')) {
+                    var histTab = wrap.querySelector('._3cx_tab[data-tab="history"]');
+                    if (histTab && histTab.classList.contains('_3cx_tab_active')) {
                       histLoaded = false;
                       loadHistory();
                     }
                   }, 3000);
                 }
               } else {
-                idleCount = 0; // ringing state
+                idleCount = 0;
               }
             })
             .catch(function () {});
         }, 2500);
       })
-      .catch(function(e){ resetDialer(); showErr(e.message); });
+      .catch(function (e) { resetDialer(); showErr(e.message); });
     });
 
-    document.getElementById('_3cx_hangup').addEventListener('click', function() {
+    wrap.querySelector('._3cx_hangup').addEventListener('click', function () {
       fetch(apiBase + '/api/dialer/hangup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dialerId: DIALER_ID, extension: extension })
-      }).finally(function(){
+      }).finally(function () {
         resetDialer();
       });
     });
@@ -548,37 +646,37 @@
       clearInterval(pollInterval);
       clearInterval(callTimerInterval);
       overlay.classList.remove('_3cx_active');
-      document.getElementById('_3cx_timer').style.display = 'none';
-      document.getElementById('_3cx_pc').classList.remove('_3cx_conn');
+      timerEl.style.display = 'none';
+      pcEl.classList.remove('_3cx_conn');
       secondsElapsed = 0;
     }
 
-    // ── Overlay helpers ──────────────────────────────────────────────────────
     function showOverlay(title, desc) {
-      document.getElementById('_3cx_stitle').textContent = title;
-      document.getElementById('_3cx_sdesc').textContent  = desc || '';
+      stitleEl.textContent = title;
+      sdescEl.textContent  = desc || '';
       overlay.classList.add('_3cx_active');
     }
 
     function showErr(msg) {
       errBanner.style.display = 'block';
       errBanner.textContent = msg;
-      setTimeout(function(){ errBanner.style.display = 'none'; }, 5000);
+      setTimeout(function () { errBanner.style.display = 'none'; }, 5000);
     }
 
-    // ── History & Audio Recording Player ───────────────────────────────────────
-    var histLoaded = false;
-    var activeAudio = null;
+    // ── History & Audio Player ──────────────────────────────────────────────
+    var histLoaded   = false;
+    var activeAudio  = null;
     var activeCallId = null;
 
-    function stopActiveAudio() {
+    function stopActiveAudio(exceptId) {
+      if (activeCallId && activeCallId === exceptId) return;
       if (activeAudio) {
-        try { activeAudio.pause(); } catch(e){}
+        try { activeAudio.pause(); } catch (e) {}
         activeAudio = null;
       }
       if (activeCallId) {
-        var prevBox = document.getElementById('_3cx_pbox_' + activeCallId);
-        var prevBtn = document.getElementById('_3cx_rbtn_' + activeCallId);
+        var prevBox = wrap.querySelector('._3cx_pbox_' + activeCallId);
+        var prevBtn = wrap.querySelector('._3cx_rbtn_' + activeCallId);
         if (prevBox) prevBox.classList.remove('_3cx_open');
         if (prevBtn) {
           prevBtn.classList.remove('_3cx_playing');
@@ -591,12 +689,13 @@
     function loadHistory() {
       if (histLoaded) return;
       histLoaded = true;
-      var list = document.getElementById('_3cx_hist');
+      var list = wrap.querySelector('._3cx_hist');
+
       fetch(apiBase + '/api/dialer/history?dialerId=' + DIALER_ID + '&extension=' + extension)
-        .then(function(r){ return r.json(); })
-        .then(function(calls) {
+        .then(function (r) { return r.json(); })
+        .then(function (calls) {
           if (!calls.length) { list.innerHTML = '<li class="_3cx_empty">No recent calls</li>'; return; }
-          list.innerHTML = calls.map(function(c) {
+          list.innerHTML = calls.map(function (c) {
             var d = new Date(c.createdAt);
             var time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             var isConnected = c.status === 'Completed' || c.status === 'Connected';
@@ -611,10 +710,10 @@
                 '<span class="_3cx_hnum" title="' + (c.destination || '') + '">' + (c.destination || '—') + '</span>' +
                 '<div class="_3cx_actions">' +
                   (hasRecording ?
-                    '<button class="_3cx_rec_btn" id="_3cx_rbtn_' + c.id + '" data-id="' + c.id + '" data-url="' + listenUrl + '" data-dl="' + downloadUrl + '" title="Play Recording">' +
+                    '<button class="_3cx_rec_btn _3cx_rbtn_' + c.id + '" data-id="' + c.id + '" data-url="' + listenUrl + '" data-dl="' + downloadUrl + '" title="Play Recording">' +
                       '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
                     '</button>' : '') +
-                  '<button class="_3cx_rd" data-num="' + (c.destination||'') + '" title="Redial">' +
+                  '<button class="_3cx_rd" data-num="' + (c.destination || '') + '" title="Redial">' +
                     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>' +
                   '</button>' +
                 '</div>' +
@@ -624,12 +723,12 @@
                 '<span class="_3cx_htime">' + time + (dur ? ' • ' + dur : '') + '</span>' +
               '</div>' +
               (hasRecording ?
-                '<div class="_3cx_player_box" id="_3cx_pbox_' + c.id + '">' +
-                  '<button class="_3cx_player_toggle" id="_3cx_ptog_' + c.id + '" title="Play/Pause">' +
+                '<div class="_3cx_player_box _3cx_pbox_' + c.id + '">' +
+                  '<button class="_3cx_player_toggle _3cx_ptog_' + c.id + '" title="Play/Pause">' +
                     '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
                   '</button>' +
-                  '<input type="range" class="_3cx_player_seek" id="_3cx_pseek_' + c.id + '" value="0" min="0" max="100"/>' +
-                  '<span class="_3cx_player_time" id="_3cx_ptime_' + c.id + '">00:00 / ' + (dur || '00:00') + '</span>' +
+                  '<input type="range" class="_3cx_player_seek _3cx_pseek_' + c.id + '" value="0" min="0" max="100"/>' +
+                  '<span class="_3cx_player_time _3cx_ptime_' + c.id + '">00:00 / ' + (dur || '00:00') + '</span>' +
                   '<a class="_3cx_player_dl" href="' + downloadUrl + '" target="_blank" download title="Download Recording">' +
                     '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>' +
                   '</a>' +
@@ -637,21 +736,21 @@
             '</li>';
           }).join('');
 
-          list.querySelectorAll('._3cx_rd').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-              try { iti.setNumber(btn.dataset.num); } catch(e){}
-              document.querySelector('[data-tab="dialer"]').click();
+          list.querySelectorAll('._3cx_rd').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              try { iti.setNumber(btn.dataset.num); } catch (e) {}
+              wrap.querySelector('._3cx_tab[data-tab="dialer"]').click();
             });
           });
 
-          list.querySelectorAll('._3cx_rec_btn').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-              var callId = btn.dataset.id;
-              var url = btn.dataset.url;
-              var box = document.getElementById('_3cx_pbox_' + callId);
-              var seek = document.getElementById('_3cx_pseek_' + callId);
-              var timeTxt = document.getElementById('_3cx_ptime_' + callId);
-              var togBtn = document.getElementById('_3cx_ptog_' + callId);
+          list.querySelectorAll('._3cx_rec_btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var callId  = btn.dataset.id;
+              var url     = btn.dataset.url;
+              var box     = wrap.querySelector('._3cx_pbox_' + callId);
+              var seek    = wrap.querySelector('._3cx_pseek_' + callId);
+              var timeTxt = wrap.querySelector('._3cx_ptime_' + callId);
+              var togBtn  = wrap.querySelector('._3cx_ptog_' + callId);
 
               if (activeCallId === callId && activeAudio) {
                 if (activeAudio.paused) {
@@ -666,12 +765,12 @@
                 return;
               }
 
-              // Stop any other active audio
-              stopActiveAudio();
+              // Pause any active audio across ALL dialer instances
+              window.__3cxRegistry__.stopAllAudio(callId);
 
               if (!url) return;
 
-              box.classList.add('_3cx_open');
+              if (box) box.classList.add('_3cx_open');
               btn.classList.add('_3cx_playing');
 
               var audio = new Audio(url);
@@ -687,11 +786,9 @@
                 timeTxt.textContent = cur + ' / ' + tot;
               }
 
-              audio.addEventListener('loadedmetadata', function() {
-                updateTimeLabel();
-              });
+              audio.addEventListener('loadedmetadata', updateTimeLabel);
 
-              audio.addEventListener('timeupdate', function() {
+              audio.addEventListener('timeupdate', function () {
                 if (!isNaN(audio.duration) && audio.duration > 0) {
                   var pct = (audio.currentTime / audio.duration) * 100;
                   if (seek) seek.value = pct;
@@ -699,7 +796,7 @@
                 updateTimeLabel();
               });
 
-              audio.addEventListener('ended', function() {
+              audio.addEventListener('ended', function () {
                 btn.classList.remove('_3cx_playing');
                 if (togBtn) togBtn.innerHTML = '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
                 if (seek) seek.value = 0;
@@ -708,7 +805,7 @@
               });
 
               if (seek) {
-                seek.addEventListener('input', function() {
+                seek.addEventListener('input', function () {
                   if (activeAudio && !isNaN(activeAudio.duration)) {
                     activeAudio.currentTime = (seek.value / 100) * activeAudio.duration;
                   }
@@ -716,28 +813,28 @@
               }
 
               if (togBtn) {
-                togBtn.onclick = function() {
+                togBtn.onclick = function () {
                   if (!activeAudio) return;
                   if (activeAudio.paused) {
                     activeAudio.play();
                     btn.classList.add('_3cx_playing');
-                    togBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                    togBtn.innerHTML = '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
                   } else {
                     activeAudio.pause();
                     btn.classList.remove('_3cx_playing');
-                    togBtn.innerHTML = '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                    togBtn.innerHTML = '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
                   }
                 };
               }
 
-              audio.play().catch(function(e){ console.error('Audio play error:', e); });
+              audio.play().catch(function (e) { console.error('Audio play error:', e); });
             });
           });
         })
-        .catch(function(){ list.innerHTML = '<li class="_3cx_empty">Failed to load history</li>'; });
+        .catch(function () { list.innerHTML = '<li class="_3cx_empty">Failed to load history</li>'; });
     }
 
-    // ── Draggable FAB ─────────────────────────────────────────────────────────
+    // ── Draggable FAB ───────────────────────────────────────────────────────
     var isDragging = false, startX, startY, startLeft, startTop, didDrag = false;
     var THRESHOLD  = 6;
 
@@ -761,27 +858,21 @@
       popup.style.bottom = 'auto';
     }
 
-    requestAnimationFrame(function() {
-      try {
-        var sp = JSON.parse(localStorage.getItem('_3cx_fab_pos') || 'null');
-        if (sp) applyFabPos(sp.left, sp.top);
-      } catch(e) {}
-    });
-
-    window.addEventListener('resize', function() {
+    window.addEventListener('resize', function () {
       if (!fab.style.left) return;
       var r = fab.getBoundingClientRect();
       applyFabPos(r.left, r.top);
     });
 
-    fab.addEventListener('pointerdown', function(e) {
+    fab.addEventListener('pointerdown', function (e) {
       startX = e.clientX; startY = e.clientY;
       var r = fab.getBoundingClientRect(); startLeft = r.left; startTop = r.top;
       isDragging = true; didDrag = false;
       fab.setPointerCapture(e.pointerId);
       fab.style.transition = 'none';
     });
-    fab.addEventListener('pointermove', function(e) {
+
+    fab.addEventListener('pointermove', function (e) {
       if (!isDragging) return;
       var dx = e.clientX - startX, dy = e.clientY - startY;
       if (!didDrag && (Math.abs(dx) > THRESHOLD || Math.abs(dy) > THRESHOLD)) {
@@ -790,22 +881,25 @@
       }
       if (didDrag) applyFabPos(startLeft + dx, startTop + dy);
     });
-    fab.addEventListener('pointerup', function() {
+
+    fab.addEventListener('pointerup', function () {
       if (!isDragging) return;
       isDragging = false;
       fab.style.transition = '';
       if (didDrag) {
         var r = fab.getBoundingClientRect();
-        localStorage.setItem('_3cx_fab_pos', JSON.stringify({ left: r.left, top: r.top }));
+        var storageKey = '_3cx_fab_pos_' + DIALER_ID;
+        localStorage.setItem(storageKey, JSON.stringify({ left: r.left, top: r.top }));
       } else {
         positionPopup();
         popup.classList.toggle('_3cx_active');
       }
       didDrag = false;
     });
-    fab.addEventListener('pointercancel', function() { isDragging = false; didDrag = false; fab.style.transition = ''; });
 
-    document.getElementById('_3cx_close_btn').addEventListener('click', function() {
+    fab.addEventListener('pointercancel', function () { isDragging = false; didDrag = false; fab.style.transition = ''; });
+
+    wrap.querySelector('._3cx_close_btn').addEventListener('click', function () {
       popup.classList.remove('_3cx_active');
     });
   }

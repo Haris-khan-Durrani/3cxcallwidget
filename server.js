@@ -3792,20 +3792,53 @@ app.post('/api/admin/dialers/test-connection', authenticateToken, async (req, re
 // ─────────────────────────────────────────────────────────────────────────────
 // DIALER PUBLIC ROUTE (CLICK TO CALL)
 // ─────────────────────────────────────────────────────────────────────────────
-// Resolve Dialer Agent by CRM User ID
+// Resolve Dialer Agent by CRM User ID or Extension, with optional Location ID check
 app.get('/api/dialer/resolve-agent', async (req, res) => {
   try {
-    const { dialerId, userid } = req.query;
-    if (!dialerId || !userid) return res.status(400).json({ error: 'Missing parameters' });
+    const { dialerId, userid, ext, location_id, locationid, location } = req.query;
+    const currentLocId = (location_id || locationid || location || '').trim();
 
-    const agent = await DialerAgent.findOne({ where: { dialerId, crm_user_id: userid } });
+    if (!dialerId || (!userid && !ext)) {
+      return res.status(400).json({ active: false, error: 'Missing dialerId or user identification (userid/ext)' });
+    }
+
+    const dialer = await DialerWidget.findByPk(dialerId);
+    if (!dialer) {
+      return res.status(404).json({ active: false, error: 'Dialer widget not found' });
+    }
+
+    // 1. If location_id is provided, check if companies exist for this dialer and match location_id
+    const dialerCompanies = await DialerCompany.findAll({ where: { dialerId } });
+    if (currentLocId && dialerCompanies.length > 0) {
+      const matchingCompany = dialerCompanies.find(c => c.location_id && c.location_id.trim() === currentLocId);
+      if (!matchingCompany) {
+        // Location mismatch - this dialer widget is not configured for this GHL sub-account location
+        return res.json({ active: false, reason: 'Location mismatch for sub-account' });
+      }
+    }
+
+    // 2. Find Agent mapping by crm_user_id or extension
+    let agent = null;
+    if (userid && userid.trim() && userid !== 'undefined' && userid !== 'null') {
+      agent = await DialerAgent.findOne({ where: { dialerId, crm_user_id: userid.trim() }, include: [{ model: DialerCompany }] });
+    }
+    if (!agent && ext && ext.trim() && ext !== 'undefined' && ext !== 'null') {
+      agent = await DialerAgent.findOne({ where: { dialerId, extension: ext.trim() }, include: [{ model: DialerCompany }] });
+    }
+
     if (agent && agent.extension && agent.extension.trim()) {
-      return res.json({ extension: agent.extension.trim() });
+      const companyName = agent.DialerCompany ? agent.DialerCompany.name : (dialerCompanies.find(c => c.location_id && c.location_id.trim() === currentLocId)?.name || '');
+      return res.json({
+        active: true,
+        extension: agent.extension.trim(),
+        companyName: companyName || dialer.name || 'Dialer',
+        dialerName: dialer.name || 'Dialer'
+      });
     } else {
-      return res.status(404).json({ error: 'Mapping not found' });
+      return res.status(404).json({ active: false, error: 'Agent mapping not found' });
     }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ active: false, error: err.message });
   }
 });
 

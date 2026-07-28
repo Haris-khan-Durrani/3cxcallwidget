@@ -4214,25 +4214,37 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
+    await sequelize.sync();
+    console.log('Database synced');
+
     const queryInterface = sequelize.getQueryInterface();
     const tablesToMigrate = [
       { name: 'Widgets', model: Widget },
       { name: 'DialerWidgets', model: DialerWidget },
       { name: 'CallRecords', model: CallRecord },
-      { name: 'DialerCallRecords', model: DialerCallRecord }
+      { name: 'DialerCallRecords', model: DialerCallRecord },
+      { name: 'DialerAgents', model: DialerAgent },
+      { name: 'DialerCompanies', model: DialerCompany }
     ];
 
     for (const target of tablesToMigrate) {
       try {
-        const tableInfo = await queryInterface.describeTable(target.name);
+        const tableName = target.model.tableName || target.name;
+        const tableInfo = await queryInterface.describeTable(tableName);
         const attrs = target.model.rawAttributes;
         for (const [colName, attrDef] of Object.entries(attrs)) {
           if (tableInfo && !tableInfo[colName]) {
             try {
-              await queryInterface.addColumn(target.name, colName, attrDef);
-              console.log(`[Migration] Automatically added missing column '${colName}' to ${target.name} table.`);
+              await queryInterface.addColumn(tableName, colName, attrDef);
+              console.log(`[Migration] Automatically added missing column '${colName}' to ${tableName} table.`);
             } catch (colErr) {
-              console.warn(`[Migration] Notice for column '${colName}' on ${target.name}:`, colErr.message);
+              console.warn(`[Migration] addColumn notice for '${colName}' on ${tableName}, trying raw ALTER TABLE fallback:`, colErr.message);
+              try {
+                await sequelize.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${colName}\` VARCHAR(255) NULL;`);
+                console.log(`[Migration] Fallback raw ALTER TABLE added column '${colName}' to ${tableName}.`);
+              } catch (rawErr) {
+                console.warn(`[Migration] Raw ALTER TABLE notice for '${colName}':`, rawErr.message);
+              }
             }
           }
         }
@@ -4240,9 +4252,6 @@ async function startServer() {
         console.warn(`[Migration] Column auto-migration check notice for ${target.name}:`, migErr.message);
       }
     }
-
-    await sequelize.sync();
-    console.log('Database synced');
   } catch (err) {
     console.warn('[Database] Sync warning (proceeding with server start):', err.message);
   }

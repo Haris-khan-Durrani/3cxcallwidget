@@ -482,6 +482,11 @@
           // Recalculate stacking order whenever active status updates
           window.__3cxRegistry__.recalculateStacking();
 
+          var histTab = wrap.querySelector('._3cx_tab[data-tab="history"]');
+          if (histTab && histTab.classList.contains('_3cx_tab_active')) {
+            loadHistory(true);
+          }
+
           if (PHONE && !isTemplate(PHONE)) {
             setTimeout(function () { try { iti.setNumber(PHONE); } catch (e) {} }, 400);
           }
@@ -544,7 +549,7 @@
 
         var tcEl = wrap.querySelector('._3cx_tab_' + target);
         if (tcEl) tcEl.classList.add('_3cx_tc_active');
-        if (target === 'history') loadHistory();
+        if (target === 'history') loadHistory(true);
       });
     });
 
@@ -675,12 +680,8 @@
 
                   setTimeout(function () {
                     resetDialer();
-                    var histTab = wrap.querySelector('._3cx_tab[data-tab="history"]');
-                    if (histTab && histTab.classList.contains('_3cx_tab_active')) {
-                      histLoaded = false;
-                      loadHistory();
-                    }
-                  }, 3000);
+                    loadHistory(true);
+                  }, 2000);
                 }
               } else {
                 idleCount = 0;
@@ -746,15 +747,16 @@
       }
     }
 
-    function loadHistory() {
-      if (histLoaded) return;
+    function loadHistory(force) {
+      if (!extension) return;
+      if (!force && histLoaded) return;
       histLoaded = true;
       var list = wrap.querySelector('._3cx_hist');
 
-      fetch(apiBase + '/api/dialer/history?dialerId=' + DIALER_ID + '&extension=' + extension)
+      fetch(apiBase + '/api/dialer/history?dialerId=' + encodeURIComponent(DIALER_ID) + '&extension=' + encodeURIComponent(extension))
         .then(function (r) { return r.json(); })
         .then(function (calls) {
-          if (!calls.length) { list.innerHTML = '<li class="_3cx_empty">No recent calls</li>'; return; }
+          if (!Array.isArray(calls) || !calls.length) { list.innerHTML = '<li class="_3cx_empty">No recent calls</li>'; return; }
           list.innerHTML = calls.map(function (c) {
             var d = new Date(c.createdAt);
             var time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

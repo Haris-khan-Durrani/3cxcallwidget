@@ -3985,8 +3985,15 @@ app.get('/api/dialer/history', async (req, res) => {
     const { dialerId, extension } = req.query;
     if (!dialerId || !extension) return res.status(400).json({ error: 'Missing parameters' });
 
+    const cleanExt = String(extension).trim();
     const history = await DialerCallRecord.findAll({
-      where: { dialerId, agent_extension: extension },
+      where: {
+        dialerId,
+        [Op.or]: [
+          { agent_extension: cleanExt },
+          { agent_extension: { [Op.like]: `${cleanExt}%` } }
+        ]
+      },
       order: [['createdAt', 'DESC']],
       limit: 30
     });
@@ -4000,7 +4007,7 @@ app.get('/api/dialer/history', async (req, res) => {
 
     res.json(history);
   } catch (err) {
-    console.error(err);
+    console.error('[Dialer History Error]', err);
     res.status(500).json({ error: 'Failed to fetch history' });
   }
 });

@@ -8,7 +8,7 @@ const dns = require('dns');
 // Force DNS resolution to prefer IPv4 to prevent IPv6 Docker timeouts on dual-stack servers
 dns.setDefaultResultOrder('ipv4first');
 const { Sequelize } = require('sequelize');
-const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCallRecord, DialerAgent, User, SystemSetting, AICallCampaign, AICallRecord, AIProviderCredential, SIPConfiguration, AIProject } = require('./db');
+const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCompany, DialerCallRecord, DialerAgent, User, SystemSetting, AICallCampaign, AICallRecord, AIProviderCredential, SIPConfiguration, AIProject } = require('./db');
 const crypto = require('crypto');
 const { verifyInternalRequest } = require('./utils/jwt');
 const { decrypt, encrypt } = require('./utils/encryption');
@@ -3349,7 +3349,7 @@ app.get('/api/admin/dialer-widgets/:id/stats', authenticateToken, async (req, re
 // Admin Routes for Dialer Agents mapping
 app.get('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, res) => {
   try {
-    const agents = await DialerAgent.findAll({ where: { dialerId: req.params.id } });
+    const agents = await DialerAgent.findAll({ where: { dialerId: req.params.id }, include: [{ model: DialerCompany, attributes: ['id', 'name', 'location_id'] }] });
     res.json(agents);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3358,7 +3358,7 @@ app.get('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, r
 
 app.post('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, res) => {
   try {
-    const { crm_user_id, extension, email, first_name, last_name, location_id } = req.body;
+    const { crm_user_id, extension, email, first_name, last_name, location_id, company_id } = req.body;
     if (!crm_user_id || !extension || !email) return res.status(400).json({ error: 'Missing required fields (crm_user_id, extension, email)' });
     const agent = await DialerAgent.create({
       dialerId: req.params.id,
@@ -3367,7 +3367,8 @@ app.post('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, 
       email,
       first_name: first_name || '',
       last_name: last_name || '',
-      location_id: location_id || ''
+      location_id: location_id || '',
+      company_id: company_id || null
     });
     res.json(agent);
   } catch (err) {
@@ -3377,7 +3378,7 @@ app.post('/api/admin/dialer-widgets/:id/agents', authenticateToken, async (req, 
 
 app.put('/api/admin/dialer-widgets/:id/agents/:agentId', authenticateToken, async (req, res) => {
   try {
-    const { crm_user_id, extension, email, first_name, last_name, location_id } = req.body;
+    const { crm_user_id, extension, email, first_name, last_name, location_id, company_id } = req.body;
     if (!crm_user_id || !extension || !email) return res.status(400).json({ error: 'Missing required fields (crm_user_id, extension, email)' });
     const agent = await DialerAgent.findOne({ where: { id: req.params.agentId, dialerId: req.params.id } });
     if (!agent) return res.status(404).json({ error: 'Agent mapping not found' });
@@ -3388,7 +3389,8 @@ app.put('/api/admin/dialer-widgets/:id/agents/:agentId', authenticateToken, asyn
       email,
       first_name: first_name || '',
       last_name: last_name || '',
-      location_id: location_id || ''
+      location_id: location_id || '',
+      company_id: company_id || null
     });
     res.json(agent);
   } catch (err) {
@@ -3399,6 +3401,50 @@ app.put('/api/admin/dialer-widgets/:id/agents/:agentId', authenticateToken, asyn
 app.delete('/api/admin/dialer-widgets/:id/agents/:agentId', authenticateToken, async (req, res) => {
   try {
     await DialerAgent.destroy({ where: { id: req.params.agentId, dialerId: req.params.id } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Dialer Companies ───────────────────────────────────────────────────────────
+app.get('/api/admin/dialer-widgets/:id/companies', authenticateToken, async (req, res) => {
+  try {
+    const companies = await DialerCompany.findAll({ where: { dialerId: req.params.id }, order: [['name', 'ASC']] });
+    res.json(companies);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/dialer-widgets/:id/companies', authenticateToken, async (req, res) => {
+  try {
+    const { name, location_id } = req.body;
+    if (!name || !location_id) return res.status(400).json({ error: 'name and location_id are required' });
+    const company = await DialerCompany.create({ dialerId: req.params.id, name: name.trim(), location_id: location_id.trim() });
+    res.json(company);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/dialer-widgets/:id/companies/:companyId', authenticateToken, async (req, res) => {
+  try {
+    const { name, location_id } = req.body;
+    const company = await DialerCompany.findOne({ where: { id: req.params.companyId, dialerId: req.params.id } });
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    await company.update({ name: name?.trim() || company.name, location_id: location_id?.trim() || company.location_id });
+    res.json(company);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/dialer-widgets/:id/companies/:companyId', authenticateToken, async (req, res) => {
+  try {
+    // Unlink agents from this company before deleting
+    await DialerAgent.update({ company_id: null }, { where: { company_id: req.params.companyId } });
+    await DialerCompany.destroy({ where: { id: req.params.companyId, dialerId: req.params.id } });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3785,6 +3831,19 @@ app.post('/api/dialer/call', async (req, res) => {
     const pageUrl = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
     const contactId = req.body.contactId || '';
 
+    // Resolve the agent's company for tagging the call record
+    let resolvedCompanyName = '';
+    let resolvedLocationId = '';
+    const agentRecord = await DialerAgent.findOne({ where: { dialerId, extension: String(extension) }, include: [DialerCompany] });
+    if (agentRecord) {
+      if (agentRecord.DialerCompany) {
+        resolvedCompanyName = agentRecord.DialerCompany.name || '';
+        resolvedLocationId = agentRecord.DialerCompany.location_id || '';
+      } else if (agentRecord.location_id) {
+        resolvedLocationId = agentRecord.location_id;
+      }
+    }
+
     // Create Call Record
     const record = await DialerCallRecord.create({
       dialerId,
@@ -3793,6 +3852,8 @@ app.post('/api/dialer/call', async (req, res) => {
       page_url: pageUrl,
       ip_address: clientIp,
       contact_id: contactId,
+      company_name: resolvedCompanyName,
+      location_id: resolvedLocationId,
       status: 'Initiated'
     });
 

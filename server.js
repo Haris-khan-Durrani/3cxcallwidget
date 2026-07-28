@@ -7,7 +7,7 @@ const dns = require('dns');
 
 // Force DNS resolution to prefer IPv4 to prevent IPv6 Docker timeouts on dual-stack servers
 dns.setDefaultResultOrder('ipv4first');
-const { Sequelize } = require('sequelize');
+const { Sequelize, Op } = require('sequelize');
 const { sequelize, Widget, CallRecord, Agent, DialerWidget, DialerCompany, DialerCallRecord, DialerAgent, User, SystemSetting, AICallCampaign, AICallRecord, AIProviderCredential, SIPConfiguration, AIProject } = require('./db');
 const crypto = require('crypto');
 const { verifyInternalRequest } = require('./utils/jwt');

@@ -1550,9 +1550,15 @@
             $badgeContainer.innerHTML = `<span class="cx-ok-icon" style="${SUCCESS_ICON_STYLE}">${SUCCESS_ICON}</span>`;
             const $successHeadline = document.getElementById('cx-ok-wrap') ? document.getElementById('cx-ok-wrap').querySelector('h3') : null;
             const $successMsg = document.getElementById('cx-ok-wrap') ? document.getElementById('cx-ok-wrap').querySelector('p') : null;
-            if (d.isLead && !OFFICE_CLOSED) {
-              if ($successHeadline) $successHeadline.textContent = SUCCESS_H || 'Inquiry Received';
-              if ($successMsg) $successMsg.textContent = SUCCESS_MSG || 'Thank you for your inquiry! Our team will contact you shortly.';
+            if ($successHeadline) {
+              $successHeadline.textContent = (OFFICE_CLOSED ? OFFICE_OUT_TITLE : 'Inquiry Received') || 'Inquiry Received';
+            }
+            if ($successMsg) {
+              $successMsg.textContent = OFFICE_OUT_MSG || 'We have received your inquiry. You will be contacted shortly during business hours!';
+            }
+            const $avSub = document.getElementById('cx-av-sub');
+            if ($avSub) {
+              $avSub.textContent = OFFICE_OUT_STATUS || "We're Offline";
             }
           } else {
             if (callId) {

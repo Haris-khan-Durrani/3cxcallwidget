@@ -16,6 +16,7 @@ import ResetPasswordView from './views/ResetPasswordView.vue'
 import AICampaignsView from './views/AICampaignsView.vue'
 import AICallHistoryView from './views/AICallHistoryView.vue'
 import AICredentialsView from './views/AICredentialsView.vue'
+import EmbedReportsView from './views/EmbedReportsView.vue'
 import './style.css'
 
 // Restore auth header after page refresh (interceptor approach — works even with cached JS)
@@ -25,8 +26,16 @@ if (_savedToken) {
 }
 // Belt-and-suspenders: interceptor always injects fresh token on every request
 axios.interceptors.request.use(config => {
-  const t = localStorage.getItem('admin_token')
-  if (t) config.headers['Authorization'] = `Bearer ${t}`
+  // If we are in embed view, use the token from the URL instead of localStorage
+  const hash = window.location.hash
+  if (hash.startsWith('#/embed/')) {
+    const params = new URLSearchParams(hash.split('?')[1] || '')
+    const embedToken = params.get('token')
+    if (embedToken) config.headers['Authorization'] = `Bearer ${embedToken}`
+  } else {
+    const t = localStorage.getItem('admin_token')
+    if (t) config.headers['Authorization'] = `Bearer ${t}`
+  }
   return config
 })
 
@@ -35,9 +44,11 @@ axios.interceptors.response.use(
   response => response,
   error => {
     if (error.response?.status === 401 || error.response?.status === 403) {
-      localStorage.removeItem('admin_token')
-      delete axios.defaults.headers.common['Authorization']
-      window.location.hash = '/login'
+      if (!window.location.hash.startsWith('#/embed/')) {
+        localStorage.removeItem('admin_token')
+        delete axios.defaults.headers.common['Authorization']
+        window.location.hash = '/login'
+      }
     }
     return Promise.reject(error)
   }
@@ -59,7 +70,8 @@ const router = createRouter({
     { path: '/settings', component: SettingsView, meta: { requiresAuth: true } },
     { path: '/ai-credentials', component: AICredentialsView, meta: { requiresAuth: true } },
     { path: '/ai-campaigns', component: AICampaignsView, meta: { requiresAuth: true } },
-    { path: '/ai-history', component: AICallHistoryView, meta: { requiresAuth: true } }
+    { path: '/ai-history', component: AICallHistoryView, meta: { requiresAuth: true } },
+    { path: '/embed/reports/:id', component: EmbedReportsView, meta: { requiresAuth: false } }
   ]
 })
 

@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <div class="embed-layout">
     <div class="rp-page">
 
       <!-- ── Header ── -->
@@ -16,12 +16,6 @@
           </div>
         </div>
         <div class="rp-header-actions">
-          <button class="rp-btn-refresh" @click="openEmbedModal" :disabled="!selectedId" title="Embed Settings">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
-            </svg>
-            Embed
-          </button>
           <button class="rp-btn-refresh" @click="load" :class="{ spinning: loading }" title="Refresh">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -39,19 +33,9 @@
 
       <!-- ── Filter Bar ── -->
       <div class="rp-filter-bar">
-        <div class="rp-filter-item rp-filter-widget">
-          <label class="rp-filter-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-            Widget
-          </label>
-          <select v-model="selectedId" class="rp-select" @change="load">
-            <option value="">— Choose a widget —</option>
-            <option v-for="w in store.widgets" :key="w.id" :value="w.id">{{ w.name }}</option>
-          </select>
-        </div>
+        <!-- Widget selector removed for embed -->
 
-        <template v-if="selectedId">
-          <div class="rp-filter-divider"></div>
+
 
           <div class="rp-filter-item">
             <label class="rp-filter-label">
@@ -106,26 +90,14 @@
             </select>
           </div>
 
-          <button v-if="statusFilter || agentFilter || dateFilter !== 'all'" class="rp-clear-btn" @click="resetFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            Clear
-          </button>
-        </template>
-      </div>
-
-      <!-- ── No Selection ── -->
-      <div v-if="!selectedId" class="rp-empty">
-        <div class="rp-empty-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-          </svg>
-        </div>
-        <p class="rp-empty-title">Select a widget to begin</p>
-        <p class="rp-empty-sub">Choose a widget from the filter bar above to view its call history and analytics</p>
+        <button v-if="statusFilter || agentFilter || dateFilter !== 'all'" class="rp-clear-btn" @click="resetFilters">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          Clear
+        </button>
       </div>
 
       <!-- ── Loading ── -->
-      <div v-else-if="loading" class="rp-empty">
+      <div v-if="loading" class="rp-empty">
         <div class="rp-spinner"></div>
         <p class="rp-empty-sub">Loading report data...</p>
       </div>
@@ -540,67 +512,17 @@
         @play="audioPlaying = true" @pause="audioPlaying = false"
         @timeupdate="onTimeUpdate" @loadedmetadata="onLoadedMetadata"
         @ended="onAudioEnded" style="display:none;"></audio>
-      <!-- ── Embed Settings Modal ── -->
-      <div v-if="showEmbedModal" class="rp-modal-backdrop" @click="showEmbedModal = false">
-        <div class="rp-modal" @click.stop>
-          <div class="rp-modal-header">
-            <h3>Embed Report Widget</h3>
-            <button class="rp-modal-close" @click="showEmbedModal = false">&times;</button>
-          </div>
-          <div class="rp-modal-body">
-            <div class="rp-form-group">
-              <label>Allowed Domains (comma separated)</label>
-              <p class="rp-form-hint">E.g. example.com, myapp.net. Only these domains can load the iframe.</p>
-              <input v-model="embedDomains" type="text" class="rp-input" placeholder="example.com" />
-            </div>
-            
-            <div class="rp-form-group" style="margin-top:20px;" v-if="embedApiKey">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                <label style="margin:0;">Embed Code (Script Snippet)</label>
-                <button class="rp-btn-ghost" style="padding:2px 8px; font-size:12px;" @click="regenerateApiKey" :disabled="regeneratingKey">
-                  {{ regeneratingKey ? 'Generating...' : 'Regenerate API Key' }}
-                </button>
-              </div>
-              <textarea readonly class="rp-input rp-code-block" rows="4" @focus="$event.target.select()">{{ embedCode }}</textarea>
-            </div>
-          </div>
-          <div class="rp-modal-footer">
-            <button class="rp-btn-ghost" @click="showEmbedModal = false">Cancel</button>
-            <button class="rp-btn-primary" @click="saveEmbedSettings" :disabled="savingEmbed">
-              {{ savingEmbed ? 'Saving...' : 'Save & Generate' }}
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
-  </AppLayout>
+  </div>
 </template>
 
-<style scoped>
-.rp-modal-backdrop { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:center; justify-content:center; }
-.rp-modal { background:var(--bg); border:1px solid var(--border); border-radius:12px; width:100%; max-width:500px; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.5); }
-.rp-modal-header { padding:20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
-.rp-modal-header h3 { margin:0; font-size:18px; color:var(--text); }
-.rp-modal-close { background:none; border:none; font-size:24px; color:var(--text3); cursor:pointer; }
-.rp-modal-body { padding:20px; }
-.rp-form-group { display:flex; flex-direction:column; gap:8px; }
-.rp-form-group label { font-size:13px; font-weight:600; color:var(--text2); }
-.rp-form-hint { font-size:12px; color:var(--text3); margin:0; }
-.rp-input { background:var(--bg2); border:1px solid var(--border); color:var(--text); padding:10px; border-radius:6px; font-family:inherit; }
-.rp-code-block { font-family:monospace; font-size:12px; resize:none; }
-.rp-modal-footer { padding:20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
-.rp-btn-primary { background:var(--accent); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer; }
-</style>
-
 <script setup>
-import { ref, computed, onMounted, onUnmounted, inject, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import axios from 'axios'
-import AppLayout from '../components/AppLayout.vue'
-import { useWidgetStore } from '../stores'
 
-const store = useWidgetStore()
-const toast = inject('toast')
-const selectedId = ref('')
+const route = useRoute()
+const selectedId = ref(route.params.id)
 const loading = ref(false)
 const report = ref(null)
 const search = ref('')
@@ -623,60 +545,6 @@ const audioPlaying = ref(false)
 const audioDuration = ref(0)
 const audioCurrentTime = ref(0)
 const activeAudioUrl = ref('')
-
-const showEmbedModal = ref(false)
-const embedDomains = ref('')
-const embedApiKey = ref('')
-const savingEmbed = ref(false)
-const regeneratingKey = ref(false)
-const embedCode = computed(() => {
-  const host = window.location.origin
-  return `<div id="3cx-reports-${selectedId.value}"></div>\n<script src="${host}/api/embed/reports.js?widgetId=${selectedId.value}&apiKey=${embedApiKey.value}" async><\/script>`
-})
-
-async function openEmbedModal() {
-  if (!selectedId.value) return
-  showEmbedModal.value = true
-  embedApiKey.value = ''
-  embedDomains.value = ''
-  try {
-    const res = await axios.get(`/api/admin/widgets/${selectedId.value}/embed-token`)
-    embedDomains.value = res.data.allowed_embed_domains || ''
-    embedApiKey.value = res.data.embed_api_key
-  } catch (e) {
-    toast('Failed to load embed settings', 'error')
-  }
-}
-
-async function saveEmbedSettings() {
-  savingEmbed.value = true
-  try {
-    await axios.put(`/api/admin/widgets/${selectedId.value}/embed-domains`, {
-      allowed_embed_domains: embedDomains.value
-    })
-    const res = await axios.get(`/api/admin/widgets/${selectedId.value}/embed-token`)
-    embedApiKey.value = res.data.embed_api_key
-    toast('Embed settings saved', 'success')
-  } catch (e) {
-    toast('Failed to save settings', 'error')
-  } finally {
-    savingEmbed.value = false
-  }
-}
-
-async function regenerateApiKey() {
-  if (!confirm('Are you sure? Any websites currently using the old API key will instantly lose access to the reports.')) return
-  regeneratingKey.value = true
-  try {
-    const res = await axios.post(`/api/admin/widgets/${selectedId.value}/regenerate-api-key`)
-    embedApiKey.value = res.data.embed_api_key
-    toast('API Key regenerated', 'success')
-  } catch (e) {
-    toast('Failed to regenerate API Key', 'error')
-  } finally {
-    regeneratingKey.value = false
-  }
-}
 
 function playInline(r) {
   if (activeAudioRowId.value === r.id) { togglePlay(); return }
@@ -719,7 +587,9 @@ function formatAudioTime(s) {
 }
 
 onMounted(() => {
-  if (!store.widgets.length) store.fetch()
+  if (selectedId.value) {
+    load()
+  }
   pollTimer = setInterval(async () => {
     if (!selectedId.value || loading.value) return
     const hasActive = report.value?.records?.some(r => ['Initiated','Ringing','Answered'].includes(r.status))
@@ -741,7 +611,7 @@ async function load() {
     const res = await axios.get(`/api/admin/widgets/${selectedId.value}/stats`)
     report.value = res.data
     page.value = 1
-  } catch { toast('Failed to load report', 'error') }
+  } catch(e) { console.error('Failed to load report', e) }
   finally { loading.value = false }
 }
 
@@ -753,7 +623,7 @@ function resetFilters() {
   page.value = 1
 }
 
-const currentWidget = computed(() => store.widgets.find(w => w.id === selectedId.value))
+const currentWidget = computed(() => report.value?.widget || null)
 
 function getAgentName(ext) {
   if (!currentWidget.value?.Agents) return ext

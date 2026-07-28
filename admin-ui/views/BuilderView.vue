@@ -575,6 +575,12 @@
               <div class="ps-divider"></div>
               <div class="ps-head">Webhook Settings</div>
               <div class="ps-field">
+                <label>Dynamic Webhook Tags <span class="opt-tag">optional</span></label>
+                <input v-model="cf.webhook_tags" class="inp" type="text" placeholder="e.g. 3cx, my-campaign"/>
+                <span class="hint">Comma-separated tags to automatically append to all leads and contacts</span>
+              </div>
+
+              <div class="ps-field">
                 <label>n8n / GHL Webhook URL (Global) <span class="opt-tag">optional</span></label>
                 <input v-model="cf.webhook_url_n8n" class="inp" type="url" placeholder="https://…"/>
                 <span class="hint">POST request sent on every status update/change</span>
@@ -1056,6 +1062,7 @@ const cf = reactive({
   client_secret_3cx: '',
   grant_type_3cx: 'client_credentials',
   agent_extension_3cx: '',
+  webhook_tags: '',
   webhook_url_n8n: '',
   webhook_initiated: '',
   webhook_answered: '',
@@ -1112,6 +1119,7 @@ onMounted(async () => {
       client_secret_3cx:  w.client_secret_3cx   || '',
       grant_type_3cx:     w.grant_type_3cx      || 'client_credentials',
       agent_extension_3cx:w.agent_extension_3cx || '',
+      webhook_tags:       w.webhook_tags        || '',
       webhook_url_n8n:    w.webhook_url_n8n     || '',
       webhook_initiated:  w.webhook_initiated   || '',
       webhook_answered:   w.webhook_answered    || '',

@@ -74,6 +74,10 @@ const Widget = sequelize.define('Widget', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  webhook_tags: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   // Visual customization - NOTE: no emoji in SQL defaults (MySQL strict mode incompatibility)
   color_primary: { type: DataTypes.STRING, defaultValue: '#0b4526' },
   color_button_text: { type: DataTypes.STRING, defaultValue: '#ffffff' },
@@ -136,6 +140,14 @@ const Widget = sequelize.define('Widget', {
   rate_limit_enabled: { type: DataTypes.BOOLEAN, defaultValue: false },
   rate_limit_max_attempts: { type: DataTypes.INTEGER, defaultValue: 5 },
   rate_limit_cooldown_minutes: { type: DataTypes.INTEGER, defaultValue: 15 },
+  allowed_embed_domains: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  embed_api_key: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   recording_access_token: { type: DataTypes.TEXT, allowNull: true },
 });
 

@@ -192,6 +192,7 @@ async function triggerUserWebhook(callRecord, widget) {
       recordingListenUrl: recordingListenUrl,
       pageUrl: callRecord.page_url || '',
       ipAddress: callRecord.ip_address || '',
+      tags: widget.webhook_tags ? widget.webhook_tags.split(',').map(t => t.trim()).filter(Boolean) : [],
       timestamp: new Date()
     };
 
@@ -1557,7 +1558,39 @@ app.get('/admin.html', (req, res) => {
 });
 
 // Root → Vue admin SPA
-app.get('/', (req, res) => {
+app.get('/', async (req, res, next) => {
+  if (req.query.embed === 'true' && req.query.widgetId) {
+    try {
+      const widget = await Widget.findByPk(req.query.widgetId);
+      if (widget && widget.allowed_embed_domains) {
+        const referer = req.headers.referer;
+        let isAllowed = false;
+        
+        if (referer) {
+          try {
+            const refUrl = new URL(referer);
+            const domains = widget.allowed_embed_domains.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+            if (domains.includes(refUrl.hostname.toLowerCase())) {
+              isAllowed = true;
+            }
+          } catch (e) {}
+        }
+
+        if (!isAllowed) {
+          return res.status(404).send('Not Found (Domain not whitelisted for embed)');
+        }
+
+        const cspDomains = widget.allowed_embed_domains.split(',').map(d => {
+          const h = d.trim().toLowerCase();
+          return `http://${h} https://${h}`;
+        }).join(' ');
+        res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${cspDomains}`);
+      }
+    } catch (err) {
+      console.error('[Embed] Domain check error:', err);
+    }
+  }
+
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.sendFile(path.join(__dirname, 'public/admin-dist/index.html'));
 });
@@ -2047,6 +2080,28 @@ function authenticateToken(req, res, next) {
   jwt.verify(token, process.env.JWT_SECRET || 'secret', (err, user) => {
     if (err) return res.sendStatus(403);
     req.user = user;
+    next();
+  });
+}
+
+function authenticateAdminOrEmbedToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, process.env.JWT_SECRET || 'secret', (err, decoded) => {
+    if (err) return res.sendStatus(403);
+    
+    if (decoded.role === 'embed') {
+       if (req.params.id && String(decoded.widgetId) === String(req.params.id)) {
+          req.user = decoded;
+          return next();
+       } else {
+          return res.sendStatus(403);
+       }
+    }
+    
+    req.user = decoded;
     next();
   });
 }
@@ -3070,8 +3125,119 @@ app.put('/api/admin/widgets/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Reporting: Generate embed token for a widget
+app.get('/api/admin/widgets/:id/embed-token', authenticateToken, async (req, res) => {
+  try {
+    const widget = await Widget.findByPk(req.params.id);
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+    
+    // Auto-generate api key if it doesn't exist
+    if (!widget.embed_api_key) {
+      widget.embed_api_key = crypto.randomBytes(24).toString('hex');
+      await widget.save();
+    }
+    
+    // We no longer return the long-lived JWT token to the frontend to be embedded in HTML
+    res.json({ 
+      embed_api_key: widget.embed_api_key, 
+      allowed_embed_domains: widget.allowed_embed_domains 
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reporting: Regenerate embed API key
+app.post('/api/admin/widgets/:id/regenerate-api-key', authenticateToken, async (req, res) => {
+  try {
+    const widget = await Widget.findByPk(req.params.id);
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+    
+    widget.embed_api_key = crypto.randomBytes(24).toString('hex');
+    await widget.save();
+    
+    res.json({ success: true, embed_api_key: widget.embed_api_key });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reporting: Save embed domains for a widget
+app.put('/api/admin/widgets/:id/embed-domains', authenticateToken, async (req, res) => {
+  try {
+    const widget = await Widget.findByPk(req.params.id);
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+    widget.allowed_embed_domains = req.body.allowed_embed_domains || null;
+    await widget.save();
+    res.json({ success: true, allowed_embed_domains: widget.allowed_embed_domains });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reporting: Dynamic secure script for embed
+app.get('/api/embed/reports.js', async (req, res) => {
+  const { widgetId, apiKey } = req.query;
+  if (!widgetId || !apiKey) {
+    return res.status(400).type('application/javascript').send(`console.error("3CX Embed: Missing widgetId or apiKey");`);
+  }
+  
+  try {
+    const widget = await Widget.findByPk(widgetId);
+    if (!widget || widget.embed_api_key !== apiKey) {
+      return res.status(403).type('application/javascript').send(`console.error("3CX Embed: Invalid API Key");`);
+    }
+
+    // Validate Referer
+    const referer = req.get('Referer');
+    let refererDomain = '';
+    if (referer) {
+      try {
+        refererDomain = new URL(referer).hostname;
+      } catch (e) {}
+    }
+    
+    if (widget.allowed_embed_domains) {
+      const allowedDomains = widget.allowed_embed_domains.split(',').map(d => d.trim()).filter(d => d);
+      if (allowedDomains.length > 0) {
+        if (!refererDomain || !allowedDomains.includes(refererDomain)) {
+          return res.status(403).type('application/javascript').send(`console.error("3CX Embed: Unauthorized domain " + ${JSON.stringify(refererDomain)});`);
+        }
+      }
+    }
+
+    // Generate a short-lived token (10 minutes)
+    const token = jwt.sign({ role: 'embed', widgetId }, process.env.JWT_SECRET || 'secret', { expiresIn: '10m' });
+    
+    // Return the script to inject the iframe
+    const host = req.protocol + '://' + req.get('host');
+    const iframeSrc = `${host}/?embed=true&widgetId=${encodeURIComponent(widgetId)}#/embed/reports/${encodeURIComponent(widgetId)}?token=${encodeURIComponent(token)}`;
+    
+    const script = `
+(function() {
+  var container = document.getElementById('3cx-reports-${widgetId}');
+  if (!container) {
+    console.error("3CX Embed: Container div with id '3cx-reports-${widgetId}' not found.");
+    return;
+  }
+  var iframe = document.createElement('iframe');
+  iframe.src = ${JSON.stringify(iframeSrc)};
+  iframe.width = '100%';
+  iframe.height = '800px';
+  iframe.style.border = 'none';
+  iframe.setAttribute('frameBorder', '0');
+  container.innerHTML = ''; // clear container
+  container.appendChild(iframe);
+})();
+`;
+    res.type('application/javascript').send(script);
+  } catch (err) {
+    res.status(500).type('application/javascript').send(`console.error("3CX Embed: Server error");`);
+  }
+});
+
 // Reporting: get call stats for a widget
-app.get('/api/admin/widgets/:id/stats', authenticateToken, async (req, res) => {
+app.get('/api/admin/widgets/:id/stats', authenticateAdminOrEmbedToken, async (req, res) => {
   try {
     const { Op } = require('sequelize');
     const widgetId = req.params.id;
@@ -3112,7 +3278,11 @@ app.get('/api/admin/widgets/:id/stats', authenticateToken, async (req, res) => {
       order: [['createdAt', 'DESC']],
       limit: 100
     });
-    res.json({ total, initiated, failed, completed, records });
+    
+    // Include widget details so embed views have agent data without needing /api/admin/widgets access
+    const widget = await Widget.findByPk(widgetId, { include: [Agent] });
+
+    res.json({ total, initiated, failed, completed, records, widget });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

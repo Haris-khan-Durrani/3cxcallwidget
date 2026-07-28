@@ -2001,8 +2001,8 @@ app.post('/api/call', async (req, res) => {
       callRecord.ended_at = new Date();
       await callRecord.save();
 
-      // Trigger Webhooks immediately for the offline lead
-      await triggerUserWebhook(callRecord, widget);
+      // Trigger Webhooks asynchronously in background for the offline lead
+      triggerUserWebhook(callRecord, widget).catch(e => console.error('[Webhook Error]', e.message));
 
       return res.json({ success: true, isLead: true, message: 'Lead captured successfully' });
     }
@@ -2017,8 +2017,8 @@ app.post('/api/call', async (req, res) => {
       callRecord.ended_at = new Date();
       await callRecord.save();
 
-      // Trigger Webhooks immediately for the offline lead
-      await triggerUserWebhook(callRecord, widget);
+      // Trigger Webhooks asynchronously in background for the offline lead
+      triggerUserWebhook(callRecord, widget).catch(e => console.error('[Webhook Error]', e.message));
 
       return res.json({ success: true, isLead: true, message: 'Lead captured successfully (Location limit)' });
     }

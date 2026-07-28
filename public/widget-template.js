@@ -1551,8 +1551,8 @@
             const $successHeadline = document.getElementById('cx-ok-wrap') ? document.getElementById('cx-ok-wrap').querySelector('h3') : null;
             const $successMsg = document.getElementById('cx-ok-wrap') ? document.getElementById('cx-ok-wrap').querySelector('p') : null;
             if (d.isLead && !OFFICE_CLOSED) {
-              if ($successHeadline) $successHeadline.textContent = WIDGET_SUCCESS_TITLE || 'Inquiry Received';
-              if ($successMsg) $successMsg.textContent = WIDGET_SUCCESS_MSG || 'Thank you for your inquiry! Our team will contact you shortly.';
+              if ($successHeadline) $successHeadline.textContent = SUCCESS_H || 'Inquiry Received';
+              if ($successMsg) $successMsg.textContent = SUCCESS_MSG || 'Thank you for your inquiry! Our team will contact you shortly.';
             }
           } else {
             if (callId) {

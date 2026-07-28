@@ -37,6 +37,7 @@
               </div>
             </div>
             <div class="dialer-actions">
+              <button class="btn btn-secondary btn-sm" @click="openCompanies(dialer)" style="margin-right: 8px;">🏢 Companies</button>
               <button class="btn btn-accent btn-sm" @click="openAgents(dialer)" style="margin-right: 8px;">Agents Mapping</button>
               <button class="btn btn-ghost btn-sm" @click="openEdit(dialer)" style="margin-right: 8px;">Edit</button>
               <button class="btn btn-danger btn-sm" @click="confirmDelete(dialer.id)">Delete</button>
@@ -198,8 +199,11 @@
                       <input v-model="newAgent.last_name" type="text" class="input" placeholder="e.g. Khan" />
                     </div>
                     <div class="form-group" style="flex: 1;">
-                      <label class="form-label">Location ID</label>
-                      <input v-model="newAgent.location_id" type="text" class="input" placeholder="e.g. loc_abc12345" />
+                      <label class="form-label">Company</label>
+                      <select v-model="newAgent.company_id" class="input" style="height: 40px;">
+                        <option value="">-- No Company --</option>
+                        <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
+                      </select>
                     </div>
                   </div>
                   <div style="display:flex; gap:12px;">
@@ -267,7 +271,7 @@
                         <th>Agent ID</th>
                         <th>Email</th>
                         <th>3CX Extension</th>
-                        <th>Location ID</th>
+                        <th>Company</th>
                         <th style="width: 120px; text-align: right;">Action</th>
                       </tr>
                     </thead>
@@ -277,7 +281,7 @@
                         <td><code>{{ a.crm_user_id }}</code></td>
                         <td>{{ a.email || '-' }}</td>
                         <td><span class="badge badge-green">{{ a.extension }}</span></td>
-                        <td><code>{{ a.location_id || '-' }}</code></td>
+                        <td><code>{{ a.DialerCompany ? a.DialerCompany.name : (a.location_id || '-') }}</code></td>
                         <td style="text-align: right; white-space: nowrap;">
                           <button class="btn btn-ghost btn-sm" @click="startEditAgent(a)" title="Edit" style="margin-right: 4px;">Edit</button>
                           <button class="btn btn-danger btn-sm" @click="deleteAgent(a.id)" title="Delete">✕</button>
@@ -293,8 +297,77 @@
       </transition>
     </teleport>
 
-  </AppLayout>
-</template>
+    <!-- Companies Modal -->
+    <teleport to="body">
+      <transition name="fade">
+        <div class="modal-backdrop" v-if="showCompaniesModal" @click.self="showCompaniesModal = false">
+          <transition name="slide-up">
+            <div class="modal-box modal-box-lg" v-if="showCompaniesModal">
+              <div class="modal-header">
+                <div>
+                  <h3>Manage Companies</h3>
+                  <p class="help-text" style="margin: 4px 0 0 0;">Each company maps to a GoHighLevel Location ID. Agents will be assigned to a company during setup.</p>
+                </div>
+                <button class="btn btn-icon btn-ghost" @click="showCompaniesModal = false">✕</button>
+              </div>
+              <div class="modal-body">
+                <!-- Add Company Form -->
+                <form class="agent-form" @submit.prevent="saveCompany" style="gap: 8px;">
+                  <div style="display:flex; gap:12px; align-items: flex-end;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                      <label class="form-label">Company Name *</label>
+                      <input v-model="newCompany.name" type="text" class="input" placeholder="e.g. EBMS Pakistan" required />
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                      <label class="form-label">GHL Location ID *</label>
+                      <input v-model="newCompany.location_id" type="text" class="input" placeholder="e.g. T73rxLwZ4VgFYPhSHe4N" required />
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                      <button v-if="editingCompanyId" type="button" class="btn btn-ghost" @click="cancelEditCompany" style="height: 38px;">Cancel</button>
+                      <button type="submit" class="btn btn-primary" :disabled="savingCompany" style="height: 38px; white-space: nowrap;">
+                        {{ savingCompany ? 'Saving...' : (editingCompanyId ? 'Save' : '+ Add Company') }}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+
+                <div class="divider"></div>
+
+                <!-- Companies List -->
+                <div v-if="loadingCompanies" style="text-align:center; padding: 20px;">
+                  <div class="spinner"></div>
+                </div>
+                <div v-else-if="companies.length === 0" class="empty-state">
+                  <p>No companies added yet. Add a company to assign agents to it.</p>
+                </div>
+                <div v-else class="table-wrap">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Company Name</th>
+                        <th>GHL Location ID</th>
+                        <th style="width: 120px; text-align: right;">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="c in companies" :key="c.id">
+                        <td><strong>{{ c.name }}</strong></td>
+                        <td><code>{{ c.location_id }}</code></td>
+                        <td style="text-align: right; white-space: nowrap;">
+                          <button class="btn btn-ghost btn-sm" @click="startEditCompany(c)" style="margin-right: 4px;">Edit</button>
+                          <button class="btn btn-danger btn-sm" @click="deleteCompany(c.id)">✕</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </transition>
+        </div>
+      </transition>
+    </teleport>
+
 
 <script setup>
 import { ref, reactive, computed, onMounted, inject } from 'vue'
@@ -326,8 +399,16 @@ const agents = ref([])
 const agentSearchQuery = ref('')
 const loadingAgents = ref(false)
 const addingAgent = ref(false)
-const newAgent = reactive({ crm_user_id: '', extension: '', email: '', first_name: '', last_name: '', location_id: '' })
+const newAgent = reactive({ crm_user_id: '', extension: '', email: '', first_name: '', last_name: '', location_id: '', company_id: '' })
 const editingAgentId = ref(null)
+
+// Companies state
+const showCompaniesModal = ref(false)
+const companies = ref([])
+const loadingCompanies = ref(false)
+const savingCompany = ref(false)
+const editingCompanyId = ref(null)
+const newCompany = reactive({ name: '', location_id: '' })
 
 const filteredAgents = computed(() => {
   if (!agentSearchQuery.value.trim()) return agents.value
@@ -464,7 +545,7 @@ async function openAgents(dialer) {
   agentSearchQuery.value = ''
   cancelEditAgent()
   showAgentsModal.value = true
-  await fetchAgents()
+  await Promise.all([fetchAgents(), fetchCompanies()])
 }
 
 async function fetchAgents() {
@@ -509,13 +590,14 @@ function startEditAgent(a) {
     email: a.email || '',
     first_name: a.first_name || '',
     last_name: a.last_name || '',
-    location_id: a.location_id || ''
+    location_id: a.location_id || '',
+    company_id: a.company_id || ''
   })
 }
 
 function cancelEditAgent() {
   editingAgentId.value = null
-  Object.assign(newAgent, { crm_user_id: '', extension: '', email: '', first_name: '', last_name: '', location_id: '' })
+  Object.assign(newAgent, { crm_user_id: '', extension: '', email: '', first_name: '', last_name: '', location_id: '', company_id: '' })
 }
 
 async function deleteAgent(agentId) {
@@ -529,6 +611,68 @@ async function deleteAgent(agentId) {
     fetchAgents()
   } catch (err) {
     toast('Failed to remove mapping', 'error')
+  }
+}
+
+// -- Companies Logic -- //
+async function openCompanies(dialer) {
+  currentDialerId.value = dialer.id
+  cancelEditCompany()
+  showCompaniesModal.value = true
+  await fetchCompanies()
+}
+
+async function fetchCompanies() {
+  loadingCompanies.value = true
+  try {
+    const res = await axios.get(`/api/admin/dialer-widgets/${currentDialerId.value}/companies`)
+    companies.value = res.data
+  } catch (err) {
+    toast('Failed to load companies', 'error')
+  } finally {
+    loadingCompanies.value = false
+  }
+}
+
+async function saveCompany() {
+  if (!newCompany.name || !newCompany.location_id) return toast('Company name and Location ID are required', 'error')
+  savingCompany.value = true
+  try {
+    if (editingCompanyId.value) {
+      await axios.put(`/api/admin/dialer-widgets/${currentDialerId.value}/companies/${editingCompanyId.value}`, { ...newCompany })
+      toast('Company updated')
+    } else {
+      await axios.post(`/api/admin/dialer-widgets/${currentDialerId.value}/companies`, { ...newCompany })
+      toast('Company added')
+    }
+    cancelEditCompany()
+    fetchCompanies()
+  } catch (err) {
+    toast(err.response?.data?.error || 'Failed to save company', 'error')
+  } finally {
+    savingCompany.value = false
+  }
+}
+
+function startEditCompany(c) {
+  editingCompanyId.value = c.id
+  Object.assign(newCompany, { name: c.name, location_id: c.location_id })
+}
+
+function cancelEditCompany() {
+  editingCompanyId.value = null
+  Object.assign(newCompany, { name: '', location_id: '' })
+}
+
+async function deleteCompany(companyId) {
+  if (!confirm('Delete this company? Agents assigned to it will be unlinked.')) return
+  try {
+    await axios.delete(`/api/admin/dialer-widgets/${currentDialerId.value}/companies/${companyId}`)
+    toast('Company deleted')
+    if (editingCompanyId.value === companyId) cancelEditCompany()
+    fetchCompanies()
+  } catch (err) {
+    toast('Failed to delete company', 'error')
   }
 }
 </script>

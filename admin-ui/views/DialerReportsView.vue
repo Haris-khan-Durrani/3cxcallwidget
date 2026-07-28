@@ -92,7 +92,18 @@
           <input type="text" v-model="agentFilter" class="dr-select" placeholder="e.g. 750" />
         </div>
 
-        <button v-if="statusFilter || agentFilter || dateFilter !== '30days'" class="dr-clear-btn" @click="resetFilters" title="Clear filters">
+        <div class="dr-filter-item">
+          <label class="dr-filter-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+            Company
+          </label>
+          <select v-model="companyFilter" class="dr-select">
+            <option value="">All Companies</option>
+            <option v-for="name in availableCompanyNames" :key="name" :value="name">{{ name }}</option>
+          </select>
+        </div>
+
+        <button v-if="statusFilter || agentFilter || companyFilter || dateFilter !== '30days'" class="dr-clear-btn" @click="resetFilters" title="Clear filters">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           Clear
         </button>
@@ -483,6 +494,7 @@
                   <span class="dr-sort-icon">{{ sortKey === 'createdAt' ? (sortDir === 'asc' ? '↑' : '↓') : '⇅' }}</span>
                 </th>
                 <th>Agent</th>
+                <th>Company</th>
                 <th class="dr-th-sortable" @click="setSort('destination')">
                   Destination
                   <span class="dr-sort-icon">{{ sortKey === 'destination' ? (sortDir === 'asc' ? '↑' : '↓') : '⇅' }}</span>
@@ -511,6 +523,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
                     Ext {{ r.agent_extension || '—' }}
                   </span>
+                </td>
+                <td>
+                  <span v-if="r.company_name" class="dr-company-chip">🏢 {{ r.company_name }}</span>
+                  <span v-else class="dr-empty-cell">—</span>
                 </td>
                 <td>
                   <div class="dr-dest-cell">
@@ -612,6 +628,7 @@ const customStartDate = ref('')
 const customEndDate = ref('')
 const statusFilter = ref('')
 const agentFilter = ref('')
+const companyFilter = ref('')
 const tableSearch = ref('')
 const page = ref(1)
 const PAGE_SIZE = 20
@@ -668,7 +685,12 @@ function formatAudioTime(s) {
 
 onMounted(async () => { if (store.dialers.length === 0) await store.fetch() })
 watch(dateFilter, () => { if (dateFilter.value !== 'custom') load() })
-watch([statusFilter, agentFilter, tableSearch], () => { page.value = 1 })
+watch([statusFilter, agentFilter, companyFilter, tableSearch], () => { page.value = 1 })
+
+const availableCompanyNames = computed(() => {
+  if (!report.value?.records) return []
+  return [...new Set(report.value.records.map(r => r.company_name).filter(Boolean))].sort()
+})
 
 async function load() {
   if (!selectedId.value) return
@@ -685,6 +707,7 @@ function resetFilters() {
   dateFilter.value = '30days'
   statusFilter.value = ''
   agentFilter.value = ''
+  companyFilter.value = ''
   tableSearch.value = ''
   page.value = 1
 }
@@ -723,6 +746,10 @@ const filteredRecords = computed(() => {
   if (agentFilter.value.trim()) {
     const t = agentFilter.value.trim().toLowerCase()
     recs = recs.filter(r => (r.agent_extension||'').toLowerCase().includes(t))
+  }
+  if (companyFilter.value.trim()) {
+    const t = companyFilter.value.trim().toLowerCase()
+    recs = recs.filter(r => (r.company_name||'').toLowerCase() === t)
   }
   if (tableSearch.value.trim()) {
     const t = tableSearch.value.trim().toLowerCase()
@@ -1281,6 +1308,14 @@ select.dr-select option { background-color: var(--bg2); color: var(--text); }
   border: 1px solid var(--border); border-radius: 20px;
   font-size: 11.5px; font-weight: 600; color: var(--text2);
 }
+.dr-company-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; background: rgba(31,111,235,0.08);
+  border: 1px solid rgba(31,111,235,0.2); border-radius: 20px;
+  font-size: 11.5px; font-weight: 600; color: var(--accent);
+  white-space: nowrap;
+}
+.dr-empty-cell { color: var(--text3); font-size: 12px; }
 .dr-dest-cell { display: flex; align-items: center; gap: 7px; }
 .dr-dest-icon { color: var(--text3); flex-shrink: 0; }
 .dr-dest-num { font-family: monospace; font-size: 12.5px; letter-spacing: .3px; }

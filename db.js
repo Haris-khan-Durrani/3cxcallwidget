@@ -305,6 +305,22 @@ const DialerWidget = sequelize.define('DialerWidget', {
   }
 });
 
+const DialerCompany = sequelize.define('DialerCompany', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  location_id: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  }
+});
+
 const DialerCallRecord = sequelize.define('DialerCallRecord', {
   id: {
     type: DataTypes.UUID,
@@ -351,6 +367,14 @@ const DialerCallRecord = sequelize.define('DialerCallRecord', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  company_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  location_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
 });
 
 const DialerAgent = sequelize.define('DialerAgent', {
@@ -381,6 +405,10 @@ const DialerAgent = sequelize.define('DialerAgent', {
   },
   location_id: {
     type: DataTypes.STRING,
+    allowNull: true,
+  },
+  company_id: {
+    type: DataTypes.UUID,
     allowNull: true,
   }
 });
@@ -646,6 +674,12 @@ DialerCallRecord.belongsTo(DialerWidget, { foreignKey: 'dialerId' });
 DialerWidget.hasMany(DialerAgent, { foreignKey: 'dialerId', onDelete: 'CASCADE' });
 DialerAgent.belongsTo(DialerWidget, { foreignKey: 'dialerId' });
 
+DialerWidget.hasMany(DialerCompany, { foreignKey: 'dialerId', onDelete: 'CASCADE' });
+DialerCompany.belongsTo(DialerWidget, { foreignKey: 'dialerId' });
+
+DialerCompany.hasMany(DialerAgent, { foreignKey: 'company_id', onDelete: 'SET NULL' });
+DialerAgent.belongsTo(DialerCompany, { foreignKey: 'company_id' });
+
 AIProject.hasMany(AIProviderCredential, { foreignKey: 'ai_project_id', onDelete: 'CASCADE' });
 AIProviderCredential.belongsTo(AIProject, { foreignKey: 'ai_project_id' });
 
@@ -667,6 +701,7 @@ module.exports = {
   CallRecord,
   Agent,
   DialerWidget,
+  DialerCompany,
   DialerCallRecord,
   DialerAgent,
   User,

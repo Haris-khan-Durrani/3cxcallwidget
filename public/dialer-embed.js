@@ -51,24 +51,72 @@
         }
       });
     },
-    // Shared GHL SPA Auto-detect Observer
+    recalculateStacking: function () {
+      var visibleInstances = [];
+      var registry = this.instances;
+      Object.keys(registry).forEach(function (id) {
+        var inst = registry[id];
+        if (inst && inst.isActive) {
+          visibleInstances.push(inst);
+        }
+      });
+
+      visibleInstances.forEach(function (inst, index) {
+        var bottomOffset = 20 + (index * 48); // Stack 48px apart
+        inst.fab.style.bottom = bottomOffset + 'px';
+        inst.fab.style.right  = '20px';
+        inst.popup.style.bottom = (bottomOffset + 46) + 'px';
+        inst.popup.style.right  = '20px';
+
+        // Restore custom drag position if stored
+        try {
+          var storageKey = '_3cx_fab_pos_' + inst.dialerId;
+          var sp = JSON.parse(localStorage.getItem(storageKey) || 'null');
+          if (sp && inst.applyFabPos) inst.applyFabPos(sp.left, sp.top);
+        } catch (e) {}
+      });
+    },
+    // Shared GHL SPA Auto-detect Observer & URL Location Listener
     sharedObserverStarted: false,
+    lastLocationId: '',
     startSharedObserver: function () {
       if (this.sharedObserverStarted) return;
       this.sharedObserverStarted = true;
 
+      var self = this;
       var _lastHref = window.location.href;
+
+      function extractLoc(url) {
+        var m = (url || window.location.href).match(/\/location\/([A-Za-z0-9_-]+)/);
+        return m ? m[1] : '';
+      }
+
+      self.lastLocationId = extractLoc(window.location.href);
+
       setInterval(function () {
-        if (window.location.href !== _lastHref) {
-          _lastHref = window.location.href;
+        var currentHref = window.location.href;
+        var currentLoc  = extractLoc(currentHref);
+
+        var hrefChanged = (currentHref !== _lastHref);
+        var locChanged  = (currentLoc !== self.lastLocationId);
+
+        if (hrefChanged || locChanged) {
+          _lastHref = currentHref;
+          self.lastLocationId = currentLoc;
+
           Object.keys(window.__3cxRegistry__.instances).forEach(function (id) {
             var inst = window.__3cxRegistry__.instances[id];
-            if (inst && inst.applyGhlAutoDetect) {
-              setTimeout(inst.applyGhlAutoDetect, 600);
+            if (inst) {
+              if (locChanged && typeof inst.onLocationChange === 'function') {
+                inst.onLocationChange(currentLoc);
+              }
+              if (inst.applyGhlAutoDetect) {
+                setTimeout(inst.applyGhlAutoDetect, 600);
+              }
             }
           });
         }
-      }, 500);
+      }, 400);
 
       var observer = new MutationObserver(function () {
         Object.keys(window.__3cxRegistry__.instances).forEach(function (id) {
@@ -96,6 +144,7 @@
   var EXT         = params.get('ext')         || '';
   var PHONE       = params.get('phone')       || '';
   var LOCATION_ID = params.get('location_id') || params.get('locationid') || params.get('location') || '';
+  var LABEL_PARAM = params.get('label')       || params.get('title')      || params.get('name')     || '';
 
   var isTemplate = function (v) {
     return !v || !v.trim() || v === 'undefined' || v === 'null' || v.includes('{{') || v.includes('}}');
@@ -327,6 +376,7 @@
     var extension   = '';
     var dialerLabel = 'Dialer';
     var apiBase     = ORIGIN;
+    var isActive    = false;
 
     // ── intl-tel-input ──────────────────────────────────────────────────────
     var iti = window.intlTelInput(input, {
@@ -359,9 +409,27 @@
       return el ? (el.value || '').trim() : '';
     }
 
+    // Register instance object in registry
+    var instanceObj = {
+      key: instanceKey,
+      dialerId: DIALER_ID,
+      fab: fab,
+      popup: popup,
+      isActive: false,
+      applyFabPos: applyFabPos,
+      applyGhlAutoDetect: applyGhlAutoDetect,
+      onLocationChange: function (newLocId) {
+        resolveAgent(newLocId);
+      },
+      stopAudio: function(exceptId) { stopActiveAudio(exceptId); }
+    };
+    window.__3cxRegistry__.instances[instanceKey] = instanceObj;
+
     // ── Sub-Account Location Matching & Agent Resolution ──────────────────
-    function resolveAgent() {
-      var currentLocId = LOCATION_ID && !isTemplate(LOCATION_ID) ? LOCATION_ID : extractGhlLocationId();
+    function resolveAgent(overrideLocId) {
+      var currentLocId = (overrideLocId !== undefined) ? overrideLocId :
+        (LOCATION_ID && !isTemplate(LOCATION_ID) ? LOCATION_ID : extractGhlLocationId());
+
       var query = '?dialerId=' + encodeURIComponent(DIALER_ID) +
                   '&location_id=' + encodeURIComponent(currentLocId);
 
@@ -378,25 +446,41 @@
         })
         .then(function (d) {
           if (!d || d.active === false || !d.extension) {
-            // Mismatch or unassigned -> Keep hidden
+            // Mismatch or unassigned -> Hide cleanly
+            instanceObj.isActive = false;
             fab.style.display   = 'none';
             popup.style.display = 'none';
             wrap.style.display  = 'none';
+            popup.classList.remove('_3cx_active');
+
+            window.__3cxRegistry__.recalculateStacking();
             return false;
           }
 
-          extension   = d.extension;
-          dialerLabel = d.companyName || d.dialerName || 'Dialer';
+          extension = d.extension;
+
+          // Priority for FAB label:
+          // 1. Explicit query parameter `label` / `title` / `name` from script src
+          // 2. Dialer Widget Name (`dialerName`) from database (e.g. "EBMS Pakistan Dialer", "CRM Dialer")
+          // 3. Fallback to "Dialer"
+          if (LABEL_PARAM && !isTemplate(LABEL_PARAM)) {
+            dialerLabel = LABEL_PARAM;
+          } else if (d.dialerName && !isTemplate(d.dialerName)) {
+            dialerLabel = d.dialerName;
+          } else {
+            dialerLabel = 'Dialer';
+          }
 
           if (fabText) fabText.textContent = dialerLabel;
           if (extTxt) extTxt.textContent = 'Agent Extension: ' + extension + ' (' + dialerLabel + ')';
 
-          // Stack FAB button cleanly based on number of active instances
-          registerInstanceInStack();
-
+          instanceObj.isActive = true;
           fab.style.display   = 'flex';
           popup.style.display = 'flex';
           wrap.style.display  = 'block';
+
+          // Recalculate stacking order whenever active status updates
+          window.__3cxRegistry__.recalculateStacking();
 
           if (PHONE && !isTemplate(PHONE)) {
             setTimeout(function () { try { iti.setNumber(PHONE); } catch (e) {} }, 400);
@@ -405,39 +489,15 @@
           return true;
         })
         .catch(function () {
+          instanceObj.isActive = false;
           fab.style.display   = 'none';
           popup.style.display = 'none';
           wrap.style.display  = 'none';
+          popup.classList.remove('_3cx_active');
+
+          window.__3cxRegistry__.recalculateStacking();
           return false;
         });
-    }
-
-    // ── Vertical Stacking Calculation ─────────────────────────────────────
-    function registerInstanceInStack() {
-      var registry = window.__3cxRegistry__.instances;
-      registry[instanceKey] = {
-        key: instanceKey,
-        dialerId: DIALER_ID,
-        fab: fab,
-        popup: popup,
-        applyGhlAutoDetect: applyGhlAutoDetect,
-        stopAudio: function(exceptId) { stopActiveAudio(exceptId); }
-      };
-
-      var keys = Object.keys(registry);
-      var index = keys.indexOf(instanceKey);
-      if (index < 0) index = keys.length - 1;
-
-      var bottomOffset = 20 + (index * 48); // Stack 48px apart
-      fab.style.bottom = bottomOffset + 'px';
-      fab.style.right  = '20px';
-
-      // Restore stored position if custom dragged
-      try {
-        var storageKey = '_3cx_fab_pos_' + DIALER_ID;
-        var sp = JSON.parse(localStorage.getItem(storageKey) || 'null');
-        if (sp) applyFabPos(sp.left, sp.top);
-      } catch (e) {}
     }
 
     resolveAgent();

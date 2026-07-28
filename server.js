@@ -365,6 +365,67 @@ async function triggerDialerWebhook(record, dialer) {
   }
 }
 
+const userTokenCache = {};
+
+/**
+ * Helper to retrieve or auto-generate a 3CX user recording access token via Webclient refresh token grant,
+ * falling back to configured access token or standard client credentials.
+ */
+async function getRecordingToken(widgetOrDialer) {
+  const tokenVal = (widgetOrDialer?.recording_access_token || process.env.RECORDING_REFRESH_TOKEN || process.env.RECORDING_ACCESS_TOKEN || '').trim();
+  if (tokenVal) {
+    try {
+      const cacheKey = widgetOrDialer?.id || 'global';
+      const cached = userTokenCache[cacheKey];
+      if (cached && cached.expiresAt > Date.now() + 60 * 1000) {
+        return cached.token;
+      }
+
+      // Attempt to auto-generate fresh User Access Token using 3CX Webclient refresh token grant
+      const fqdn = sanitizeFqdn(widgetOrDialer?.fqdn_3cx || process.env.FQDN_3CX);
+      if (fqdn) {
+        const tokenUrl = `https://${fqdn}/connect/token`;
+        const https = require('https');
+        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+        const params = new URLSearchParams({
+          client_id: 'Webclient',
+          grant_type: 'refresh_token',
+          refresh_token: tokenVal,
+          expires_in_minutes: '60'
+        });
+
+        try {
+          const resp = await axios.post(tokenUrl, params.toString(), {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+              'Cookie': `RefreshTokenCookie=${tokenVal}`
+            },
+            httpsAgent,
+            timeout: 6000
+          });
+
+          if (resp.data?.access_token) {
+            userTokenCache[cacheKey] = {
+              token: resp.data.access_token,
+              expiresAt: Date.now() + (resp.data.expires_in || 3600) * 1000
+            };
+            console.log(`[3CX User Token] Auto-generated fresh User Access Token from 3CX /connect/token!`);
+            return resp.data.access_token;
+          }
+        } catch (rfErr) {
+          // If refresh token grant fails, fallback to using raw token string directly
+        }
+      }
+      return tokenVal;
+    } catch (e) {
+      return tokenVal;
+    }
+  }
+
+  return await get3cxToken(widgetOrDialer);
+}
+
 /**
  * Searches the 3CX recordings list for a match and links it to the dialer call record.
  * Retries up to 4 times with a 5-second delay.
@@ -379,75 +440,61 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
 
     console.log(`[3CX Dialer] Searching call recording for destination ${record.destination} / call ${record.id} (Attempt ${attempt}/10)...`);
 
-    let currentToken = await get3cxToken(dialer);
+    const token = await getRecordingToken(dialer);
     const hostWithPort = sanitizeFqdn(dialer.fqdn_3cx);
     const hostOnly = sanitizeHostOnly(dialer.fqdn_3cx);
-    const agentExt = record.agent_extension ? encodeURIComponent(String(record.agent_extension).trim().split(':')[0]) : '';
+    const now = new Date();
+    const pastIso = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+    const futureIso = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const rawFilter = `(StartTime ge ${pastIso} and StartTime lt ${futureIso})`;
 
     const candidateUrls = [
-      `https://${hostWithPort}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings()`,
-      `https://${hostWithPort}/xapi/v1/recordings()`,
-      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings()?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Pbx.GetRecordings()?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}`,
-      `https://${hostOnly}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      ...(agentExt ? [
-        `https://${hostWithPort}/xapi/v1/Users(${agentExt})/Recordings()?access_token=${currentToken}`,
-        `https://${hostWithPort}/xapi/v1/Users('${agentExt}')/Recordings()?access_token=${currentToken}`,
-        `https://${hostWithPort}/callcontrol/${agentExt}/recordings?access_token=${currentToken}`,
-        `https://${hostWithPort}/xapi/v1/Users/${agentExt}/Recordings?access_token=${currentToken}`
-      ] : [])
+      `https://${hostWithPort}/xapi/v1/Recordings?%24top=50&%24skip=0&%24filter=${encodeURI(rawFilter)}&%24count=true&%24orderby=StartTime%20desc&%24select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn,SentimentScore,Summary,IsTranscribed,TranscriptionResult,CanBeTranscribed`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings`
     ];
+
+    const https = require('https');
+    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
     let list = [];
     let lastErr = null;
 
     for (const url of candidateUrls) {
       try {
+        console.log(`[3CX Dialer Recordings] Querying: ${url}`);
         const resp = await axios.get(url, {
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-            Accept: 'application/json, text/plain, */*',
-            'OData-Version': '4.0',
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          timeout: 6000
+          headers: { Authorization: `Bearer ${token}` },
+          httpsAgent,
+          timeout: 5000
         });
         const data = resp.data;
         const items = Array.isArray(data) ? data : (data?.value || data?.items || data?.result || []);
+        console.log(`[3CX Dialer Recordings] Status: ${resp.status} | Total Items Returned: ${items.length}`);
         if (items.length > 0) {
-          console.log(`[3CX Dialer Recordings] Successfully fetched ${items.length} recordings from endpoint: ${url}`);
+          console.log('[3CX Dialer Recordings Response Sample]:', JSON.stringify(items.slice(0, 3), null, 2));
           list = items;
           break;
+        } else {
+          console.log('[3CX Dialer Recordings Raw Response Data]:', JSON.stringify(data, null, 2));
         }
       } catch (err) {
         lastErr = err;
-        const status = err.response?.status;
-        console.log(`[3CX Dialer Recordings] Candidate ${url} returned status ${status || err.message}`);
-        if (status === 401 || status === 403) {
-          invalidate3cxToken(dialer.id);
-          try {
-            currentToken = await get3cxToken(dialer);
-          } catch (tErr) { /* ignore */ }
-        }
+        console.error(`[3CX Dialer Recordings Error] Candidate ${url} returned ${err.response?.status || err.message}:`, err.response?.data || '');
       }
     }
 
-    if (list.length === 0 && lastErr) {
-      throw lastErr;
+    if (list.length === 0 && lastErr && (lastErr.response?.status === 403 || lastErr.response?.status === 401)) {
+      console.warn('[3CX Dialer] 3CX returned 403/401 Forbidden. App Token lacks recording access. Set RECORDING_ACCESS_TOKEN in .env or set recording_access_token on the Dialer Widget.');
+      return;
     }
 
-    console.log(`[3CX Dialer] Total recordings fetched: ${list.length}.`);
+    console.log(`[3CX Dialer] Total recordings fetched: ${list.length}. Sample:`, JSON.stringify(list.slice(0, 2), null, 2));
 
     const cleanPhone = record.destination.replace(/\D/g, '');
     const phoneSuffix = cleanPhone.length >= 7 ? cleanPhone.slice(-7) : cleanPhone;
+    const callEndTime = new Date(record.ended_at || record.updatedAt || record.createdAt).getTime();
 
     const matches = list.filter(r => {
       const pStr = JSON.stringify(r);
@@ -455,13 +502,12 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
       const phoneMatch = phoneSuffix && digitsInRecord.includes(phoneSuffix);
       if (!phoneMatch) return false;
 
-      const recDateStr = r.Date || r.date || r.StartTime || r.startTime || r.DateTime || r.dateTime || r.Created || r.created;
+      const recDateStr = r.StartTime || r.startTime || r.Date || r.date || r.DateTime || r.dateTime || r.Created || r.created;
       let timeMatch = true;
       if (recDateStr) {
         const recTime = new Date(recDateStr).getTime();
-        const callTime = new Date(record.ended_at || record.updatedAt).getTime();
-        const diffMs = Math.abs(recTime - callTime);
-        timeMatch = diffMs < 12 * 60 * 60 * 1000;
+        const diffMs = Math.abs(recTime - callEndTime);
+        timeMatch = diffMs < 60 * 60 * 1000; // 1-hour window
       }
 
       return phoneMatch && timeMatch;
@@ -470,8 +516,8 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
     let match = null;
     if (matches.length > 0) {
       matches.sort((a, b) => {
-        const idA = parseInt(a.Id || a.id || a.recId || 0, 10);
-        const idB = parseInt(b.Id || b.id || b.recId || 0, 10);
+        const idA = parseInt(a.Id ?? a.id ?? a.recId ?? a.ID ?? 0, 10);
+        const idB = parseInt(b.Id ?? b.id ?? b.recId ?? b.ID ?? 0, 10);
         return idB - idA;
       });
       match = matches[0];
@@ -485,8 +531,6 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
         const crypto = require('crypto');
         record.recording_token = crypto.randomBytes(32).toString('hex');
         await record.save();
-
-        // Push update to webhook
         await triggerDialerWebhook(record, dialer);
       }
     } else {
@@ -494,11 +538,16 @@ async function fetchAndLinkDialerRecording(recordId, attempt = 1) {
         console.log(`[3CX Dialer] Recording not found yet. Retrying search (attempt ${attempt + 1}/10) in 5s...`);
         setTimeout(() => fetchAndLinkDialerRecording(recordId, attempt + 1), 5000);
       } else {
-        console.log(`[3CX Dialer] Max recording search attempts reached. No matching recording found in the recent recordings list for call ${record.id}.`);
+        console.log(`[3CX Dialer] Max recording search attempts reached. No matching recording found for call ${record.id}.`);
       }
     }
   } catch (err) {
+    const is403 = err.response?.status === 403 || err.response?.status === 401;
     console.error('[3CX Dialer] Error fetching recordings list:', err.response?.data || err.message);
+    if (is403) {
+      console.warn('[3CX Dialer] 3CX returned 403 Forbidden. App Token lacks recording access. Set RECORDING_ACCESS_TOKEN in .env or set recording_access_token on the Dialer Widget.');
+      return;
+    }
     if (attempt < 10) {
       console.log(`[3CX Dialer] Retrying search due to error (attempt ${attempt + 1}/10) in 5s...`);
       setTimeout(() => fetchAndLinkDialerRecording(recordId, attempt + 1), 5000);
@@ -1084,6 +1133,10 @@ async function checkDialerCallControlStatus(dialer, extension, destination) {
     // Fallback if agentPart is not found but there are active participants
     return { active: true, connected: false, ringing: true };
   } catch (err) {
+    if (err.response?.status === 401 || err.response?.status === 403) {
+      console.log(`[3CX Dialer CC] Received ${err.response.status} for Ext ${extension}. Invalidating token cache...`);
+      invalidate3cxToken(dialer.id);
+    }
     console.error(`[3CX Dialer CC] Failed checking CallControl for Ext ${extension}:`, err.message);
     return null;
   }
@@ -1106,105 +1159,85 @@ function updateLastAgentStatus(agentExtensionStr, status) {
  * Retries up to 20 times with a 5-second delay to handle PBX write latency.
  */
 async function fetchAndLinkRecording(recordId, attempt = 1) {
-  let widgetIdForToken = null;
   try {
     const record = await CallRecord.findByPk(recordId, { include: [Widget] });
     if (!record || !record.Widget) return;
 
     const widget = record.Widget;
-    widgetIdForToken = widget.id;
     if (!widget.client_id_3cx || !widget.client_secret_3cx) return;
 
     console.log(`[3CX] Searching call recording for customer ${record.customer_phone} / call ${record.id} (Attempt ${attempt}/20)...`);
 
-    let currentToken = await get3cxToken(widget);
+    const token = await getRecordingToken(widget);
     const hostWithPort = sanitizeFqdn(widget.fqdn_3cx);
     const hostOnly = sanitizeHostOnly(widget.fqdn_3cx);
-
-    const triedExts = (record.agent_extension || '').split(',').map(x => x.trim().split(':')[0]).filter(Boolean);
-    const lastExt = triedExts[triedExts.length - 1];
-    const agentExt = lastExt ? encodeURIComponent(lastExt) : '';
+    const now = new Date();
+    const pastIso = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+    const futureIso = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const rawFilter = `(StartTime ge ${pastIso} and StartTime lt ${futureIso})`;
 
     const candidateUrls = [
-      `https://${hostWithPort}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings()`,
-      `https://${hostWithPort}/xapi/v1/recordings()`,
-      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings()?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Recordings/Pbx.GetRecordings?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Pbx.GetRecordings()?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/Recordings?access_token=${currentToken}`,
-      `https://${hostWithPort}/xapi/v1/recordings?access_token=${currentToken}`,
-      `https://${hostOnly}/xapi/v1/Recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      `https://${hostOnly}/xapi/v1/recordings()?access_token=${currentToken}&$top=45&$orderby=Id desc`,
-      ...(agentExt ? [
-        `https://${hostWithPort}/xapi/v1/Users(${agentExt})/Recordings()?access_token=${currentToken}`,
-        `https://${hostWithPort}/xapi/v1/Users('${agentExt}')/Recordings()?access_token=${currentToken}`,
-        `https://${hostWithPort}/callcontrol/${agentExt}/recordings?access_token=${currentToken}`,
-        `https://${hostWithPort}/xapi/v1/Users/${agentExt}/Recordings?access_token=${currentToken}`
-      ] : [])
+      `https://${hostWithPort}/xapi/v1/Recordings?%24top=50&%24skip=0&%24filter=${encodeURI(rawFilter)}&%24count=true&%24orderby=StartTime%20desc&%24select=Id,IsArchived,Transcription,FromDidNumber,FromDn,FromCallerNumber,FromDisplayName,StartTime,ToDnType,ToDidNumber,ToDisplayName,ToDn,SentimentScore,Summary,IsTranscribed,TranscriptionResult,CanBeTranscribed`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=StartTime desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings?$top=50&$orderby=Id desc`,
+      `https://${hostWithPort}/xapi/v1/Recordings`
     ];
+
+    const https = require('https');
+    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
     let list = [];
     let lastErr = null;
 
     for (const url of candidateUrls) {
       try {
+        console.log(`[3CX Recordings] Querying: ${url}`);
         const resp = await axios.get(url, {
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-            Accept: 'application/json, text/plain, */*',
-            'OData-Version': '4.0',
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          timeout: 6000
+          headers: { Authorization: `Bearer ${token}` },
+          httpsAgent,
+          timeout: 5000
         });
         const data = resp.data;
         const items = Array.isArray(data) ? data : (data?.value || data?.items || data?.result || []);
+        console.log(`[3CX Recordings] Status: ${resp.status} | Total Items Returned: ${items.length}`);
         if (items.length > 0) {
-          console.log(`[3CX Recordings] Successfully fetched ${items.length} recordings from endpoint: ${url}`);
+          console.log('[3CX Recordings Response Sample]:', JSON.stringify(items.slice(0, 3), null, 2));
           list = items;
           break;
+        } else {
+          console.log('[3CX Recordings Raw Response Data]:', JSON.stringify(data, null, 2));
         }
       } catch (err) {
         lastErr = err;
-        const status = err.response?.status;
-        console.log(`[3CX Recordings] Candidate ${url} returned status ${status || err.message}`);
-        if (status === 401 || status === 403) {
-          invalidate3cxToken(widget.id);
-          try {
-            currentToken = await get3cxToken(widget);
-          } catch (tErr) { /* ignore */ }
-        }
+        console.error(`[3CX Recordings Error] Candidate ${url} returned ${err.response?.status || err.message}:`, err.response?.data || '');
       }
     }
 
-    if (list.length === 0 && lastErr) {
-      throw lastErr;
+    if (list.length === 0 && lastErr && (lastErr.response?.status === 403 || lastErr.response?.status === 401)) {
+      console.warn('[3CX] 3CX returned 403/401 Forbidden. App Token lacks recording access. Set RECORDING_ACCESS_TOKEN in .env or set recording_access_token on the Widget.');
+      return;
     }
 
-    console.log(`[3CX] Total recordings fetched: ${list.length}.`);
+    console.log(`[3CX] Total recordings fetched: ${list.length}. Sample:`, JSON.stringify(list.slice(0, 2), null, 2));
+
+    const cleanPhone = (record.customer_phone || '').replace(/\D/g, '');
+    const phoneSuffix = cleanPhone.length >= 7 ? cleanPhone.slice(-7) : cleanPhone;
+    const callEndTime = new Date(record.ended_at || record.updatedAt || record.createdAt).getTime();
 
     // Find matching recordings using multi-factor criteria:
-    const cleanPhone = record.customer_phone.replace(/\D/g, '');
-    const phoneSuffix = cleanPhone.length >= 7 ? cleanPhone.slice(-7) : cleanPhone;
-
     const matches = list.filter(r => {
       const pStr = JSON.stringify(r);
       const digitsInRecord = pStr.replace(/\D/g, '');
       const phoneMatch = phoneSuffix && digitsInRecord.includes(phoneSuffix);
       if (!phoneMatch) return false;
 
-      // Time match (ensures the recording timestamp is close to call end time, timezone-tolerant 12h window)
-      const recDateStr = r.Date || r.date || r.StartTime || r.startTime || r.DateTime || r.dateTime || r.Created || r.created;
+      // Time match (ensures the recording timestamp is close to call end time, 1-hour window)
+      const recDateStr = r.StartTime || r.startTime || r.Date || r.date || r.DateTime || r.dateTime || r.Created || r.created;
       let timeMatch = true;
       if (recDateStr) {
         const recTime = new Date(recDateStr).getTime();
-        const callTime = new Date(record.ended_at || record.updatedAt).getTime();
-        const diffMs = Math.abs(recTime - callTime);
-        timeMatch = diffMs < 12 * 60 * 60 * 1000;
+        const diffMs = Math.abs(recTime - callEndTime);
+        timeMatch = diffMs < 60 * 60 * 1000; // 1-hour window
       }
 
       return phoneMatch && timeMatch;
@@ -1214,8 +1247,8 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     if (matches.length > 0) {
       // Sort matches descending by ID (highest ID represents the newest recording)
       matches.sort((a, b) => {
-        const idA = parseInt(a.Id || a.id || a.recId || 0, 10);
-        const idB = parseInt(b.Id || b.id || b.recId || 0, 10);
+        const idA = parseInt(a.Id ?? a.id ?? a.recId ?? a.ID ?? 0, 10);
+        const idB = parseInt(b.Id ?? b.id ?? b.recId ?? b.ID ?? 0, 10);
         return idB - idA;
       });
       match = matches[0];
@@ -1243,17 +1276,10 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     }
   } catch (err) {
     const is403 = err.response?.status === 403 || err.response?.status === 401;
-    if (is403 && widgetIdForToken) {
-      invalidate3cxToken(widgetIdForToken);
-    }
     console.error('[3CX] Error fetching recordings list:', err.response?.data || err.message);
     if (is403) {
-      console.warn(`[3CX Fix Instructions for 403 Forbidden on Recordings]:
- 1. Open 3CX Admin Console (https://ebmsdxb.3cx.ae:3081 or WebClient).
- 2. Go to Admin -> System / Users -> Select your API User / Extension.
- 3. Click the 'Rights' tab (or 'Group Roles').
- 4. Under Rights, check ENABLE 'Show Call Recordings' / 'Can see group recordings' / 'Perform Management'.
- 5. Save changes in 3CX Admin Console.`);
+      console.warn('[3CX] 3CX returned 403 Forbidden. App Token lacks recording access. Set RECORDING_ACCESS_TOKEN in .env or set recording_access_token on the Widget.');
+      return;
     }
     if (attempt < 20) {
       console.log(`[3CX] Retrying search due to error (attempt ${attempt + 1}/20) in 5s...`);
@@ -1261,7 +1287,6 @@ async function fetchAndLinkRecording(recordId, attempt = 1) {
     }
   }
 }
-
 
 /**
  * Polls 3CX ActiveCalls API every 4s to track live calls and handle state transitions.
@@ -3370,21 +3395,16 @@ async function streamRecordingFrom3cx(widgetOrDialer, recId, res, isInline = fal
   const https = require('https');
   const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-  let cxToken = null;
-  try {
-    cxToken = await get3cxToken(widgetOrDialer);
-  } catch (tErr) {
-    console.error('[3CX Stream] Token fetch failed:', tErr.message);
-  }
-
   const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
   const hostOnly = sanitizeHostOnly(widgetOrDialer.fqdn_3cx);
 
+  let token = await getRecordingToken(widgetOrDialer);
+
   const candidateUrls = [
-    `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${cxToken || ''}`,
-    `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${cxToken || ''}`,
-    `https://${fqdn}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${cxToken || ''}`,
-    `https://${hostOnly}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${cxToken || ''}`
+    `https://${fqdn}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
+    `https://${fqdn}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
+    `https://${hostOnly}/xapi/v1/Recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`,
+    `https://${hostOnly}/xapi/v1/recordings/Pbx.DownloadRecording(recId=${recId})?access_token=${token}`
   ];
 
   let lastErr = null;
@@ -3394,9 +3414,12 @@ async function streamRecordingFrom3cx(widgetOrDialer, recId, res, isInline = fal
         method: 'get',
         url,
         responseType: 'stream',
-        headers: cxToken ? { Authorization: `Bearer ${cxToken}` } : {},
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'audio/wav, audio/*, */*'
+        },
         httpsAgent,
-        timeout: 20000
+        timeout: 5000
       });
 
       res.setHeader('Content-Type', response.headers['content-type'] || 'audio/wav');
@@ -3408,6 +3431,9 @@ async function streamRecordingFrom3cx(widgetOrDialer, recId, res, isInline = fal
       response.data.pipe(res);
       return;
     } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        invalidate3cxToken(widgetOrDialer.id);
+      }
       lastErr = err;
       console.warn(`[3CX Recording Stream] Candidate ${url} returned ${err.response?.status || err.message}`);
     }
@@ -4109,21 +4135,30 @@ const PORT = process.env.PORT || 3000;
 async function startServer() {
   try {
     const queryInterface = sequelize.getQueryInterface();
-    try {
-      const tableInfo = await queryInterface.describeTable('Widgets');
-      const widgetAttrs = Widget.rawAttributes;
-      for (const [colName, attrDef] of Object.entries(widgetAttrs)) {
-        if (tableInfo && !tableInfo[colName]) {
-          try {
-            await queryInterface.addColumn('Widgets', colName, attrDef);
-            console.log(`[Migration] Automatically added missing column '${colName}' to Widgets table.`);
-          } catch (colErr) {
-            console.warn(`[Migration] Notice for column '${colName}':`, colErr.message);
+    const tablesToMigrate = [
+      { name: 'Widgets', model: Widget },
+      { name: 'DialerWidgets', model: DialerWidget },
+      { name: 'CallRecords', model: CallRecord },
+      { name: 'DialerCallRecords', model: DialerCallRecord }
+    ];
+
+    for (const target of tablesToMigrate) {
+      try {
+        const tableInfo = await queryInterface.describeTable(target.name);
+        const attrs = target.model.rawAttributes;
+        for (const [colName, attrDef] of Object.entries(attrs)) {
+          if (tableInfo && !tableInfo[colName]) {
+            try {
+              await queryInterface.addColumn(target.name, colName, attrDef);
+              console.log(`[Migration] Automatically added missing column '${colName}' to ${target.name} table.`);
+            } catch (colErr) {
+              console.warn(`[Migration] Notice for column '${colName}' on ${target.name}:`, colErr.message);
+            }
           }
         }
+      } catch (migErr) {
+        console.warn(`[Migration] Column auto-migration check notice for ${target.name}:`, migErr.message);
       }
-    } catch (migErr) {
-      console.warn('[Migration] Column auto-migration check notice:', migErr.message);
     }
 
     await sequelize.sync();

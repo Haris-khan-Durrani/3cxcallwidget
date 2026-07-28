@@ -148,6 +148,7 @@ const Widget = sequelize.define('Widget', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  recording_access_token: { type: DataTypes.TEXT, allowNull: true },
 });
 
 const CallRecord = sequelize.define('CallRecord', {
@@ -290,6 +291,10 @@ const DialerWidget = sequelize.define('DialerWidget', {
   },
   location_id: {
     type: DataTypes.STRING,
+    allowNull: true,
+  },
+  recording_access_token: {
+    type: DataTypes.TEXT,
     allowNull: true,
   }
 });

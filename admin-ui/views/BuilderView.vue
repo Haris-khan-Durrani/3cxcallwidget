@@ -311,6 +311,32 @@
                 <div class="iti-number-box">50 123 4567</div>
               </div>
               <p class="hint" style="margin-top:8px">In the live widget, intl-tel-input auto-detects the visitor's country.</p>
+
+              <div class="ps-divider"></div>
+              <div class="ps-head" style="margin-top:12px">Call Connect Location Scope</div>
+              <div class="ps-field">
+                <label>Live Call Connect Target Scope</label>
+                <select v-model="f.call_connect_location_mode" class="sel">
+                  <option value="all">🌍 All Countries (International - Default)</option>
+                  <option value="uae_only">🇦🇪 UAE Numbers Only (+971)</option>
+                  <option value="custom">🌐 Specific Allowed Countries</option>
+                </select>
+                <span class="hint" v-if="f.call_connect_location_mode === 'uae_only'">
+                  Live 55s calls will ONLY trigger for UAE (+971) phone numbers. Non-UAE numbers are saved as offline leads.
+                </span>
+                <span class="hint" v-else-if="f.call_connect_location_mode === 'all'">
+                  Live 55s calls are allowed for all valid phone numbers worldwide.
+                </span>
+                <span class="hint" v-else-if="f.call_connect_location_mode === 'custom'">
+                  Specify allowed country dial codes below.
+                </span>
+              </div>
+
+              <div class="ps-field" v-if="f.call_connect_location_mode === 'custom'">
+                <label>Allowed Country Dial Codes</label>
+                <input v-model="f.call_connect_allowed_countries" class="inp" placeholder="e.g. +971, +966, +965" />
+                <span class="hint">Comma-separated list of country dial codes allowed for live call connect (e.g. +971, +966, +965).</span>
+              </div>
             </template>
 
             <!-- ── FIELDS ─────────────────────────────────────────────── -->
@@ -683,6 +709,36 @@
                   <span class="hint">How long each agent extension rings before retrying the next available agent (default is 40s).</span>
                 </div>
 
+                <div class="ps-divider"></div>
+                <div class="ps-head" style="margin-top:12px">Call Connect Location Restrictions</div>
+                <p class="hint" style="margin-bottom:12px">
+                  Control where the 55-second live phone call connect feature operates. Numbers outside allowed locations automatically operate as offline lead creators.
+                </p>
+
+                <div class="ps-field">
+                  <label>Live Call Connect Target Scope</label>
+                  <select v-model="f.call_connect_location_mode" class="sel">
+                    <option value="all">🌍 All Countries (International - Default)</option>
+                    <option value="uae_only">🇦🇪 UAE Numbers Only (+971)</option>
+                    <option value="custom">🌐 Specific Allowed Countries</option>
+                  </select>
+                  <span class="hint" v-if="f.call_connect_location_mode === 'uae_only'">
+                    Live 55s calls will ONLY be initiated for UAE numbers (+971). All other international visitors will be saved as offline leads.
+                  </span>
+                  <span class="hint" v-else-if="f.call_connect_location_mode === 'all'">
+                    Live 55s call connect is enabled for all valid phone numbers worldwide.
+                  </span>
+                  <span class="hint" v-else-if="f.call_connect_location_mode === 'custom'">
+                    Specify the country dial codes allowed for 55s live call connect below.
+                  </span>
+                </div>
+
+                <div class="ps-field" v-if="f.call_connect_location_mode === 'custom'">
+                  <label>Allowed Country Dial Codes</label>
+                  <input v-model="f.call_connect_allowed_countries" class="inp" placeholder="e.g. +971, +966, +965" />
+                  <span class="hint">Comma-separated list of country dial codes allowed for live call connect (e.g. +971, +966, +965).</span>
+                </div>
+
 
                 <div class="ps-divider"></div>
                 <div class="ps-head" style="margin-top:12px">Offline Text Customization</div>
@@ -1037,6 +1093,8 @@ const f = reactive({
   office_hours_out_status:"We're Offline",
   ring_timeout_seconds:  40,
   agent_rotation_enabled:true,
+  call_connect_location_mode:  'all',
+  call_connect_allowed_countries: '+971',
   rate_limit_enabled:          false,
   rate_limit_max_attempts:     5,
   rate_limit_cooldown_minutes: 15,
@@ -1120,6 +1178,7 @@ onMounted(async () => {
       'office_hours_enabled','office_hours_start','office_hours_end','office_hours_timezone',
       'office_hours_days','office_hours_out_title','office_hours_out_subtitle','office_hours_out_msg',
       'office_hours_out_status','office_hours_out_sub','ring_timeout_seconds','agent_rotation_enabled',
+      'call_connect_location_mode','call_connect_allowed_countries',
       'tooltip_autohide','tooltip_autohide_seconds',
       'rate_limit_enabled','rate_limit_max_attempts','rate_limit_cooldown_minutes']
     fields.forEach(k => { if (w[k] !== undefined && w[k] !== null) f[k] = w[k] })

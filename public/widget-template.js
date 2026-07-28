@@ -1546,8 +1546,14 @@
         const $badgeContainer = document.getElementById('cx-success-badge-container');
 
         if ($badgeContainer) {
-          if (OFFICE_CLOSED) {
+          if (OFFICE_CLOSED || d.isLead) {
             $badgeContainer.innerHTML = `<span class="cx-ok-icon" style="${SUCCESS_ICON_STYLE}">${SUCCESS_ICON}</span>`;
+            const $successHeadline = document.getElementById('cx-ok-wrap') ? document.getElementById('cx-ok-wrap').querySelector('h3') : null;
+            const $successMsg = document.getElementById('cx-ok-wrap') ? document.getElementById('cx-ok-wrap').querySelector('p') : null;
+            if (d.isLead && !OFFICE_CLOSED) {
+              if ($successHeadline) $successHeadline.textContent = WIDGET_SUCCESS_TITLE || 'Inquiry Received';
+              if ($successMsg) $successMsg.textContent = WIDGET_SUCCESS_MSG || 'Thank you for your inquiry! Our team will contact you shortly.';
+            }
           } else {
             if (callId) {
               sessionStorage.setItem('cx_active_call_id', callId);

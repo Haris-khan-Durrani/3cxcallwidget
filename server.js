@@ -1731,6 +1731,8 @@ app.get('/widget.js', async (req, res) => {
       '__OFFICE_OUT_SUB__': (widget.office_hours_out_sub || "Leave a message and we'll reply during business hours!").replace(/'/g, "\\'"),
       '__AGENT_ROTATION_ENABLED__': widget.agent_rotation_enabled !== false ? 'true' : 'false',
       '__RING_TIMEOUT__': String(widget.ring_timeout_seconds ?? 55),
+      '__CALL_CONNECT_LOCATION_MODE__': widget.call_connect_location_mode || 'all',
+      '__CALL_CONNECT_ALLOWED_COUNTRIES__': (widget.call_connect_allowed_countries || '+971').replace(/'/g, "\\'"),
     };
     for (const [key, val] of Object.entries(replacements)) {
       // Use split/join to replace all occurrences globally
@@ -1865,6 +1867,44 @@ function isIpRateLimited(clientIp, limit = 5, windowMs = 15 * 60 * 1000) {
   validTimestamps.push(now);
   callIpRateMap.set(clientIp, validTimestamps);
   return false;
+function isCallConnectAllowedForPhone(phone, widget) {
+  const mode = widget.call_connect_location_mode || 'all';
+  if (mode === 'all') {
+    return true;
+  }
+
+  const rawDigits = String(phone || '').replace(/\D/g, '');
+  if (!rawDigits) return false;
+
+  let allowedCodes = [];
+  if (mode === 'uae_only') {
+    allowedCodes = ['971'];
+  } else if (mode === 'custom') {
+    const rawList = (widget.call_connect_allowed_countries || '').split(',');
+    allowedCodes = rawList
+      .map(c => c.replace(/\D/g, ''))
+      .filter(Boolean);
+    if (allowedCodes.length === 0) {
+      allowedCodes = ['971'];
+    }
+  }
+
+  for (const code of allowedCodes) {
+    if (!code) continue;
+    if (rawDigits.startsWith(code)) {
+      return true;
+    }
+    if (rawDigits.startsWith('00' + code)) {
+      return true;
+    }
+    if (code === '971') {
+      if (/^0[2-9]\d{7,8}$/.test(rawDigits) || /^[2-9]\d{8}$/.test(rawDigits)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 // 2. API to initiate the call
@@ -1963,6 +2003,22 @@ app.post('/api/call', async (req, res) => {
       await triggerUserWebhook(callRecord, widget);
 
       return res.json({ success: true, isLead: true, message: 'Lead captured successfully' });
+    }
+
+    // Check location restrictions: If caller phone is outside allowed live call connect locations,
+    // skip 3CX call control and save as offline lead creator
+    const isLocationAllowed = isCallConnectAllowedForPhone(phone, widget);
+    if (!isLocationAllowed) {
+      console.log(`[Location Restriction] Phone ${phone} is outside allowed call connect scope (${widget.call_connect_location_mode}). Routing to Offline Lead Creator.`);
+      callRecord.status = 'Completed';
+      callRecord.outcome = 'Lead';
+      callRecord.ended_at = new Date();
+      await callRecord.save();
+
+      // Trigger Webhooks immediately for the offline lead
+      await triggerUserWebhook(callRecord, widget);
+
+      return res.json({ success: true, isLead: true, message: 'Lead captured successfully (Location limit)' });
     }
 
     // ── 3CX Call Control API: makecall via agent extension ───────────────────

@@ -140,7 +140,9 @@ const Widget = sequelize.define('Widget', {
   ring_timeout_seconds: { type: DataTypes.INTEGER, defaultValue: 40 },
   agent_rotation_enabled: { type: DataTypes.BOOLEAN, defaultValue: true },
   tooltip_autohide: { type: DataTypes.BOOLEAN, defaultValue: true },
-  tooltip_autohide_seconds: { type: DataTypes.INTEGER, defaultValue: 15 },
+  // Call Connect location scope & restrictions
+  call_connect_location_mode: { type: DataTypes.STRING, defaultValue: 'all' }, // 'all', 'uae_only', 'custom'
+  call_connect_allowed_countries: { type: DataTypes.STRING, defaultValue: '+971' },
   location_id: { type: DataTypes.STRING, allowNull: true },
   // Rate limiting & IP protection settings
   rate_limit_enabled: { type: DataTypes.BOOLEAN, defaultValue: false },

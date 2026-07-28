@@ -185,13 +185,13 @@ async def process_call_job(job, job_token):
         sip_uri = f"sip:{destination}@{fqdn}"
             
         # Using Daily REST API to trigger dialout
-        url = "https://api.daily.co/v1/dialout"
+        room_name = room_url.split("/")[-1]
+        url = f"https://api.daily.co/v1/rooms/{room_name}/dialOut/start"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {daily_key}"
         }
         data = {
-            "room_name": room_url.split("/")[-1],
             "sipUri": sip_uri
         }
         res = requests.post(url, headers=headers, json=data)

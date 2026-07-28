@@ -368,6 +368,8 @@
       </transition>
     </teleport>
 
+  </AppLayout>
+</template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, inject } from 'vue'

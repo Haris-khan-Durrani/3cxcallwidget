@@ -1867,6 +1867,8 @@ function isIpRateLimited(clientIp, limit = 5, windowMs = 15 * 60 * 1000) {
   validTimestamps.push(now);
   callIpRateMap.set(clientIp, validTimestamps);
   return false;
+}
+
 function isCallConnectAllowedForPhone(phone, widget) {
   const mode = widget.call_connect_location_mode || 'all';
   if (mode === 'all') {

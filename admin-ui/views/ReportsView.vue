@@ -377,7 +377,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="r in pagedRecords" :key="r.id" class="rp-tr">
+                <tr v-for="r in paginatedRecords" :key="r.id" class="rp-tr">
                   <td style="text-align: center;">
                     <input type="checkbox" :value="r.id" v-model="selectedCalls" class="dr-checkbox" />
                   </td>

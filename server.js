@@ -3328,8 +3328,10 @@ app.get('/api/embed/reports.js', async (req, res) => {
     const token = jwt.sign({ role: 'embed', widgetId }, process.env.JWT_SECRET || 'secret', { expiresIn: '10m' });
     
     // Return the script to inject the iframe
-    const host = req.protocol + '://' + req.get('host');
-    const iframeSrc = `${host}/?embed=true&widgetId=${encodeURIComponent(widgetId)}#/embed/reports/${encodeURIComponent(widgetId)}?token=${encodeURIComponent(token)}`;
+    // Return the script to inject the iframe
+    const fwdHost = req.headers['x-forwarded-host'] || req.headers.host;
+    const fwdProto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const iframeSrc = `${fwdProto}://${fwdHost}/?embed=true&widgetId=${encodeURIComponent(widgetId)}#/embed/reports/${encodeURIComponent(widgetId)}?token=${encodeURIComponent(token)}`;
     
     const script = `
 (function() {

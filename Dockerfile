@@ -29,6 +29,8 @@ RUN npm install --omit=dev
 COPY --from=builder /app/server.js ./
 COPY --from=builder /app/db.js ./
 COPY --from=builder /app/utils ./utils
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/public ./public
 
 # Set the port to 3005 as requested

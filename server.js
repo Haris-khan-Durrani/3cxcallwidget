@@ -3790,6 +3790,60 @@ app.get('/api/admin/dialers/:dialerId/recordings/:recId/listen', async (req, res
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ── BULK DELETE APIS ──────────────────────────────────────────────
+
+app.post('/api/admin/widget-calls/bulk/request-otp', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user;
+    const fullUser = await User.findByPk(user.id || user.userId);
+    if (!fullUser || !fullUser.email) {
+      return res.status(400).json({ error: 'Admin email is not configured. Please configure your email in settings or database to use this feature.' });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    bulkDeleteOtps.set(fullUser.id, { otp, expiresAt: Date.now() + 10 * 60 * 1000 });
+
+    await sendBulkDeleteOtpEmail(fullUser.email, otp);
+    res.json({ success: true, message: 'OTP sent to admin email.' });
+  } catch (err) {
+    console.error('[Bulk Delete OTP Error]', err);
+    res.status(500).json({ error: 'Failed to send OTP email: ' + err.message });
+  }
+});
+
+app.delete('/api/admin/widget-calls/bulk', authenticateToken, async (req, res) => {
+  try {
+    const { callIds, otp } = req.body;
+    if (!callIds || !Array.isArray(callIds) || callIds.length === 0) {
+      return res.status(400).json({ error: 'No calls selected for deletion.' });
+    }
+    if (!otp) {
+      return res.status(400).json({ error: 'OTP is required.' });
+    }
+
+    const user = req.user;
+    const fullUser = await User.findByPk(user.id || user.userId);
+    if (!fullUser) return res.status(401).json({ error: 'Invalid user.' });
+
+    const storedOtpData = bulkDeleteOtps.get(fullUser.id);
+    if (!storedOtpData || storedOtpData.otp !== String(otp).trim() || storedOtpData.expiresAt < Date.now()) {
+      return res.status(400).json({ error: 'Invalid or expired OTP.' });
+    }
+
+    bulkDeleteOtps.delete(fullUser.id);
+    
+    const { Op } = require('sequelize');
+    const deletedCount = await CallRecord.destroy({
+      where: { id: { [Op.in]: callIds } }
+    });
+
+    res.json({ success: true, message: `Successfully deleted ${deletedCount} call(s).` });
+  } catch (err) {
+    console.error('[Bulk Delete Error]', err);
+    res.status(500).json({ error: 'Failed to bulk delete calls: ' + err.message });
+  }
+});
+
+// ── BULK DELETE APIS ──────────────────────────────────────────────
 app.post('/api/admin/dialer-calls/bulk/request-otp', authenticateToken, async (req, res) => {
   try {
     const user = req.user; // populated by authenticateToken

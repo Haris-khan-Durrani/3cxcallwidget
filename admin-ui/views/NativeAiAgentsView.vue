@@ -66,15 +66,7 @@
                   <input v-model="form.name" type="text" class="input" placeholder="e.g. Main Support AI" />
                 </div>
                 
-                <div class="form-group">
-                  <label class="form-label">Company</label>
-                  <select v-model="form.company_id" class="input">
-                    <option :value="null">-- Select a Company --</option>
-                    <option v-for="w in widgets" :key="w.id" :value="w.id">
-                      {{ w.company_name || 'Unnamed Company' }} ({{ w.fqdn || w.id.substring(0,8) }})
-                    </option>
-                  </select>
-                </div>
+
 
                 <div class="form-group">
                   <label class="form-label">3CX PBX FQDN</label>

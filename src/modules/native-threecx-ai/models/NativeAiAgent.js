@@ -9,7 +9,7 @@ module.exports = (sequelize) => {
     },
     company_id: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true,
     },
     name: {
       type: DataTypes.STRING(150),

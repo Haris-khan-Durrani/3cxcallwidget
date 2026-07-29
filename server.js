@@ -1588,10 +1588,9 @@ app.get('/', async (req, res, next) => {
         if (referer) {
           try {
             const refUrl = new URL(referer);
+            const hostName = refUrl.hostname.toLowerCase();
             const domains = widget.allowed_embed_domains.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
-            if (domains.includes(refUrl.hostname.toLowerCase())) {
-              isAllowed = true;
-            }
+            isAllowed = domains.some(d => hostName === d || hostName.endsWith('.' + d));
           } catch (e) {}
         }
 
@@ -3316,9 +3315,10 @@ app.get('/api/embed/reports.js', async (req, res) => {
     }
     
     if (widget.allowed_embed_domains) {
-      const allowedDomains = widget.allowed_embed_domains.split(',').map(d => d.trim()).filter(d => d);
+      const allowedDomains = widget.allowed_embed_domains.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
       if (allowedDomains.length > 0) {
-        if (!refererDomain || !allowedDomains.includes(refererDomain)) {
+        const isAllowed = allowedDomains.some(d => refererDomain.toLowerCase() === d || refererDomain.toLowerCase().endsWith('.' + d));
+        if (!refererDomain || !isAllowed) {
           return res.status(403).type('application/javascript').send(`console.error("3CX Embed: Unauthorized domain " + ${JSON.stringify(refererDomain)});`);
         }
       }

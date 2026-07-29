@@ -16,6 +16,10 @@
           </div>
         </div>
         <div class="dr-header-actions">
+          <button class="btn-icon-action" @click="openEmbedModal" title="Embed Report">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+            Embed
+          </button>
           <button class="btn-icon-action" @click="load" :class="{ spinning: loading }" title="Refresh">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -624,20 +628,51 @@
     <div v-if="showOtpModal" class="dr-modal-overlay">
       <div class="dr-modal">
         <div class="dr-modal-header">
-          <h3>Confirm Bulk Delete</h3>
-          <button class="dr-modal-close" @click="showOtpModal = false">×</button>
+          <h3>Verify Deletion</h3>
+          <button class="dr-modal-close" @click="showOtpModal = false">&times;</button>
         </div>
         <div class="dr-modal-body">
-          <p>An OTP has been sent to your email to confirm the deletion of <strong>{{ selectedCalls.length }}</strong> calls.</p>
-          <div class="form-group" style="margin-top: 15px;">
-            <label>Enter 6-Digit OTP</label>
-            <input type="text" v-model="deleteOtp" class="form-input" placeholder="123456" />
+          <p class="dr-form-hint" style="margin-bottom:15px; color:#a1a1aa;">An OTP has been sent to your email. Enter it below to confirm deletion of {{ selectedCalls.length }} calls.</p>
+          <div class="dr-form-group">
+            <label>OTP Code</label>
+            <input v-model="deleteOtp" type="text" class="dr-input" placeholder="e.g. 123456" />
           </div>
         </div>
         <div class="dr-modal-footer">
-          <button class="btn-cancel" @click="showOtpModal = false">Cancel</button>
-          <button class="btn-save" @click="confirmBulkDelete" :disabled="otpDeleting">
-            {{ otpDeleting ? 'Deleting...' : 'Confirm Delete' }}
+          <button class="btn-ghost" @click="showOtpModal = false">Cancel</button>
+          <button class="btn-primary" @click="confirmBulkDelete" :disabled="!deleteOtp">Confirm Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Embed Settings Modal -->
+    <div v-if="showEmbedModal" class="dr-modal-overlay">
+      <div class="dr-modal">
+        <div class="dr-modal-header">
+          <h3>Embed Dialer Report</h3>
+          <button class="dr-modal-close" @click="showEmbedModal = false">&times;</button>
+        </div>
+        <div class="dr-modal-body">
+          <div class="dr-form-group">
+            <label>Allowed Domains (comma separated)</label>
+            <p class="dr-form-hint" style="margin-bottom:10px; color:#a1a1aa;">E.g. example.com, myapp.net. Only these domains can load the iframe.</p>
+            <input v-model="embedDomains" type="text" class="dr-input" placeholder="example.com" />
+          </div>
+          
+          <div class="dr-form-group" style="margin-top:20px;" v-if="embedApiKey">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+              <label style="margin:0;">Embed Code (Script Snippet)</label>
+              <button class="btn-ghost" style="padding:2px 8px; font-size:12px;" @click="regenerateApiKey" :disabled="regeneratingKey">
+                {{ regeneratingKey ? 'Generating...' : 'Regenerate API Key' }}
+              </button>
+            </div>
+            <textarea readonly class="dr-input rp-code-block" rows="4" @focus="$event.target.select()" style="font-family:monospace; background:rgba(0,0,0,0.2);">{{ embedCode }}</textarea>
+          </div>
+        </div>
+        <div class="dr-modal-footer">
+          <button class="btn-ghost" @click="showEmbedModal = false">Cancel</button>
+          <button class="btn-primary" @click="saveEmbedSettings" :disabled="savingEmbed">
+            {{ savingEmbed ? 'Saving...' : 'Save & Generate' }}
           </button>
         </div>
       </div>
@@ -662,6 +697,12 @@ const deleteOtp = ref('')
 const otpSending = ref(false)
 const otpDeleting = ref(false)
 
+const showEmbedModal = ref(false)
+const embedDomains = ref('')
+const embedApiKey = ref('')
+const savingEmbed = ref(false)
+const regeneratingKey = ref(false)
+
 const dateFilter = ref('30days')
 const customStartDate = ref('')
 const customEndDate = ref('')
@@ -674,6 +715,11 @@ const PAGE_SIZE = 20
 const sortKey = ref('createdAt')
 const sortDir = ref('desc')
 
+const embedCode = computed(() => {
+  const host = window.location.origin
+  return `<div id="3cx-dialer-reports-${selectedId.value}"></div>\n<script src="${host}/api/embed/dialer-reports.js?dialerId=${selectedId.value}&apiKey=${embedApiKey.value}" async><\/script>`
+})
+
 // Audio
 const audioRef = ref(null)
 const activeAudioRowId = ref(null)
@@ -682,6 +728,8 @@ const audioDuration = ref(0)
 const audioCurrentTime = ref(0)
 const activeAudioUrl = ref('')
 
+const apiBase = import.meta.env.VITE_API_URL || window.location.origin
+
 function playInline(r) {
   if (activeAudioRowId.value === r.id) { togglePlay(); return }
   activeAudioRowId.value = r.id
@@ -689,7 +737,6 @@ function playInline(r) {
   audioCurrentTime.value = 0
   audioDuration.value = r.duration_seconds || 0
   const token = localStorage.getItem('admin_token') || ''
-  const apiBase = import.meta.env.VITE_API_URL || window.location.origin
   activeAudioUrl.value = `${apiBase}/api/admin/dialers/${r.dialerId || selectedId.value}/recordings/${r.recording_id}/listen?token=${encodeURIComponent(token)}`
   nextTick(() => {
     if (audioRef.value) {
@@ -735,7 +782,7 @@ async function load() {
   if (!selectedId.value) return
   loading.value = true
   try {
-    const res = await axios.get(`/api/admin/dialer-widgets/${selectedId.value}/stats`)
+    const res = await axios.get(`${apiBase}/api/admin/dialer-widgets/${selectedId.value}/stats`)
     report.value = res.data
     page.value = 1
   } catch(err) { console.error(err) }
@@ -769,7 +816,6 @@ async function requestBulkDelete() {
   otpSending.value = true
   try {
     const token = localStorage.getItem('admin_token') || ''
-    const apiBase = import.meta.env.VITE_API_URL || window.location.origin
     await axios.post(`${apiBase}/api/admin/dialer-calls/bulk/request-otp`, {}, {
       headers: { Authorization: `Bearer ${token}` }
     })
@@ -788,7 +834,6 @@ async function confirmBulkDelete() {
   otpDeleting.value = true
   try {
     const token = localStorage.getItem('admin_token') || ''
-    const apiBase = import.meta.env.VITE_API_URL || window.location.origin
     const res = await axios.delete(`${apiBase}/api/admin/dialer-calls/bulk`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { callIds: selectedCalls.value, otp: deleteOtp.value }
@@ -801,6 +846,61 @@ async function confirmBulkDelete() {
     showToast('Delete failed: ' + (e.response?.data?.error || e.message), 'error')
   } finally {
     otpDeleting.value = false
+  }
+}
+
+async function openEmbedModal() {
+  if (!selectedId.value) return
+  showEmbedModal.value = true
+  embedApiKey.value = ''
+  embedDomains.value = ''
+  try {
+    const token = localStorage.getItem('admin_token')
+    const res = await axios.get(`${apiBase}/api/admin/dialer-widgets/${selectedId.value}/embed-token`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    embedDomains.value = res.data.allowed_embed_domains || ''
+    embedApiKey.value = res.data.embed_api_key
+  } catch (e) {
+    showToast('Failed to load embed settings', 'error')
+  }
+}
+
+async function saveEmbedSettings() {
+  savingEmbed.value = true
+  try {
+    const token = localStorage.getItem('admin_token')
+    await axios.put(`${apiBase}/api/admin/dialer-widgets/${selectedId.value}/embed-domains`, {
+      allowed_embed_domains: embedDomains.value
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const res = await axios.get(`${apiBase}/api/admin/dialer-widgets/${selectedId.value}/embed-token`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    embedApiKey.value = res.data.embed_api_key
+    showToast('Embed settings saved')
+  } catch (e) {
+    showToast('Failed to save settings', 'error')
+  } finally {
+    savingEmbed.value = false
+  }
+}
+
+async function regenerateApiKey() {
+  if (!confirm('Are you sure? Any websites currently using the old API key will instantly lose access to the reports.')) return
+  regeneratingKey.value = true
+  try {
+    const token = localStorage.getItem('admin_token')
+    const res = await axios.post(`${apiBase}/api/admin/dialer-widgets/${selectedId.value}/regenerate-api-key`, {}, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    embedApiKey.value = res.data.embed_api_key
+    showToast('API Key regenerated')
+  } catch (e) {
+    showToast('Failed to regenerate API Key', 'error')
+  } finally {
+    regeneratingKey.value = false
   }
 }
 

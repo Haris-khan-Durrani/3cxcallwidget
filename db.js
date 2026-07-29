@@ -285,6 +285,14 @@ const DialerWidget = sequelize.define('DialerWidget', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  embed_api_key: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  allowed_embed_domains: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   webhook_connected: {
     type: DataTypes.STRING,
     allowNull: true,
@@ -697,6 +705,20 @@ AICallRecord.belongsTo(AIProject, { foreignKey: 'ai_project_id' });
 AICallCampaign.hasMany(AICallRecord, { foreignKey: 'campaign_id', onDelete: 'CASCADE' });
 AICallRecord.belongsTo(AICallCampaign, { foreignKey: 'campaign_id' });
 
+// Initialize Native 3CX AI Models
+const NativeAiAgent = require('./src/modules/native-threecx-ai/models/NativeAiAgent')(sequelize);
+const NativeAiCall = require('./src/modules/native-threecx-ai/models/NativeAiCall')(sequelize);
+
+// Native 3CX AI Associations
+Widget.hasMany(NativeAiAgent, { foreignKey: 'company_id', onDelete: 'CASCADE' });
+NativeAiAgent.belongsTo(Widget, { foreignKey: 'company_id' });
+
+NativeAiAgent.hasMany(NativeAiCall, { foreignKey: 'agent_id', onDelete: 'CASCADE' });
+NativeAiCall.belongsTo(NativeAiAgent, { foreignKey: 'agent_id' });
+
+Widget.hasMany(NativeAiCall, { foreignKey: 'company_id', onDelete: 'CASCADE' });
+NativeAiCall.belongsTo(Widget, { foreignKey: 'company_id' });
+
 module.exports = {
   sequelize,
   Widget,
@@ -712,5 +734,7 @@ module.exports = {
   AIProviderCredential,
   SIPConfiguration,
   AICallCampaign,
-  AICallRecord
+  AICallRecord,
+  NativeAiAgent,
+  NativeAiCall
 };

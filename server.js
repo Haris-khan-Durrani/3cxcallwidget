@@ -1546,6 +1546,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Native 3CX AI Routes
+const nativeAiRoutes = require('./src/modules/native-threecx-ai/native-ai.routes');
+// We pass authenticateToken inside the router, wait, I need to wrap it if I want all routes protected.
+// For now, we will mount it and protect it using the authenticateToken middleware defined in server.js.
+// Since authenticateToken is defined lower in the file (around line 1800+), wait.
+// In JS, function declarations are hoisted. Let's see if authenticateToken is hoisted.
+app.use('/api/v1/native-ai', (req, res, next) => authenticateToken(req, res, next), nativeAiRoutes);
+
 app.use((req, res, next) => {
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
@@ -2685,6 +2693,76 @@ app.post('/api/admin/settings/smtp/test', authenticateToken, async (req, res) =>
 });
 
 // Get all widgets
+const fs = require('fs');
+const path = require('path');
+
+app.get('/api/admin/3cx/discover-openapi', async (req, res) => {
+  try {
+    const widget = await Widget.findOne();
+    if (!widget) return res.status(404).json({ error: 'No configured company/widget found.' });
+
+    const fqdn = sanitizeFqdn(widget.fqdn_3cx);
+    if (!fqdn) return res.status(400).json({ error: 'FQDN is missing from widget config.' });
+
+    const token = await get3cxToken(widget);
+    
+    const endpoints = [
+      `/xapi/v1/openapi.json`,
+      `/xapi/v1/swagger.json`,
+      `/xapi/openapi.json`,
+      `/swagger/v1/swagger.json`
+    ];
+
+    let schema = null;
+    let successfulUrl = null;
+    let errors = [];
+
+    const https = require('https');
+    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+    for (const ep of endpoints) {
+      const url = `https://${fqdn}${ep}`;
+      try {
+        const response = await axios.get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          httpsAgent,
+          timeout: 5000
+        });
+        if (response.data && typeof response.data === 'object') {
+          schema = response.data;
+          successfulUrl = url;
+          break;
+        }
+      } catch (err) {
+        errors.push({ url, status: err.response?.status || err.code || err.message });
+      }
+    }
+
+    if (!schema) {
+      return res.status(404).json({
+        error: 'Failed to download OpenAPI schema',
+        attempts: errors
+      });
+    }
+
+    const docsDir = path.join(__dirname, 'docs', 'openapi');
+    if (!fs.existsSync(docsDir)) {
+      fs.mkdirSync(docsDir, { recursive: true });
+    }
+    const filePath = path.join(docsDir, '3cx-openapi.json');
+    fs.writeFileSync(filePath, JSON.stringify(schema, null, 2));
+
+    res.json({
+      success: true,
+      url: successfulUrl,
+      file: filePath,
+      info: schema.info || 'No info object found'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/admin/widgets', authenticateToken, async (req, res) => {
   try {
     const widgets = await Widget.findAll({ include: [Agent] });
@@ -3355,6 +3433,67 @@ app.get('/api/embed/reports.js', async (req, res) => {
   }
 });
 
+app.get('/api/embed/dialer-reports.js', async (req, res) => {
+  const { dialerId, apiKey } = req.query;
+  if (!dialerId || !apiKey) {
+    return res.status(400).type('application/javascript').send(`console.error("3CX Embed: Missing dialerId or apiKey");`);
+  }
+  
+  try {
+    const dialer = await DialerWidget.findByPk(dialerId);
+    if (!dialer || dialer.embed_api_key !== apiKey) {
+      return res.status(403).type('application/javascript').send(`console.error("3CX Embed: Invalid API Key");`);
+    }
+
+    // Validate Referer
+    const referer = req.get('Referer');
+    let refererDomain = '';
+    if (referer) {
+      try {
+        refererDomain = new URL(referer).hostname;
+      } catch (e) {}
+    }
+    
+    if (dialer.allowed_embed_domains) {
+      const allowedDomains = dialer.allowed_embed_domains.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+      if (allowedDomains.length > 0) {
+        const isAllowed = allowedDomains.some(d => refererDomain.toLowerCase() === d || refererDomain.toLowerCase().endsWith('.' + d));
+        if (!refererDomain || !isAllowed) {
+          return res.status(403).type('application/javascript').send(`console.error("3CX Embed: Unauthorized domain " + ${JSON.stringify(refererDomain)});`);
+        }
+      }
+    }
+
+    // Generate a short-lived token (10 minutes). Use widgetId in payload for compatibility with authenticateAdminOrEmbedToken
+    const token = jwt.sign({ role: 'embed', widgetId: dialerId }, process.env.JWT_SECRET || 'secret', { expiresIn: '10m' });
+    
+    // Return the script to inject the iframe
+    const hostUrl = getAppUrl(req);
+    const iframeSrc = `${hostUrl}/?embed=true&dialerId=${encodeURIComponent(dialerId)}#/embed/dialer-reports/${encodeURIComponent(dialerId)}?token=${encodeURIComponent(token)}`;
+    
+    const script = `
+(function() {
+  var container = document.getElementById('3cx-dialer-reports-${dialerId}');
+  if (!container) {
+    console.error("3CX Embed: Container div with id '3cx-dialer-reports-${dialerId}' not found.");
+    return;
+  }
+  var iframe = document.createElement('iframe');
+  iframe.src = ${JSON.stringify(iframeSrc)};
+  iframe.width = '100%';
+  iframe.height = '800px';
+  iframe.style.border = 'none';
+  iframe.setAttribute('frameBorder', '0');
+  container.innerHTML = ''; // clear container
+  container.appendChild(iframe);
+})();
+`;
+    res.type('application/javascript').send(script);
+  } catch (err) {
+    res.status(500).type('application/javascript').send(`console.error("3CX Embed: Server error");`);
+  }
+});
+
 // Reporting: get call stats for a widget
 app.get('/api/admin/widgets/:id/stats', authenticateAdminOrEmbedToken, async (req, res) => {
   try {
@@ -3408,7 +3547,7 @@ app.get('/api/admin/widgets/:id/stats', authenticateAdminOrEmbedToken, async (re
 });
 
 // Reporting: get call stats for a dialer widget
-app.get('/api/admin/dialer-widgets/:id/stats', authenticateToken, async (req, res) => {
+app.get('/api/admin/dialer-widgets/:id/stats', authenticateAdminOrEmbedToken, async (req, res) => {
   try {
     const { Op } = require('sequelize');
     const dialerId = req.params.id;
@@ -3546,6 +3685,52 @@ app.delete('/api/admin/dialer-widgets/:id/companies/:companyId', authenticateTok
     await DialerAgent.update({ company_id: null }, { where: { company_id: req.params.companyId } });
     await DialerCompany.destroy({ where: { id: req.params.companyId, dialerId: req.params.id } });
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/dialer-widgets/:id/embed-token', authenticateToken, async (req, res) => {
+  try {
+    const dialer = await DialerWidget.findByPk(req.params.id);
+    if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
+    
+    // Auto-generate api key if it doesn't exist
+    if (!dialer.embed_api_key) {
+      dialer.embed_api_key = require('crypto').randomBytes(24).toString('hex');
+      await dialer.save();
+    }
+    
+    res.json({ 
+      embed_api_key: dialer.embed_api_key, 
+      allowed_embed_domains: dialer.allowed_embed_domains 
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/dialer-widgets/:id/regenerate-api-key', authenticateToken, async (req, res) => {
+  try {
+    const dialer = await DialerWidget.findByPk(req.params.id);
+    if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
+    
+    dialer.embed_api_key = require('crypto').randomBytes(24).toString('hex');
+    await dialer.save();
+    
+    res.json({ success: true, embed_api_key: dialer.embed_api_key });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/dialer-widgets/:id/embed-domains', authenticateToken, async (req, res) => {
+  try {
+    const dialer = await DialerWidget.findByPk(req.params.id);
+    if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
+    dialer.allowed_embed_domains = req.body.allowed_embed_domains || null;
+    await dialer.save();
+    res.json({ success: true, allowed_embed_domains: dialer.allowed_embed_domains });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

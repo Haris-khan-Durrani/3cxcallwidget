@@ -9,7 +9,7 @@ module.exports = (sequelize) => {
     },
     company_id: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true,
     },
     agent_id: {
       type: DataTypes.BIGINT.UNSIGNED,

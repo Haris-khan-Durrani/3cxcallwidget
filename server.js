@@ -4650,7 +4650,7 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
     console.log('Database synced');
 
     const queryInterface = sequelize.getQueryInterface();

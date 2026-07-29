@@ -16,7 +16,9 @@ import ResetPasswordView from './views/ResetPasswordView.vue'
 import AICampaignsView from './views/AICampaignsView.vue'
 import AICallHistoryView from './views/AICallHistoryView.vue'
 import AICredentialsView from './views/AICredentialsView.vue'
+import NativeAiAgentsView from './views/NativeAiAgentsView.vue'
 import EmbedReportsView from './views/EmbedReportsView.vue'
+import EmbedDialerReportsView from './views/EmbedDialerReportsView.vue'
 import './style.css'
 
 // Restore auth header after page refresh (interceptor approach — works even with cached JS)
@@ -69,9 +71,11 @@ const router = createRouter({
     { path: '/users', component: UsersView, meta: { requiresAuth: true } },
     { path: '/settings', component: SettingsView, meta: { requiresAuth: true } },
     { path: '/ai-credentials', component: AICredentialsView, meta: { requiresAuth: true } },
+    { path: '/native-ai-agents', component: NativeAiAgentsView, meta: { requiresAuth: true } },
     { path: '/ai-campaigns', component: AICampaignsView, meta: { requiresAuth: true } },
     { path: '/ai-history', component: AICallHistoryView, meta: { requiresAuth: true } },
-    { path: '/embed/reports/:id', component: EmbedReportsView, meta: { requiresAuth: false } }
+    { path: '/embed/reports/:id', component: EmbedReportsView, meta: { requiresAuth: false } },
+    { path: '/embed/dialer-reports/:id', component: EmbedDialerReportsView, meta: { requiresAuth: false } }
   ]
 })
 

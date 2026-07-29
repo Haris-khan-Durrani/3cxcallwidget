@@ -1175,26 +1175,34 @@ function downloadCSV() {
 /* OTP Modal */
 .dr-modal-overlay {
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+  background: rgba(10, 10, 14, 0.7); backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center; z-index: 10000;
 }
 .dr-modal {
-  background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
-  width: 100%; max-width: 400px; padding: 20px; box-shadow: 0 16px 40px rgba(0,0,0,0.3);
-  animation: modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--bg); border: 1px solid var(--border); border-radius: 16px;
+  width: 100%; max-width: 420px; padding: 24px; box-shadow: 0 24px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-@keyframes modalIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-.dr-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
-.dr-modal-header h3 { margin: 0; font-size: 16px; color: var(--text); }
-.dr-modal-close { background: none; border: none; font-size: 24px; color: var(--text2); cursor: pointer; }
+@keyframes modalIn { from { transform: translateY(10px) scale(0.98); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+.dr-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.dr-modal-header h3 { margin: 0; font-size: 18px; color: var(--text); font-weight: 700; }
+.dr-modal-close { background: none; border: none; font-size: 26px; color: var(--text2); cursor: pointer; line-height: 1; transition: color 0.2s; }
 .dr-modal-close:hover { color: var(--text); }
-.dr-modal-body p { margin: 0; color: var(--text2); font-size: 14px; line-height: 1.5; }
-.dr-modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
-.btn-cancel { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
-.btn-cancel:hover { color: var(--text); background: var(--bg); }
-.btn-save { background: #ef4444; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
-.btn-save:hover:not(:disabled) { background: #dc2626; }
-.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.dr-modal-body p { margin: 0; color: var(--text2); font-size: 14.5px; line-height: 1.6; }
+.dr-modal-body .form-group { margin-top: 20px; }
+.dr-modal-body label { display: block; font-size: 13px; font-weight: 600; color: var(--text2); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+.dr-modal-body .form-input { 
+  width: 100%; background: var(--bg2); border: 1.5px solid var(--border); 
+  border-radius: 10px; padding: 12px 16px; color: var(--text); font-size: 20px; 
+  font-weight: 700; letter-spacing: 6px; text-align: center; transition: all 0.2s; box-sizing: border-box;
+}
+.dr-modal-body .form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,139,253,0.2); outline: none; background: var(--bg3); }
+.dr-modal-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 30px; }
+.btn-cancel { background: transparent; color: var(--text2); border: 1.5px solid var(--border); padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 13.5px; font-weight: 600; transition: all 0.2s; }
+.btn-cancel:hover { color: var(--text); background: var(--bg2); border-color: var(--text2); }
+.btn-save { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 13.5px; font-weight: 600; transition: all 0.2s; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
+.btn-save:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4); }
+.btn-save:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
 
 /* ─── Filter Bar ─── */

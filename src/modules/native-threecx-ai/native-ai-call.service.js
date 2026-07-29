@@ -1,4 +1,4 @@
-const { NativeAiAgent, NativeAiCall } = require('../../../../db');
+const { NativeAiAgent, NativeAiCall } = require('../../../db');
 const { getNative3cxToken } = require('./native-ai-agent.service');
 const axios = require('axios');
 const https = require('https');

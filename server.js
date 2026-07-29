@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
@@ -138,7 +139,7 @@ async function triggerUserWebhook(callRecord, widget) {
   // Deduplicate URLs and merge tags if the same URL is configured for multiple events
   const targetMap = new Map();
   const globalTags = parseTags(freshWidget.webhook_tags); // Backwards compatibility for old tags
-  
+
   for (const t of targets) {
     if (targetMap.has(t.url)) {
       const existing = targetMap.get(t.url);
@@ -147,7 +148,7 @@ async function triggerUserWebhook(callRecord, widget) {
       targetMap.set(t.url, { url: t.url, tags: new Set([...globalTags, ...t.tags]) });
     }
   }
-  
+
   const uniqueTargets = Array.from(targetMap.values()).map(t => ({ url: t.url, tags: Array.from(t.tags) }));
 
   try {
@@ -720,7 +721,7 @@ function invalidate3cxToken(widgetId) {
  */
 async function execute3cxMakeCall(widgetOrDialer, extension, destination) {
   const fqdn = sanitizeFqdn(widgetOrDialer.fqdn_3cx);
-  const ext  = encodeURIComponent(extension);
+  const ext = encodeURIComponent(extension);
   const dest = String(destination);
 
   // Endpoint candidates for 3CX v18 and v20 compatibility
@@ -1592,14 +1593,14 @@ app.get('/', async (req, res, next) => {
       if (widget && widget.allowed_embed_domains) {
         const referer = req.headers.referer;
         let isAllowed = false;
-        
+
         if (referer) {
           try {
             const refUrl = new URL(referer);
             const hostName = refUrl.hostname.toLowerCase();
             const domains = widget.allowed_embed_domains.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
             isAllowed = domains.some(d => hostName === d || hostName.endsWith('.' + d));
-          } catch (e) {}
+          } catch (e) { }
         }
 
         if (!isAllowed) {
@@ -1673,7 +1674,7 @@ app.get('/widget.js', async (req, res) => {
     const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
     const fallbackUrl = `//${host}`;
     const frontendUrl = process.env.FRONTEND_URL || fallbackUrl;
-    const fs = require('fs');
+    // const fs = require('fs');
     const widgetScriptPath = path.join(__dirname, 'public', 'widget-template.js');
     let scriptContent = fs.readFileSync(widgetScriptPath, 'utf8');
 
@@ -2175,16 +2176,16 @@ function authenticateAdminOrEmbedToken(req, res, next) {
 
   jwt.verify(token, process.env.JWT_SECRET || 'secret', (err, decoded) => {
     if (err) return res.sendStatus(403);
-    
+
     if (decoded.role === 'embed') {
-       if (req.params.id && String(decoded.widgetId) === String(req.params.id)) {
-          req.user = decoded;
-          return next();
-       } else {
-          return res.sendStatus(403);
-       }
+      if (req.params.id && String(decoded.widgetId) === String(req.params.id)) {
+        req.user = decoded;
+        return next();
+      } else {
+        return res.sendStatus(403);
+      }
     }
-    
+
     req.user = decoded;
     next();
   });
@@ -2693,8 +2694,7 @@ app.post('/api/admin/settings/smtp/test', authenticateToken, async (req, res) =>
 });
 
 // Get all widgets
-const fs = require('fs');
-const path = require('path');
+
 
 app.get('/api/admin/3cx/discover-openapi', async (req, res) => {
   try {
@@ -2705,7 +2705,7 @@ app.get('/api/admin/3cx/discover-openapi', async (req, res) => {
     if (!fqdn) return res.status(400).json({ error: 'FQDN is missing from widget config.' });
 
     const token = await get3cxToken(widget);
-    
+
     const endpoints = [
       `/xapi/v1/openapi.json`,
       `/xapi/v1/swagger.json`,
@@ -3071,7 +3071,7 @@ app.post('/api/admin/test-call', authenticateToken, async (req, res) => {
     const call_id = `test-${Date.now()}`;
     const tokenPayload = { ai_project_id, role: 'ai-runner' };
     if (campaign_id) tokenPayload.campaign_id = campaign_id;
-    
+
     const jwt_token = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'change_this_secret_in_production', { expiresIn: '1h' });
 
     await aiCallQueue.add('outbound-call', {
@@ -3325,17 +3325,17 @@ app.get('/api/admin/widgets/:id/embed-token', authenticateToken, async (req, res
   try {
     const widget = await Widget.findByPk(req.params.id);
     if (!widget) return res.status(404).json({ error: 'Widget not found' });
-    
+
     // Auto-generate api key if it doesn't exist
     if (!widget.embed_api_key) {
       widget.embed_api_key = crypto.randomBytes(24).toString('hex');
       await widget.save();
     }
-    
+
     // We no longer return the long-lived JWT token to the frontend to be embedded in HTML
-    res.json({ 
-      embed_api_key: widget.embed_api_key, 
-      allowed_embed_domains: widget.allowed_embed_domains 
+    res.json({
+      embed_api_key: widget.embed_api_key,
+      allowed_embed_domains: widget.allowed_embed_domains
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3347,10 +3347,10 @@ app.post('/api/admin/widgets/:id/regenerate-api-key', authenticateToken, async (
   try {
     const widget = await Widget.findByPk(req.params.id);
     if (!widget) return res.status(404).json({ error: 'Widget not found' });
-    
+
     widget.embed_api_key = crypto.randomBytes(24).toString('hex');
     await widget.save();
-    
+
     res.json({ success: true, embed_api_key: widget.embed_api_key });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3376,7 +3376,7 @@ app.get('/api/embed/reports.js', async (req, res) => {
   if (!widgetId || !apiKey) {
     return res.status(400).type('application/javascript').send(`console.error("3CX Embed: Missing widgetId or apiKey");`);
   }
-  
+
   try {
     const widget = await Widget.findByPk(widgetId);
     if (!widget || widget.embed_api_key !== apiKey) {
@@ -3389,9 +3389,9 @@ app.get('/api/embed/reports.js', async (req, res) => {
     if (referer) {
       try {
         refererDomain = new URL(referer).hostname;
-      } catch (e) {}
+      } catch (e) { }
     }
-    
+
     if (widget.allowed_embed_domains) {
       const allowedDomains = widget.allowed_embed_domains.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
       if (allowedDomains.length > 0) {
@@ -3404,12 +3404,12 @@ app.get('/api/embed/reports.js', async (req, res) => {
 
     // Generate a short-lived token (10 minutes)
     const token = jwt.sign({ role: 'embed', widgetId }, process.env.JWT_SECRET || 'secret', { expiresIn: '10m' });
-    
+
     // Return the script to inject the iframe
     // Return the script to inject the iframe
     const hostUrl = getAppUrl(req);
     const iframeSrc = `${hostUrl}/?embed=true&widgetId=${encodeURIComponent(widgetId)}#/embed/reports/${encodeURIComponent(widgetId)}?token=${encodeURIComponent(token)}`;
-    
+
     const script = `
 (function() {
   var container = document.getElementById('3cx-reports-${widgetId}');
@@ -3438,7 +3438,7 @@ app.get('/api/embed/dialer-reports.js', async (req, res) => {
   if (!dialerId || !apiKey) {
     return res.status(400).type('application/javascript').send(`console.error("3CX Embed: Missing dialerId or apiKey");`);
   }
-  
+
   try {
     const dialer = await DialerWidget.findByPk(dialerId);
     if (!dialer || dialer.embed_api_key !== apiKey) {
@@ -3451,9 +3451,9 @@ app.get('/api/embed/dialer-reports.js', async (req, res) => {
     if (referer) {
       try {
         refererDomain = new URL(referer).hostname;
-      } catch (e) {}
+      } catch (e) { }
     }
-    
+
     if (dialer.allowed_embed_domains) {
       const allowedDomains = dialer.allowed_embed_domains.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
       if (allowedDomains.length > 0) {
@@ -3466,11 +3466,11 @@ app.get('/api/embed/dialer-reports.js', async (req, res) => {
 
     // Generate a short-lived token (10 minutes). Use widgetId in payload for compatibility with authenticateAdminOrEmbedToken
     const token = jwt.sign({ role: 'embed', widgetId: dialerId }, process.env.JWT_SECRET || 'secret', { expiresIn: '10m' });
-    
+
     // Return the script to inject the iframe
     const hostUrl = getAppUrl(req);
     const iframeSrc = `${hostUrl}/?embed=true&dialerId=${encodeURIComponent(dialerId)}#/embed/dialer-reports/${encodeURIComponent(dialerId)}?token=${encodeURIComponent(token)}`;
-    
+
     const script = `
 (function() {
   var container = document.getElementById('3cx-dialer-reports-${dialerId}');
@@ -3536,7 +3536,7 @@ app.get('/api/admin/widgets/:id/stats', authenticateAdminOrEmbedToken, async (re
       order: [['createdAt', 'DESC']],
       limit: 100
     });
-    
+
     // Include widget details so embed views have agent data without needing /api/admin/widgets access
     const widget = await Widget.findByPk(widgetId, { include: [Agent] });
 
@@ -3694,16 +3694,16 @@ app.get('/api/admin/dialer-widgets/:id/embed-token', authenticateToken, async (r
   try {
     const dialer = await DialerWidget.findByPk(req.params.id);
     if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
-    
+
     // Auto-generate api key if it doesn't exist
     if (!dialer.embed_api_key) {
       dialer.embed_api_key = require('crypto').randomBytes(24).toString('hex');
       await dialer.save();
     }
-    
-    res.json({ 
-      embed_api_key: dialer.embed_api_key, 
-      allowed_embed_domains: dialer.allowed_embed_domains 
+
+    res.json({
+      embed_api_key: dialer.embed_api_key,
+      allowed_embed_domains: dialer.allowed_embed_domains
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3714,10 +3714,10 @@ app.post('/api/admin/dialer-widgets/:id/regenerate-api-key', authenticateToken, 
   try {
     const dialer = await DialerWidget.findByPk(req.params.id);
     if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
-    
+
     dialer.embed_api_key = require('crypto').randomBytes(24).toString('hex');
     await dialer.save();
-    
+
     res.json({ success: true, embed_api_key: dialer.embed_api_key });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4016,7 +4016,7 @@ app.delete('/api/admin/widget-calls/bulk', authenticateToken, async (req, res) =
     }
 
     bulkDeleteOtps.delete(fullUser.id);
-    
+
     const { Op } = require('sequelize');
     const deletedCount = await CallRecord.destroy({
       where: { id: { [Op.in]: callIds } }
@@ -4072,7 +4072,7 @@ app.delete('/api/admin/dialer-calls/bulk', authenticateToken, async (req, res) =
 
     // OTP valid. Clear it and perform delete.
     bulkDeleteOtps.delete(fullUser.id);
-    
+
     const { Op } = require('sequelize');
     const deletedCount = await DialerCallRecord.destroy({
       where: { id: { [Op.in]: callIds } }
@@ -4618,13 +4618,13 @@ app.post('/api/campaigns/:id/knowledge-base', authenticateToken, upload.array('f
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
     }
-    
+
     // Find campaign to ensure it exists and user has access (simplified for now)
     const campaign = await AICallCampaign.findByPk(campaignId);
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
-    
+
     const filesInfo = req.files.map(f => ({ path: f.path, name: f.originalname }));
     const fileNames = filesInfo.map(f => f.name).join(', ');
 

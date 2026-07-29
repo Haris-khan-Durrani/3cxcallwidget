@@ -1528,7 +1528,7 @@ function getAppUrl(req) {
   if (req) {
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
-      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const proto = (req.headers['x-forwarded-proto'] || '').toLowerCase() === 'http' ? 'http' : 'https';
       return `${proto}://${host}`.replace(/\/$/, '');
     }
   }
@@ -3329,9 +3329,8 @@ app.get('/api/embed/reports.js', async (req, res) => {
     
     // Return the script to inject the iframe
     // Return the script to inject the iframe
-    const fwdHost = req.headers['x-forwarded-host'] || req.headers.host;
-    const fwdProto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-    const iframeSrc = `${fwdProto}://${fwdHost}/?embed=true&widgetId=${encodeURIComponent(widgetId)}#/embed/reports/${encodeURIComponent(widgetId)}?token=${encodeURIComponent(token)}`;
+    const hostUrl = getAppUrl(req);
+    const iframeSrc = `${hostUrl}/?embed=true&widgetId=${encodeURIComponent(widgetId)}#/embed/reports/${encodeURIComponent(widgetId)}?token=${encodeURIComponent(token)}`;
     
     const script = `
 (function() {

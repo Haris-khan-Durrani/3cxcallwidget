@@ -297,5 +297,23 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Inherits global dashboard styles from style.css */
+.dialer-card { padding: 20px; }
+.dialer-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+.dialer-header h3 { margin: 0 0 8px 0; font-size: 18px; }
+.meta-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.help-text { font-size: 13px; color: var(--text2); margin-top: 4px; margin-bottom: 12px; line-height: 1.5; }
+
+/* Modal */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(10, 12, 16, 0.6); backdrop-filter: blur(12px) saturate(180%); -webkit-backdrop-filter: blur(12px) saturate(180%); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.modal-box { width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; background: linear-gradient(135deg, var(--bg2), var(--bg3)); border: 1px solid rgba(128,128,128,0.2); box-shadow: 0 24px 60px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.04); border-radius: var(--radius-lg); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 24px 24px 8px; flex-shrink: 0; }
+.modal-header h3 { font-size: 18px; font-weight: 700; margin: 0; }
+.modal-body { padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px 24px; border-top: 1px solid rgba(128,128,128,0.1); }
+
+/* Test Connection Result Box */
+.conn-result { padding: 10px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5; }
+.conn-result.ok { background: rgba(5,150,105,.12); border: 1px solid rgba(5,150,105,.3); color: #059669; }
+.conn-result.err { background: rgba(220,38,38,.1); border: 1px solid rgba(220,38,38,.25); color: #dc2626; }
 </style>

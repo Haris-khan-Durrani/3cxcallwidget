@@ -8,7 +8,7 @@ module.exports = (sequelize) => {
       autoIncrement: true,
     },
     company_id: {
-      type: DataTypes.BIGINT.UNSIGNED,
+      type: DataTypes.UUID,
       allowNull: false,
     },
     agent_id: {

@@ -151,7 +151,10 @@
   };
 
   if (!DIALER_ID) return;
-  if (isTemplate(USERID) && isTemplate(EXT)) return;
+  if (isTemplate(USERID) && isTemplate(EXT)) {
+    console.warn('[3CX Dialer] Aborting load: USERID and EXT are missing or unresolved templates ("' + USERID + '", "' + EXT + '"). Make sure you are using this in a Custom Menu Link where GoHighLevel replaces merge tags.');
+    return;
+  }
 
   var instanceKey = DIALER_ID + '_' + (isTemplate(USERID) ? (isTemplate(EXT) ? 'anon' : EXT) : USERID);
   if (window.__3cxRegistry__.instances[instanceKey]) return; // Prevent duplicate instantiation for same config

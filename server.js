@@ -2444,6 +2444,8 @@ app.post('/api/admin/verify-2fa', async (req, res) => {
 // --- SMTP & Password Reset Helper Functions ---
 const nodemailer = require('nodemailer');
 
+const bulkDeleteOtps = new Map();
+
 async function sendResetEmail(email, resetUrl) {
   // Retrieve SMTP settings from DB
   const settingsList = await SystemSetting.findAll();
@@ -2493,6 +2495,45 @@ async function sendResetEmail(email, resetUrl) {
     `
   };
 
+  await transporter.sendMail(mailOptions);
+}
+
+async function sendBulkDeleteOtpEmail(email, otp) {
+  const settingsList = await SystemSetting.findAll();
+  const settings = {};
+  settingsList.forEach(s => settings[s.key] = s.value);
+
+  const host = settings.smtp_host || process.env.SMTP_HOST;
+  const port = parseInt(settings.smtp_port || process.env.SMTP_PORT || '587', 10);
+  const user = settings.smtp_user || process.env.SMTP_USER;
+  const pass = settings.smtp_pass || process.env.SMTP_PASS;
+  const from = settings.smtp_from || process.env.SMTP_FROM || 'noreply@yourdomain.com';
+  const secure = settings.smtp_secure === 'true' || process.env.SMTP_SECURE === 'true';
+
+  if (!host || !user || !pass) throw new Error('SMTP mail server is not configured.');
+
+  const transporter = nodemailer.createTransport({
+    host, port, secure, auth: { user, pass }, tls: { rejectUnauthorized: false }
+  });
+
+  const mailOptions = {
+    from: `"3CX Widget Admin" <${from}>`,
+    to: email,
+    subject: 'Bulk Delete OTP Code',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e1e4e8; border-radius: 12px; background-color: #ffffff; color: #24292f;">
+        <h2 style="font-weight: 700; color: #0b4526; text-align: center;">3CX Call Connect Platform</h2>
+        <p style="font-size: 14px; line-height: 1.5;">Hello,</p>
+        <p style="font-size: 14px; line-height: 1.5;">You requested to perform a bulk deletion of call records. Please use the following One-Time Password (OTP) to confirm this action:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <span style="background-color: #f6f8fa; border: 1px solid #d0d7de; padding: 12px 24px; font-size: 24px; font-weight: bold; letter-spacing: 4px; border-radius: 8px;">${otp}</span>
+        </div>
+        <p style="font-size: 12px; color: #57606a; line-height: 1.5;">This code will expire in 10 minutes.</p>
+        <hr style="border: 0; border-top: 1px solid #d0d7de; margin: 30px 0;" />
+        <p style="font-size: 11px; color: #6e7781; text-align: center;">If you did not request this, you can safely ignore this email.</p>
+      </div>
+    `
+  };
   await transporter.sendMail(mailOptions);
 }
 
@@ -3748,6 +3789,63 @@ app.get('/api/admin/dialers/:dialerId/recordings/:recId/listen', async (req, res
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ── BULK DELETE APIS ──────────────────────────────────────────────
+app.post('/api/admin/dialer-calls/bulk/request-otp', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user; // populated by authenticateToken
+    // Assuming the req.user has username/email from the DB. 
+    // Wait, authenticateToken might only have the payload (id, username). Let's fetch the full user.
+    const fullUser = await User.findByPk(user.id || user.userId);
+    if (!fullUser || !fullUser.email) {
+      return res.status(400).json({ error: 'Admin email is not configured. Please configure your email in settings or database to use this feature.' });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
+    bulkDeleteOtps.set(fullUser.id, { otp, expiresAt: Date.now() + 10 * 60 * 1000 }); // 10 min expiry
+
+    await sendBulkDeleteOtpEmail(fullUser.email, otp);
+    res.json({ success: true, message: 'OTP sent to admin email.' });
+  } catch (err) {
+    console.error('[Bulk Delete OTP Error]', err);
+    res.status(500).json({ error: 'Failed to send OTP email: ' + err.message });
+  }
+});
+
+app.delete('/api/admin/dialer-calls/bulk', authenticateToken, async (req, res) => {
+  try {
+    const { callIds, otp } = req.body;
+    if (!callIds || !Array.isArray(callIds) || callIds.length === 0) {
+      return res.status(400).json({ error: 'No calls selected for deletion.' });
+    }
+    if (!otp) {
+      return res.status(400).json({ error: 'OTP is required.' });
+    }
+
+    const user = req.user;
+    const fullUser = await User.findByPk(user.id || user.userId);
+    if (!fullUser) return res.status(401).json({ error: 'Invalid user.' });
+
+    const storedOtpData = bulkDeleteOtps.get(fullUser.id);
+    if (!storedOtpData || storedOtpData.otp !== String(otp).trim() || storedOtpData.expiresAt < Date.now()) {
+      return res.status(400).json({ error: 'Invalid or expired OTP.' });
+    }
+
+    // OTP valid. Clear it and perform delete.
+    bulkDeleteOtps.delete(fullUser.id);
+    
+    const { Op } = require('sequelize');
+    const deletedCount = await DialerCallRecord.destroy({
+      where: { id: { [Op.in]: callIds } }
+    });
+
+    res.json({ success: true, message: `Successfully deleted ${deletedCount} call(s).` });
+  } catch (err) {
+    console.error('[Bulk Delete Error]', err);
+    res.status(500).json({ error: 'Failed to bulk delete calls: ' + err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────
 // DIALER WIDGET ADMIN ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -22,6 +22,10 @@
             </svg>
             Refresh
           </button>
+          <button v-if="selectedCalls.length > 0" class="btn-delete-bulk" @click="requestBulkDelete" :disabled="otpSending">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            Delete Selected ({{ selectedCalls.length }})
+          </button>
           <button class="btn-csv" @click="downloadCSV" :disabled="!filteredRecords.length">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
@@ -489,6 +493,9 @@
           <table v-if="pagedRecords.length" class="dr-table">
             <thead>
               <tr>
+                <th style="width: 40px; text-align: center;">
+                  <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="dr-checkbox" />
+                </th>
                 <th class="dr-th-sortable" @click="setSort('createdAt')">
                   Date &amp; Time
                   <span class="dr-sort-icon">{{ sortKey === 'createdAt' ? (sortDir === 'asc' ? '↑' : '↓') : '⇅' }}</span>
@@ -512,6 +519,9 @@
             </thead>
             <tbody>
               <tr v-for="r in pagedRecords" :key="r.id" class="dr-table-row">
+                <td style="text-align: center;">
+                  <input type="checkbox" :value="r.id" v-model="selectedCalls" class="dr-checkbox" />
+                </td>
                 <td>
                   <div class="dr-cell-date">
                     <span class="dr-date-d">{{ formatDateMain(r.createdAt) }}</span>
@@ -609,6 +619,29 @@
         @timeupdate="onTimeUpdate" @loadedmetadata="onLoadedMetadata"
         @ended="onAudioEnded" style="display:none;"></audio>
     </div>
+
+    <!-- OTP Modal -->
+    <div v-if="showOtpModal" class="dr-modal-overlay">
+      <div class="dr-modal">
+        <div class="dr-modal-header">
+          <h3>Confirm Bulk Delete</h3>
+          <button class="dr-modal-close" @click="showOtpModal = false">×</button>
+        </div>
+        <div class="dr-modal-body">
+          <p>An OTP has been sent to your email to confirm the deletion of <strong>{{ selectedCalls.length }}</strong> calls.</p>
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Enter 6-Digit OTP</label>
+            <input type="text" v-model="deleteOtp" class="form-input" placeholder="123456" />
+          </div>
+        </div>
+        <div class="dr-modal-footer">
+          <button class="btn-cancel" @click="showOtpModal = false">Cancel</button>
+          <button class="btn-save" @click="confirmBulkDelete" :disabled="otpDeleting">
+            {{ otpDeleting ? 'Deleting...' : 'Confirm Delete' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </AppLayout>
 </template>
 
@@ -622,6 +655,12 @@ const store = useDialerStore()
 const selectedId = ref('')
 const loading = ref(false)
 const report = ref(null)
+
+const selectedCalls = ref([])
+const showOtpModal = ref(false)
+const deleteOtp = ref('')
+const otpSending = ref(false)
+const otpDeleting = ref(false)
 
 const dateFilter = ref('30days')
 const customStartDate = ref('')
@@ -684,8 +723,8 @@ function formatAudioTime(s) {
 }
 
 onMounted(async () => { if (store.dialers.length === 0) await store.fetch() })
-watch(dateFilter, () => { if (dateFilter.value !== 'custom') load() })
-watch([statusFilter, agentFilter, companyFilter, tableSearch], () => { page.value = 1 })
+watch(dateFilter, () => { if (dateFilter.value !== 'custom') { selectedCalls.value = []; load() } })
+watch([statusFilter, agentFilter, companyFilter, tableSearch], () => { selectedCalls.value = []; page.value = 1 })
 
 const availableCompanyNames = computed(() => {
   if (!report.value?.records) return []
@@ -710,6 +749,71 @@ function resetFilters() {
   companyFilter.value = ''
   tableSearch.value = ''
   page.value = 1
+}
+
+const isAllSelected = computed(() => {
+  if (filteredRecords.value.length === 0) return false
+  return selectedCalls.value.length === filteredRecords.value.length && filteredRecords.value.length > 0
+})
+
+function toggleSelectAll(e) {
+  if (e.target.checked) {
+    selectedCalls.value = filteredRecords.value.map(r => r.id)
+  } else {
+    selectedCalls.value = []
+  }
+}
+
+async function requestBulkDelete() {
+  if (selectedCalls.value.length === 0) return
+  otpSending.value = true
+  try {
+    const token = localStorage.getItem('admin_token') || ''
+    const apiBase = import.meta.env.VITE_API_URL || window.location.origin
+    await axios.post(`${apiBase}/api/admin/dialer-calls/bulk/request-otp`, {}, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    deleteOtp.value = ''
+    showOtpModal.value = true
+    showToast('OTP sent to your email.')
+  } catch (e) {
+    showToast('Error sending OTP: ' + (e.response?.data?.error || e.message), 'error')
+  } finally {
+    otpSending.value = false
+  }
+}
+
+async function confirmBulkDelete() {
+  if (!deleteOtp.value) return showToast('Please enter OTP', 'error')
+  otpDeleting.value = true
+  try {
+    const token = localStorage.getItem('admin_token') || ''
+    const apiBase = import.meta.env.VITE_API_URL || window.location.origin
+    const res = await axios.delete(`${apiBase}/api/admin/dialer-calls/bulk`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { callIds: selectedCalls.value, otp: deleteOtp.value }
+    })
+    showToast(res.data.message)
+    selectedCalls.value = []
+    showOtpModal.value = false
+    load()
+  } catch (e) {
+    showToast('Delete failed: ' + (e.response?.data?.error || e.message), 'error')
+  } finally {
+    otpDeleting.value = false
+  }
+}
+
+function showToast(msg, type='success') {
+  const toast = document.createElement('div')
+  toast.className = `dr-toast ${type}`
+  toast.textContent = msg
+  document.body.appendChild(toast)
+  setTimeout(() => toast.classList.add('show'), 10)
+  setTimeout(() => {
+    toast.classList.remove('show')
+    setTimeout(() => toast.remove(), 300)
+  }, 3000)
 }
 
 function setSort(key) {
@@ -1043,6 +1147,55 @@ function downloadCSV() {
 }
 .btn-csv:hover:not(:disabled) { box-shadow: 0 6px 22px rgba(56,139,253,.5); transform: translateY(-1px); }
 .btn-csv:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.btn-delete-bulk {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px; background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.3); border-radius: 9px; color: #f87171;
+  font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all .18s;
+}
+.btn-delete-bulk:hover:not(:disabled) { background: rgba(220, 38, 38, 0.2); }
+.btn-delete-bulk:disabled { opacity: .4; cursor: not-allowed; }
+
+.dr-checkbox {
+  width: 16px; height: 16px; cursor: pointer;
+  accent-color: #388bfd;
+}
+
+.dr-toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translate(-50%, 20px);
+  background: #388bfd; color: #fff; padding: 10px 20px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; z-index: 99999; opacity: 0; pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+.dr-toast.error { background: #ef4444; }
+.dr-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* OTP Modal */
+.dr-modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; z-index: 10000;
+}
+.dr-modal {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+  width: 100%; max-width: 400px; padding: 20px; box-shadow: 0 16px 40px rgba(0,0,0,0.3);
+  animation: modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes modalIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.dr-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+.dr-modal-header h3 { margin: 0; font-size: 16px; color: var(--text); }
+.dr-modal-close { background: none; border: none; font-size: 24px; color: var(--text2); cursor: pointer; }
+.dr-modal-close:hover { color: var(--text); }
+.dr-modal-body p { margin: 0; color: var(--text2); font-size: 14px; line-height: 1.5; }
+.dr-modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
+.btn-cancel { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+.btn-cancel:hover { color: var(--text); background: var(--bg); }
+.btn-save { background: #ef4444; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+.btn-save:hover:not(:disabled) { background: #dc2626; }
+.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+
 
 /* ─── Filter Bar ─── */
 .dr-filter-bar {

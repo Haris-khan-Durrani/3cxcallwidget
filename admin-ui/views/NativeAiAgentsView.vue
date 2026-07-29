@@ -67,8 +67,13 @@
                 </div>
                 
                 <div class="form-group">
-                  <label class="form-label">Company ID</label>
-                  <input v-model.number="form.company_id" type="number" class="input" placeholder="e.g. 1" />
+                  <label class="form-label">Company</label>
+                  <select v-model="form.company_id" class="input">
+                    <option :value="null">-- Select a Company --</option>
+                    <option v-for="w in widgets" :key="w.id" :value="w.id">
+                      {{ w.company_name || 'Unnamed Company' }} ({{ w.fqdn || w.id.substring(0,8) }})
+                    </option>
+                  </select>
                 </div>
 
                 <div class="form-group">
@@ -161,6 +166,7 @@ import axios from 'axios'
 import AppLayout from '../components/AppLayout.vue'
 
 const agents = ref([])
+const widgets = ref([])
 const loading = ref(true)
 const showModal = ref(false)
 const showTestCallModal = ref(false)
@@ -185,10 +191,14 @@ const form = ref({
 const fetchAgents = async () => {
   try {
     loading.value = true
-    const res = await axios.get('/api/v1/native-ai/agents')
-    agents.value = res.data
+    const [resAgents, resWidgets] = await Promise.all([
+      axios.get('/api/v1/native-ai/agents'),
+      axios.get('/api/admin/widgets')
+    ])
+    agents.value = resAgents.data
+    widgets.value = resWidgets.data
   } catch (err) {
-    console.error('Failed to load agents:', err)
+    console.error('Failed to load agents/widgets:', err)
   } finally {
     loading.value = false
   }

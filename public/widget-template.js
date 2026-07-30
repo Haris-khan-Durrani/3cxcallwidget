@@ -57,6 +57,8 @@
   const OFFICE_OUT_SUB         = '__OFFICE_OUT_SUB__';
   const AGENT_ROTATION_ENABLED = __AGENT_ROTATION_ENABLED__;
   const RING_TIMEOUT = __RING_TIMEOUT__;
+  // Pre-baked agent list from server (no extra HTTP call needed)
+  const PREFETCHED_AGENTS = __PREFETCHED_AGENTS__;
 
   // Prevent double-loading
   if (document.getElementById('cx-widget-container')) return;
@@ -1304,10 +1306,19 @@
       document.getElementById('cx-agent').style.display = '';
     } else if (SHOW_AGENT) {
       try {
-        const r = await fetch(`${SERVER_URL}/api/widget/${WIDGET_ID}/available-agents`);
-        if (r.ok) {
-          const { agents } = await r.json();
-          if (agents && agents.length > 0) {
+        // Use pre-baked agent list if available (no network round-trip needed)
+        let agents = (Array.isArray(PREFETCHED_AGENTS) && PREFETCHED_AGENTS.length > 0)
+          ? PREFETCHED_AGENTS
+          : null;
+        // Fallback: fetch from server if pre-baked list was empty or stale
+        if (!agents) {
+          const r = await fetch(`${SERVER_URL}/api/widget/${WIDGET_ID}/available-agents`);
+          if (r.ok) {
+            const data = await r.json();
+            agents = data.agents || [];
+          }
+        }
+        if (agents && agents.length > 0) {
             window.cxAvailableAgents = agents;
             
             // Retrieve last shown index from sessionStorage for round-robin starting agent

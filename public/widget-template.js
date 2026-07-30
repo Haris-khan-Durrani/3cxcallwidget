@@ -1409,7 +1409,7 @@
             }
           }
         }
-      } catch {}
+      } catch (e) {}
     }
 
     /* ─── Auto-Slider Engine ─── */
@@ -1586,7 +1586,7 @@
         $submit.disabled = false;
         $submit.textContent = OFFICE_CLOSED ? 'Submit Inquiry' : (BTN_TEXT || 'Call me!');
       }
-    } catch {
+    } catch (e) {
       alert('Network error. Please try again.');
       $submit.disabled = false;
       $submit.textContent = OFFICE_CLOSED ? 'Submit Inquiry' : (BTN_TEXT || 'Call me!');

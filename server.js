@@ -32,6 +32,7 @@ require('dotenv').config();
 // ─── 3CX OAuth Token Cache ───────────────────────────────────────────────────
 // Stores { [widgetId]: { token: string, expiresAt: number } }
 const tokenCache = {};
+const agentCache = {};  // Short-lived cache (20s) for available-agents to avoid repeated 3CX API calls
 const unactiveTicksMap = {};
 
 /**
@@ -835,6 +836,14 @@ async function fetchAvailableAgents(widget) {
     return [];
   }
 
+  // Return cached result if still fresh (20 seconds)
+  const cacheKey = widget.id;
+  const cached = agentCache[cacheKey];
+  if (cached && cached.expiresAt > Date.now()) {
+    console.log(`[3CX] Returning cached available agents for widget ${widget.id} (${cached.agents.length} agents)`);
+    return cached.agents;
+  }
+
   // 1. Fetch DN List
   const dnList = await fetch3cxDnList(widget);
 
@@ -912,6 +921,9 @@ async function fetchAvailableAgents(widget) {
     // If passed all checks, agent is available
     availableAgents.push(agent);
   }
+
+  // Cache the result for 20 seconds
+  agentCache[cacheKey] = { agents: availableAgents, expiresAt: Date.now() + 20000 };
 
   return availableAgents;
 }
@@ -2054,6 +2066,9 @@ app.post('/api/call', async (req, res) => {
       callRecord.status = 'Ringing';
       await callRecord.save();
       await triggerUserWebhook(callRecord, widget);
+
+      // Invalidate agent cache so the busy agent is excluded on next widget open
+      delete agentCache[widget.id];
 
       res.json({ success: true, message: 'Call initiated successfully', callId: callRecord.id });
     } catch (err3cx) {

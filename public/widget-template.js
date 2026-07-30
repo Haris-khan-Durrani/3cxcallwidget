@@ -1,60 +1,60 @@
-(function() {
-  const WIDGET_ID   = '__WIDGET_ID__';
-  const SERVER_URL  = '__SERVER_URL__';
-  const PRIMARY     = '__COLOR_PRIMARY__';
-  const BTN_COLOR   = '__COLOR_BUTTON_TEXT__';
-  const TITLE       = '__WIDGET_TITLE__';
-  const SUBTITLE    = '__WIDGET_SUBTITLE__';
-  const BTN_TEXT    = '__WIDGET_BUTTON_TEXT__';
-  const SUCCESS_H   = '__WIDGET_SUCCESS_TITLE__';
+(function () {
+  const WIDGET_ID = '__WIDGET_ID__';
+  const SERVER_URL = '__SERVER_URL__';
+  const PRIMARY = '__COLOR_PRIMARY__';
+  const BTN_COLOR = '__COLOR_BUTTON_TEXT__';
+  const TITLE = '__WIDGET_TITLE__';
+  const SUBTITLE = '__WIDGET_SUBTITLE__';
+  const BTN_TEXT = '__WIDGET_BUTTON_TEXT__';
+  const SUCCESS_H = '__WIDGET_SUCCESS_TITLE__';
   const SUCCESS_MSG = '__WIDGET_SUCCESS_MSG__';
-  const TOOLTIP     = '__TOOLTIP_TEXT__';
+  const TOOLTIP = '__TOOLTIP_TEXT__';
   const TOOLTIP_AUTOHIDE = __TOOLTIP_AUTOHIDE__;
   const TOOLTIP_AUTOHIDE_SEC = __TOOLTIP_AUTOHIDE_SEC__;
-  const REQ_EMAIL   = __REQUIRE_EMAIL__;
-  const REQ_LAST    = __REQUIRE_LASTNAME__;
-  const LOGO_URL    = '__LOGO_URL__';
-  const POSITION    = '__POSITION__';
+  const REQ_EMAIL = __REQUIRE_EMAIL__;
+  const REQ_LAST = __REQUIRE_LASTNAME__;
+  const LOGO_URL = '__LOGO_URL__';
+  const POSITION = '__POSITION__';
   const POPUP_STYLE = '__POPUP_STYLE__';
-  const RADIUS      = __BORDER_RADIUS__;
-  const BTN_SIZE    = __BTN_SIZE__;
+  const RADIUS = __BORDER_RADIUS__;
+  const BTN_SIZE = __BTN_SIZE__;
   const FONT_FAMILY = '__FONT_FAMILY__';
-  const SHOW_AGENT  = __SHOW_AGENT__;
-  const AV_SHAPE    = '__AVATAR_SHAPE__';
-  const AV_BORDER   = '__AVATAR_BORDER_COLOR__';
-  const AV_STATUS   = '__AGENT_STATUS_TEXT__';
-  const FIELDS_ORDER= '__FIELDS_ORDER__';
-  const ANIM_STYLE  = '__ANIMATION_STYLE__';
+  const SHOW_AGENT = __SHOW_AGENT__;
+  const AV_SHAPE = '__AVATAR_SHAPE__';
+  const AV_BORDER = '__AVATAR_BORDER_COLOR__';
+  const AV_STATUS = '__AGENT_STATUS_TEXT__';
+  const FIELDS_ORDER = '__FIELDS_ORDER__';
+  const ANIM_STYLE = '__ANIMATION_STYLE__';
   const TOOLTIP_STYLE = '__TOOLTIP_STYLE__';
-  const OVERLAY_BLUR= __OVERLAY_BLUR__;
-  const CUSTOM_CSS  = '__CUSTOM_CSS__';
-  const SHOW_BRANDING= __SHOW_BRANDING__;
+  const OVERLAY_BLUR = __OVERLAY_BLUR__;
+  const CUSTOM_CSS = '__CUSTOM_CSS__';
+  const SHOW_BRANDING = __SHOW_BRANDING__;
   const BRANDING_TEXT = '__BRANDING_TEXT__';
-  const BRANDING_URL  = '__BRANDING_URL__';
-  const THEME_STYLE  = '__THEME_STYLE__';
+  const BRANDING_URL = '__BRANDING_URL__';
+  const THEME_STYLE = '__THEME_STYLE__';
   const AGENT_BG_URL = '__AGENT_BG_URL__';
   const AGENT_DISPLAY_MODE = '__AGENT_DISPLAY_MODE__';
   const AGENT_FULL_IMAGE_URL = '__AGENT_FULL_IMAGE_URL__';
   const SIDE_GRAPHIC_URL = '__SIDE_GRAPHIC_URL__';
   const SLIDER_AUTO_PLAY = __SLIDER_AUTO_PLAY__;
   const SLIDER_INTERVAL_SEC = __SLIDER_INTERVAL_SEC__;
-  const W_WIDTH     = __WIDGET_WIDTH__;
-  const W_HEIGHT    = '__WIDGET_HEIGHT__';
+  const W_WIDTH = __WIDGET_WIDTH__;
+  const W_HEIGHT = '__WIDGET_HEIGHT__';
   const LOGO_HEIGHT = '__LOGO_HEIGHT__';
-  const LOGO_WIDTH  = '__LOGO_WIDTH__';
+  const LOGO_WIDTH = '__LOGO_WIDTH__';
   const logoHeightStyle = !isNaN(LOGO_HEIGHT) ? `${LOGO_HEIGHT}px` : LOGO_HEIGHT;
   const logoWidthStyle = !isNaN(LOGO_WIDTH) ? `${LOGO_WIDTH}px` : LOGO_WIDTH;
   const SUCCESS_ICON = '__ICON_SUCCESS_HTML__';
-  const FAILED_ICON  = '__ICON_FAILED_HTML__';
+  const FAILED_ICON = '__ICON_FAILED_HTML__';
   const SUCCESS_ICON_STYLE = '__ICON_SUCCESS_STYLE__';
-  const FAILED_ICON_STYLE  = '__ICON_FAILED_STYLE__';
+  const FAILED_ICON_STYLE = '__ICON_FAILED_STYLE__';
   // Office hours configuration
-  const OFFICE_CLOSED       = __OFFICE_CLOSED__;
-  const OFFICE_OUT_TITLE    = '__OFFICE_OUT_TITLE__';
+  const OFFICE_CLOSED = __OFFICE_CLOSED__;
+  const OFFICE_OUT_TITLE = '__OFFICE_OUT_TITLE__';
   const OFFICE_OUT_SUBTITLE = '__OFFICE_OUT_SUBTITLE__';
-  const OFFICE_OUT_MSG      = '__OFFICE_OUT_MSG__';
-  const OFFICE_OUT_STATUS      = '__OFFICE_OUT_STATUS__';
-  const OFFICE_OUT_SUB         = '__OFFICE_OUT_SUB__';
+  const OFFICE_OUT_MSG = '__OFFICE_OUT_MSG__';
+  const OFFICE_OUT_STATUS = '__OFFICE_OUT_STATUS__';
+  const OFFICE_OUT_SUB = '__OFFICE_OUT_SUB__';
   const AGENT_ROTATION_ENABLED = __AGENT_ROTATION_ENABLED__;
   const RING_TIMEOUT = __RING_TIMEOUT__;
   // Pre-baked agent list from server (no extra HTTP call needed)
@@ -74,8 +74,8 @@
     if (document.querySelector(`script[src="${src}"]`)) { cb && cb(); return; }
     const s = document.createElement('script');
     s.src = src;
-    s.onload = cb || function(){};
-    s.onerror = function() { console.error('Failed to load script: ' + src); };
+    s.onload = cb || function () { };
+    s.onerror = function () { console.error('Failed to load script: ' + src); };
     (document.head || document.documentElement).appendChild(s);
   }
 
@@ -1118,24 +1118,24 @@
     `;
   }
 
-    /* ─── Widget HTML ──────────────────────────────────────────────── */
-    const actualTitle      = OFFICE_CLOSED ? OFFICE_OUT_TITLE : (TITLE || 'Need Expert Advice?');
-    const actualSubtitle   = OFFICE_CLOSED ? OFFICE_OUT_SUBTITLE : (SUBTITLE || 'We will call you in 55 seconds!');
-    const actualBtnText    = OFFICE_CLOSED ? 'Submit Inquiry' : (BTN_TEXT || 'Call me!');
-    const actualSuccessH   = OFFICE_CLOSED ? 'Inquiry Received' : (SUCCESS_H || 'Calling you now…');
-    const actualSuccessMsg = OFFICE_CLOSED ? OFFICE_OUT_MSG : (SUCCESS_MSG || 'Please keep your phone nearby. An agent will connect shortly.');
+  /* ─── Widget HTML ──────────────────────────────────────────────── */
+  const actualTitle = OFFICE_CLOSED ? OFFICE_OUT_TITLE : (TITLE || 'Need Expert Advice?');
+  const actualSubtitle = OFFICE_CLOSED ? OFFICE_OUT_SUBTITLE : (SUBTITLE || 'We will call you in 55 seconds!');
+  const actualBtnText = OFFICE_CLOSED ? 'Submit Inquiry' : (BTN_TEXT || 'Call me!');
+  const actualSuccessH = OFFICE_CLOSED ? 'Inquiry Received' : (SUCCESS_H || 'Calling you now…');
+  const actualSuccessMsg = OFFICE_CLOSED ? OFFICE_OUT_MSG : (SUCCESS_MSG || 'Please keep your phone nearby. An agent will connect shortly.');
 
-    let headerLogoHtml = '';
-    if (THEME_STYLE === 'floating' && LOGO_URL) {
-      const filterStyle = BTN_COLOR === '#ffffff' ? 'filter: brightness(0) invert(1);' : '';
-      headerLogoHtml = `
+  let headerLogoHtml = '';
+  if (THEME_STYLE === 'floating' && LOGO_URL) {
+    const filterStyle = BTN_COLOR === '#ffffff' ? 'filter: brightness(0) invert(1);' : '';
+    headerLogoHtml = `
         <div class="cx-logo-header" style="margin-bottom: 12px; text-align: center; display: flex; align-items: center; justify-content: center;">
           <img src="${LOGO_URL}" style="max-height: 30px; max-width: ${logoWidthStyle}; object-fit: contain; ${filterStyle}">
         </div>
       `;
-    }
+  }
 
-    document.body.insertAdjacentHTML('beforeend', `
+  document.body.insertAdjacentHTML('beforeend', `
     <div id="cx-widget-container" class="cx-fab-${ANIM_STYLE}">
       <div id="cx-tooltip" class="cx-tooltip-${TOOLTIP_STYLE}">
         <button id="cx-tooltip-x" aria-label="Close">&times;</button>
@@ -1237,16 +1237,16 @@
   }
 
   /* ─── Refs ─────────────────────────────────────────────────────── */
-  const $fab      = document.getElementById('cx-widget-button');
-  const $tooltip  = document.getElementById('cx-tooltip');
-  const $tipX     = document.getElementById('cx-tooltip-x');
-  const $overlay  = document.getElementById('cx-overlay');
-  const $modal    = document.getElementById('cx-modal');
-  const $modalX   = document.getElementById('cx-modal-x');
-  const $form     = document.getElementById('cx-form');
+  const $fab = document.getElementById('cx-widget-button');
+  const $tooltip = document.getElementById('cx-tooltip');
+  const $tipX = document.getElementById('cx-tooltip-x');
+  const $overlay = document.getElementById('cx-overlay');
+  const $modal = document.getElementById('cx-modal');
+  const $modalX = document.getElementById('cx-modal-x');
+  const $form = document.getElementById('cx-form');
   const $formWrap = document.getElementById('cx-form-wrap');
-  const $okWrap   = document.getElementById('cx-ok-wrap');
-  const $submit   = document.getElementById('cx-submit');
+  const $okWrap = document.getElementById('cx-ok-wrap');
+  const $submit = document.getElementById('cx-submit');
   const $phoneInp = document.getElementById('cx-phone');
 
   let iti = null;
@@ -1255,7 +1255,7 @@
 
   // Real-time input filtering for phone field
   if ($phoneInp) {
-    $phoneInp.addEventListener('input', function() {
+    $phoneInp.addEventListener('input', function () {
       this.value = this.value.replace(/[^\d\+\-\s\(\)\.]/g, '');
     });
   }
@@ -1264,11 +1264,11 @@
   function initITI(done) {
     if (!$phoneInp) { done(); return; }
     if (itiReady) { done(); return; }
-    addScript(`${ITI_BASE}/js/intlTelInput.min.js`, function() {
+    addScript(`${ITI_BASE}/js/intlTelInput.min.js`, function () {
       iti = window.intlTelInput($phoneInp, {
         utilsScript: `${ITI_BASE}/js/utils.js`,
         initialCountry: 'auto',
-        geoIpLookup: function(cb) {
+        geoIpLookup: function (cb) {
           fetch('https://ipapi.co/json/')
             .then(r => r.json()).then(d => cb(d.country_code))
             .catch(() => cb('ae'));
@@ -1295,7 +1295,7 @@
     $tooltip.style.display = 'none';
     $fab.style.animation = 'none';
 
-    initITI(() => {}); // fire and forget — ITI loads in background
+    initITI(() => { }); // fire and forget — ITI loads in background
 
     if (LOGO_URL && THEME_STYLE !== 'split' && THEME_STYLE !== 'floating') {
       document.getElementById('cx-logo-wrap').style.display = 'block';
@@ -1319,97 +1319,97 @@
           }
         }
         if (agents && agents.length > 0) {
-            window.cxAvailableAgents = agents;
-            
-            // Retrieve last shown index from sessionStorage for round-robin starting agent
-            let cxAgentIndex = parseInt(sessionStorage.getItem('cx_last_agent_index') || '-1', 10);
-            cxAgentIndex = (cxAgentIndex + 1) % window.cxAvailableAgents.length;
-            sessionStorage.setItem('cx_last_agent_index', cxAgentIndex);
+          window.cxAvailableAgents = agents;
 
-            function displayAgent(agent) {
-              if (!agent) return;
-              agentExt = agent.extension;
-              const $ag = document.getElementById('cx-agent');
-              const $av = document.getElementById('cx-av');
-              const $name = document.getElementById('cx-av-name');
-              const $sub = document.getElementById('cx-av-sub');
-              
-              if ($av) {
-                $av.src = agent.avatarUrl ||
-                  `https://ui-avatars.com/api/?name=${encodeURIComponent(agent.firstName)}&background=${PRIMARY.replace('#','')}&color=fff&size=128`;
-                $av.style.display = 'block';
-              }
-              if ($name) {
-                $name.textContent = `${agent.firstName} ${agent.lastName || ''}`.trim();
-              }
-              if ($sub) {
-                $sub.textContent = AV_STATUS || 'Will answer your call';
-              }
-              if ($ag) $ag.style.display = '';
+          // Retrieve last shown index from sessionStorage for round-robin starting agent
+          let cxAgentIndex = parseInt(sessionStorage.getItem('cx_last_agent_index') || '-1', 10);
+          cxAgentIndex = (cxAgentIndex + 1) % window.cxAvailableAgents.length;
+          sessionStorage.setItem('cx_last_agent_index', cxAgentIndex);
+
+          function displayAgent(agent) {
+            if (!agent) return;
+            agentExt = agent.extension;
+            const $ag = document.getElementById('cx-agent');
+            const $av = document.getElementById('cx-av');
+            const $name = document.getElementById('cx-av-name');
+            const $sub = document.getElementById('cx-av-sub');
+
+            if ($av) {
+              $av.src = agent.avatarUrl ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(agent.firstName)}&background=${PRIMARY.replace('#', '')}&color=fff&size=128`;
+              $av.style.display = 'block';
             }
-
-            // Show starting agent immediately
-            displayAgent(window.cxAvailableAgents[cxAgentIndex]);
-
-            const $ringSvg = document.querySelector('.cx-av-ring-svg');
-            const $ring = document.getElementById('cx-av-ring');
-            const circumference = 2 * Math.PI * 33; // ~207.35
-
-            if ($ringSvg) {
-              // Hide ring if rotation is disabled or if there's only 1 agent
-              if (!AGENT_ROTATION_ENABLED || window.cxAvailableAgents.length <= 1) {
-                $ringSvg.style.display = 'none';
-              } else {
-                $ringSvg.style.display = '';
-                if ($ring) {
-                  $ring.style.strokeDasharray = circumference;
-                  $ring.style.strokeDashoffset = circumference;
-                }
-              }
+            if ($name) {
+              $name.textContent = `${agent.firstName} ${agent.lastName || ''}`.trim();
             }
+            if ($sub) {
+              $sub.textContent = AV_STATUS || 'Will answer your call';
+            }
+            if ($ag) $ag.style.display = '';
+          }
 
-            // Cycle agents every 15 seconds with smooth progress ring updates (if enabled)
-            if (window.cxAgentCycleInterval) clearInterval(window.cxAgentCycleInterval);
-            if (AGENT_ROTATION_ENABLED && window.cxAvailableAgents.length > 1) {
-              let elapsedMs = 0;
-              const cycleDuration = 15000;
-              const stepMs = 100;
+          // Show starting agent immediately
+          displayAgent(window.cxAvailableAgents[cxAgentIndex]);
 
-              window.cxAgentCycleInterval = setInterval(() => {
-                const $okWrap = document.getElementById('cx-ok-wrap');
-                if ($okWrap && $okWrap.style.display === 'block') {
-                  clearInterval(window.cxAgentCycleInterval);
-                  return;
-                }
+          const $ringSvg = document.querySelector('.cx-av-ring-svg');
+          const $ring = document.getElementById('cx-av-ring');
+          const circumference = 2 * Math.PI * 33; // ~207.35
 
-                elapsedMs += stepMs;
-                
-                // Update ring dashoffset
-                if ($ring) {
-                  const progress = Math.min(1, elapsedMs / cycleDuration);
-                  $ring.style.strokeDashoffset = circumference * (1 - progress);
-                }
-
-                if (elapsedMs >= cycleDuration) {
-                  elapsedMs = 0;
-                  
-                  // Rotate with fade animation targeting agent content wrapper
-                  const $content = document.getElementById('cx-agent-content');
-                  if ($content) {
-                    $content.classList.add('cx-fade-out');
-                    setTimeout(() => {
-                      cxAgentIndex = (cxAgentIndex + 1) % window.cxAvailableAgents.length;
-                      sessionStorage.setItem('cx_last_agent_index', cxAgentIndex);
-                      displayAgent(window.cxAvailableAgents[cxAgentIndex]);
-                      $content.classList.remove('cx-fade-out');
-                    }, 220);
-                  }
-                }
-              }, stepMs);
+          if ($ringSvg) {
+            // Hide ring if rotation is disabled or if there's only 1 agent
+            if (!AGENT_ROTATION_ENABLED || window.cxAvailableAgents.length <= 1) {
+              $ringSvg.style.display = 'none';
+            } else {
+              $ringSvg.style.display = '';
+              if ($ring) {
+                $ring.style.strokeDasharray = circumference;
+                $ring.style.strokeDashoffset = circumference;
+              }
             }
           }
+
+          // Cycle agents every 15 seconds with smooth progress ring updates (if enabled)
+          if (window.cxAgentCycleInterval) clearInterval(window.cxAgentCycleInterval);
+          if (AGENT_ROTATION_ENABLED && window.cxAvailableAgents.length > 1) {
+            let elapsedMs = 0;
+            const cycleDuration = 15000;
+            const stepMs = 100;
+
+            window.cxAgentCycleInterval = setInterval(() => {
+              const $okWrap = document.getElementById('cx-ok-wrap');
+              if ($okWrap && $okWrap.style.display === 'block') {
+                clearInterval(window.cxAgentCycleInterval);
+                return;
+              }
+
+              elapsedMs += stepMs;
+
+              // Update ring dashoffset
+              if ($ring) {
+                const progress = Math.min(1, elapsedMs / cycleDuration);
+                $ring.style.strokeDashoffset = circumference * (1 - progress);
+              }
+
+              if (elapsedMs >= cycleDuration) {
+                elapsedMs = 0;
+
+                // Rotate with fade animation targeting agent content wrapper
+                const $content = document.getElementById('cx-agent-content');
+                if ($content) {
+                  $content.classList.add('cx-fade-out');
+                  setTimeout(() => {
+                    cxAgentIndex = (cxAgentIndex + 1) % window.cxAvailableAgents.length;
+                    sessionStorage.setItem('cx_last_agent_index', cxAgentIndex);
+                    displayAgent(window.cxAvailableAgents[cxAgentIndex]);
+                    $content.classList.remove('cx-fade-out');
+                  }, 220);
+                }
+              }
+            }, stepMs);
+          }
         }
-      } catch (e) {}
+      }
+      catch (e) { }
     }
 
     /* ─── Auto-Slider Engine ─── */
@@ -1449,7 +1449,7 @@
   function closeAll() {
     $modal.classList.remove('show');
     $overlay.classList.remove('show');
-    
+
     const activeCallId = sessionStorage.getItem('cx_active_call_id');
     if (!activeCallId) {
       setTimeout(reset, 300);
@@ -1465,7 +1465,7 @@
       window.cxAgentCycleInterval = null;
     }
     $formWrap.style.display = 'block';
-    $okWrap.style.display   = 'none';
+    $okWrap.style.display = 'none';
     $form.reset();
     const $phoneErr = document.getElementById('cx-phone-err');
     if ($phoneErr) $phoneErr.style.display = 'none';
@@ -1490,8 +1490,8 @@
     if ($phoneErr) $phoneErr.style.display = 'none';
 
     const firstName = document.getElementById('cx-fname') ? document.getElementById('cx-fname').value.trim() : '';
-    const lastName  = document.getElementById('cx-lname')  ? document.getElementById('cx-lname').value.trim()  : '';
-    const email     = document.getElementById('cx-email')  ? document.getElementById('cx-email').value.trim()  : '';
+    const lastName = document.getElementById('cx-lname') ? document.getElementById('cx-lname').value.trim() : '';
+    const email = document.getElementById('cx-email') ? document.getElementById('cx-email').value.trim() : '';
 
     // Validate phone
     let phone = '';
@@ -1530,7 +1530,7 @@
     $submit.textContent = OFFICE_CLOSED ? 'Submitting…' : 'Connecting…';
 
     const $hpInp = document.getElementById('cx-hp-field');
-    const hpVal  = $hpInp ? $hpInp.value : '';
+    const hpVal = $hpInp ? $hpInp.value : '';
 
     try {
       const res = await fetch(`${SERVER_URL}/api/call`, {
@@ -1552,7 +1552,7 @@
         const callId = d.callId;
 
         $formWrap.style.display = 'none';
-        $okWrap.style.display   = 'block';
+        $okWrap.style.display = 'block';
 
         const $badgeContainer = document.getElementById('cx-success-badge-container');
 
@@ -1605,7 +1605,7 @@
       $badgeContainer.innerHTML = `<span class="cx-ok-icon" style="${SUCCESS_ICON_STYLE}">${SUCCESS_ICON}</span>`;
       if ($successHeadline) $successHeadline.textContent = 'Call Connected!';
       if ($successMsg) $successMsg.textContent = 'You are now connected with our agent. Enjoy talking!';
-      
+
       // Still poll for completion/fail to clean up storage
       if (window.cxStatusPollInterval) clearInterval(window.cxStatusPollInterval);
       window.cxStatusPollInterval = setInterval(async () => {
@@ -1620,7 +1620,7 @@
               sessionStorage.removeItem('cx_call_start_duration');
             }
           }
-        } catch (e) {}
+        } catch (e) { }
       }, 3000);
       return;
     }
@@ -1637,17 +1637,17 @@
         <div class="cx-timer-text" id="cx-timer-countdown">${secondsLeft}</div>
       </div>
     `;
-    
+
     const $circle = document.getElementById('cx-timer-circle');
     const $text = document.getElementById('cx-timer-countdown');
     const circumference = 2 * Math.PI * 34; // ~213.63
-    
+
     if ($circle) {
       $circle.style.strokeDasharray = circumference;
       const initialOffset = circumference * (1 - secondsLeft / maxSeconds);
       $circle.style.strokeDashoffset = initialOffset;
     }
-    
+
     if (window.cxTimerInterval) clearInterval(window.cxTimerInterval);
     if (window.cxStatusPollInterval) clearInterval(window.cxStatusPollInterval);
 
@@ -1677,7 +1677,7 @@
           const sResp = await fetch(`${SERVER_URL}/api/call/${callId}/status`);
           if (sResp.ok) {
             const statusData = await sResp.json();
-            
+
             // A. If call is Answered
             if (statusData.status === 'Answered') {
               clearInterval(window.cxTimerInterval);
@@ -1686,7 +1686,7 @@
               if ($successHeadline) $successHeadline.textContent = 'Call Connected!';
               if ($successMsg) $successMsg.textContent = 'You are now connected with our agent. Enjoy talking!';
             }
-            
+
             // B. If call failed/completed/missed
             if (['Completed', 'Failed', 'Missed', 'Abandoned'].includes(statusData.status) || ['Completed', 'Failed', 'Missed', 'Abandoned'].includes(statusData.outcome)) {
               clearInterval(window.cxTimerInterval);
@@ -1712,16 +1712,16 @@
               const $av = document.getElementById('cx-av');
               const $name = document.getElementById('cx-av-name');
               const $sub = document.getElementById('cx-av-sub');
-              
+
               if ($av) {
                 $av.style.display = 'block';
                 if (statusData.agentAvatarUrl) {
                   $av.src = statusData.agentAvatarUrl;
                 } else if (statusData.agentName) {
-                  $av.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(statusData.agentName)}&background=${PRIMARY.replace('#','')}&color=fff&size=128`;
+                  $av.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(statusData.agentName)}&background=${PRIMARY.replace('#', '')}&color=fff&size=128`;
                 }
               }
-              
+
               if ($name && statusData.agentName) {
                 $name.textContent = statusData.agentName;
               }
@@ -1746,7 +1746,7 @@
       const sResp = await fetch(`${SERVER_URL}/api/call/${activeCallId}/status`);
       if (sResp.ok) {
         const statusData = await sResp.json();
-        
+
         // If the call is still in progress
         if (['Initiated', 'Ringing', 'Answered'].includes(statusData.status)) {
           // Open the widget automatically
@@ -1754,23 +1754,23 @@
           $overlay.classList.add('show');
           $tooltip.style.display = 'none';
           $fab.style.animation = 'none';
-          
-          initITI(() => {});
-          
+
+          initITI(() => { });
+
           // Show success screen
           $formWrap.style.display = 'none';
-          $okWrap.style.display   = 'block';
-          
+          $okWrap.style.display = 'block';
+
           // Resume agent info display
           if (statusData.agentExtension) {
             const $ag = document.getElementById('cx-agent');
             const $av = document.getElementById('cx-av');
             const $name = document.getElementById('cx-av-name');
             const $sub = document.getElementById('cx-av-sub');
-            
+
             if ($av) {
               $av.src = statusData.agentAvatarUrl ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(statusData.agentName || 'Agent')}&background=${PRIMARY.replace('#','')}&color=fff&size=128`;
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(statusData.agentName || 'Agent')}&background=${PRIMARY.replace('#', '')}&color=fff&size=128`;
               $av.style.display = 'block';
             }
             if ($name && statusData.agentName) {
@@ -1781,7 +1781,7 @@
             }
             if ($ag) $ag.style.display = '';
           }
-          
+
           // Calculate remaining seconds
           let remaining = undefined;
           const startTimeStr = sessionStorage.getItem('cx_call_start_time');

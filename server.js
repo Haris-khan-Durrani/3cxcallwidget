@@ -1692,6 +1692,25 @@ app.get('/widget.js', async (req, res) => {
 
     const isClosed = !isOfficeHours(widget);
 
+    // Pre-fetch agents at serve time to bake into the widget JS (eliminates client HTTP round-trip)
+    let prefetchedAgents = [];
+    if (!isClosed && widget.show_agent !== false) {
+      try {
+        const widgetWithAgents = await Widget.findByPk(widgetId, { include: [Agent] });
+        if (widgetWithAgents) {
+          prefetchedAgents = await fetchAvailableAgents(widgetWithAgents);
+          prefetchedAgents = prefetchedAgents.map(a => ({
+            extension: a.extension,
+            firstName: a.first_name,
+            lastName: a.last_name,
+            avatarUrl: a.avatar_url || ''
+          }));
+        }
+      } catch (prefetchErr) {
+        console.warn('[Widget] Agent prefetch failed, widget will fallback to client-side fetch:', prefetchErr.message);
+      }
+    }
+
     // Replace all dynamic placeholders
     const replacements = {
       '__WIDGET_ID__': widgetId,
@@ -1753,6 +1772,7 @@ app.get('/widget.js', async (req, res) => {
       '__RING_TIMEOUT__': String(widget.ring_timeout_seconds ?? 55),
       '__CALL_CONNECT_LOCATION_MODE__': widget.call_connect_location_mode || 'all',
       '__CALL_CONNECT_ALLOWED_COUNTRIES__': (widget.call_connect_allowed_countries || '+971').replace(/'/g, "\\'"),
+      '__PREFETCHED_AGENTS__': JSON.stringify(prefetchedAgents),
     };
     for (const [key, val] of Object.entries(replacements)) {
       // Use split/join to replace all occurrences globally

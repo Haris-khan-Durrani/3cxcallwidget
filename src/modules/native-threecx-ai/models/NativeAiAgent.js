@@ -80,13 +80,8 @@ module.exports = (sequelize) => {
     updatedAt: 'updated_at',
     indexes: [
       {
-        unique: true,
-        fields: ['company_id', 'threecx_extension'],
-        name: 'uq_native_ai_agent_company_extension'
-      },
-      {
-        fields: ['company_id', 'status'],
-        name: 'idx_native_ai_agent_company_status'
+        fields: ['status'],
+        name: 'idx_native_ai_agent_status'
       }
     ]
   });

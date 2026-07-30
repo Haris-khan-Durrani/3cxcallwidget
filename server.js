@@ -4653,6 +4653,65 @@ async function startServer() {
     await sequelize.sync({ alter: true });
     console.log('Database synced');
 
+    // Guaranteed table creation for Native AI models (failsafe for MariaDB index edge-cases)
+    try {
+      await sequelize.query(`
+        CREATE TABLE IF NOT EXISTS \`native_ai_agents\` (
+          \`id\` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+          \`company_id\` CHAR(36) NULL,
+          \`name\` VARCHAR(150) NOT NULL,
+          \`fqdn_3cx\` VARCHAR(255) NULL,
+          \`client_id_3cx\` VARCHAR(255) NULL,
+          \`client_secret_3cx\` VARCHAR(255) NULL,
+          \`threecx_extension\` VARCHAR(20) NOT NULL,
+          \`threecx_dn_id\` VARCHAR(100) NULL,
+          \`department_id\` VARCHAR(100) NULL,
+          \`outbound_caller_id\` VARCHAR(40) NULL,
+          \`assigned_did\` VARCHAR(40) NULL,
+          \`language\` VARCHAR(20) DEFAULT 'en',
+          \`voice_name\` VARCHAR(100) NULL,
+          \`status\` ENUM('active','inactive','testing','error') DEFAULT 'testing',
+          \`concurrency_limit\` INT UNSIGNED DEFAULT 1,
+          \`settings\` JSON NULL,
+          \`last_verified_at\` DATETIME NULL,
+          \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (\`id\`),
+          INDEX \`idx_native_ai_agent_status\` (\`status\`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      await sequelize.query(`
+        CREATE TABLE IF NOT EXISTS \`native_ai_calls\` (
+          \`id\` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+          \`company_id\` CHAR(36) NULL,
+          \`agent_id\` BIGINT UNSIGNED NOT NULL,
+          \`client_phone\` VARCHAR(20) NOT NULL,
+          \`client_name\` VARCHAR(150) NULL,
+          \`threecx_call_id\` VARCHAR(100) NULL,
+          \`threecx_recording_id\` VARCHAR(100) NULL,
+          \`direction\` ENUM('inbound','outbound') NOT NULL DEFAULT 'outbound',
+          \`status\` ENUM('pending','initiated','ringing','connected','completed','failed','canceled') DEFAULT 'pending',
+          \`duration_seconds\` INT UNSIGNED DEFAULT 0,
+          \`recording_url\` VARCHAR(512) NULL,
+          \`error_message\` TEXT NULL,
+          \`dynamic_context\` JSON NULL,
+          \`call_metadata\` JSON NULL,
+          \`started_at\` DATETIME NULL,
+          \`answered_at\` DATETIME NULL,
+          \`ended_at\` DATETIME NULL,
+          \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (\`id\`),
+          INDEX \`idx_native_ai_call_agent_status\` (\`agent_id\`, \`status\`),
+          INDEX \`idx_native_ai_call_phone\` (\`client_phone\`),
+          CONSTRAINT \`fk_native_ai_call_agent\` FOREIGN KEY (\`agent_id\`) REFERENCES \`native_ai_agents\` (\`id\`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      console.log('[Migration] native_ai_agents and native_ai_calls tables ensured.');
+    } catch (nativeTableErr) {
+      console.warn('[Migration] Native AI table creation notice:', nativeTableErr.message);
+    }
+
     const queryInterface = sequelize.getQueryInterface();
     const tablesToMigrate = [
       { name: 'Widgets', model: Widget },

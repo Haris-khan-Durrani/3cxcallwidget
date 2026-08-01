@@ -2083,6 +2083,9 @@ app.post('/api/call', async (req, res) => {
       let finalDestination = phone;
       if (widget.dial_prefix) {
         finalDestination = widget.dial_prefix + phone;
+        console.log(`[3CX Dial Prefix] Applied prefix '${widget.dial_prefix}' to phone '${phone}'. Final Destination: ${finalDestination}`);
+      } else {
+        console.log(`[3CX Dial Prefix] No dial prefix configured for widget. Final Destination: ${finalDestination}`);
       }
 
       const responseData = await execute3cxMakeCall(widget, ext, finalDestination);

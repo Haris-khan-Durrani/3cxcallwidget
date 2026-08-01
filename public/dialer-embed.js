@@ -64,16 +64,16 @@
       visibleInstances.forEach(function (inst, index) {
         var bottomOffset = 20 + (index * 48); // Stack 48px apart
         inst.fab.style.bottom = bottomOffset + 'px';
-        inst.fab.style.right  = '20px';
+        inst.fab.style.right = '20px';
         inst.popup.style.bottom = (bottomOffset + 46) + 'px';
-        inst.popup.style.right  = '20px';
+        inst.popup.style.right = '20px';
 
         // Restore custom drag position if stored
         try {
           var storageKey = '_3cx_fab_pos_' + inst.dialerId;
           var sp = JSON.parse(localStorage.getItem(storageKey) || 'null');
           if (sp && inst.applyFabPos) inst.applyFabPos(sp.left, sp.top);
-        } catch (e) {}
+        } catch (e) { }
       });
     },
     // Shared GHL SPA Auto-detect Observer & URL Location Listener
@@ -95,10 +95,10 @@
 
       setInterval(function () {
         var currentHref = window.location.href;
-        var currentLoc  = extractLoc(currentHref);
+        var currentLoc = extractLoc(currentHref);
 
         var hrefChanged = (currentHref !== _lastHref);
-        var locChanged  = (currentLoc !== self.lastLocationId);
+        var locChanged = (currentLoc !== self.lastLocationId);
 
         if (hrefChanged || locChanged) {
           _lastHref = currentHref;
@@ -136,15 +136,15 @@
     return scripts[scripts.length - 1];
   })();
 
-  var src         = me ? me.src : '';
-  var params      = new URLSearchParams(src.split('?')[1] || '');
-  var ORIGIN      = src.split('/dialer-embed.js')[0];
-  var DIALER_ID   = params.get('id')          || '';
-  var USERID      = params.get('userid')      || '';
-  var EXT         = params.get('ext')         || '';
-  var PHONE       = params.get('phone')       || '';
+  var src = me ? me.src : '';
+  var params = new URLSearchParams(src.split('?')[1] || '');
+  var ORIGIN = src.split('/dialer-embed.js')[0];
+  var DIALER_ID = params.get('id') || '';
+  var USERID = params.get('userid') || '';
+  var EXT = params.get('ext') || '';
+  var PHONE = params.get('phone') || '';
   var LOCATION_ID = params.get('location_id') || params.get('locationid') || params.get('location') || '';
-  var LABEL_PARAM = params.get('label')       || params.get('title')      || params.get('name')     || '';
+  var LABEL_PARAM = params.get('label') || params.get('title') || params.get('name') || '';
 
   var isTemplate = function (v) {
     return !v || !v.trim() || v === 'undefined' || v === 'null' || v.includes('{{') || v.includes('}}');
@@ -362,24 +362,24 @@
 
   // ── 6. Boot Instance Logic ────────────────────────────────────────────────
   function bootInstance() {
-    var fab       = wrap.querySelector('._3cx_fab');
-    var popup     = wrap.querySelector('._3cx_popup');
-    var input     = wrap.querySelector('._3cx_phone');
-    var btnCall   = wrap.querySelector('._3cx_call');
-    var btnDel    = wrap.querySelector('._3cx_del');
-    var overlay   = wrap.querySelector('._3cx_overlay');
+    var fab = wrap.querySelector('._3cx_fab');
+    var popup = wrap.querySelector('._3cx_popup');
+    var input = wrap.querySelector('._3cx_phone');
+    var btnCall = wrap.querySelector('._3cx_call');
+    var btnDel = wrap.querySelector('._3cx_del');
+    var overlay = wrap.querySelector('._3cx_overlay');
     var errBanner = wrap.querySelector('._3cx_err');
-    var fabText   = wrap.querySelector('._3cx_fab_txt');
-    var extTxt    = wrap.querySelector('._3cx_ext_txt');
-    var pcEl      = wrap.querySelector('._3cx_pc');
-    var stitleEl  = wrap.querySelector('._3cx_stitle');
-    var sdescEl   = wrap.querySelector('._3cx_sdesc');
-    var timerEl   = wrap.querySelector('._3cx_timer');
+    var fabText = wrap.querySelector('._3cx_fab_txt');
+    var extTxt = wrap.querySelector('._3cx_ext_txt');
+    var pcEl = wrap.querySelector('._3cx_pc');
+    var stitleEl = wrap.querySelector('._3cx_stitle');
+    var sdescEl = wrap.querySelector('._3cx_sdesc');
+    var timerEl = wrap.querySelector('._3cx_timer');
 
-    var extension   = '';
+    var extension = '';
     var dialerLabel = 'Dialer';
-    var apiBase     = ORIGIN;
-    var isActive    = false;
+    var apiBase = ORIGIN;
+    var isActive = false;
 
     // ── intl-tel-input ──────────────────────────────────────────────────────
     var iti = window.intlTelInput(input, {
@@ -392,7 +392,7 @@
       input.value = input.value.replace(/[^\d\+\-\s\(\)\.]/g, '');
       var num = iti.getNumber();
       if (num && num.length > 4) {
-        try { iti.setNumber(num); } catch (e) {}
+        try { iti.setNumber(num); } catch (e) { }
       }
     });
 
@@ -424,7 +424,7 @@
       onLocationChange: function (newLocId) {
         resolveAgent(newLocId);
       },
-      stopAudio: function(exceptId) { stopActiveAudio(exceptId); }
+      stopAudio: function (exceptId) { stopActiveAudio(exceptId); }
     };
     window.__3cxRegistry__.instances[instanceKey] = instanceObj;
 
@@ -434,7 +434,7 @@
         (LOCATION_ID && !isTemplate(LOCATION_ID) ? LOCATION_ID : extractGhlLocationId());
 
       var query = '?dialerId=' + encodeURIComponent(DIALER_ID) +
-                  '&location_id=' + encodeURIComponent(currentLocId);
+        '&location_id=' + encodeURIComponent(currentLocId);
 
       if (USERID && !isTemplate(USERID)) {
         query += '&userid=' + encodeURIComponent(USERID);
@@ -451,9 +451,9 @@
           if (!d || d.active === false || !d.extension) {
             // Mismatch or unassigned -> Hide cleanly
             instanceObj.isActive = false;
-            fab.style.display   = 'none';
+            fab.style.display = 'none';
             popup.style.display = 'none';
-            wrap.style.display  = 'none';
+            wrap.style.display = 'none';
             popup.classList.remove('_3cx_active');
 
             window.__3cxRegistry__.recalculateStacking();
@@ -478,9 +478,9 @@
           if (extTxt) extTxt.textContent = 'Agent Extension: ' + extension + ' (' + dialerLabel + ')';
 
           instanceObj.isActive = true;
-          fab.style.display   = 'flex';
+          fab.style.display = 'flex';
           popup.style.display = 'flex';
-          wrap.style.display  = 'block';
+          wrap.style.display = 'block';
 
           // Recalculate stacking order whenever active status updates
           window.__3cxRegistry__.recalculateStacking();
@@ -491,16 +491,16 @@
           }
 
           if (PHONE && !isTemplate(PHONE)) {
-            setTimeout(function () { try { iti.setNumber(PHONE); } catch (e) {} }, 400);
+            setTimeout(function () { try { iti.setNumber(PHONE); } catch (e) { } }, 400);
           }
 
           return true;
         })
         .catch(function () {
           instanceObj.isActive = false;
-          fab.style.display   = 'none';
+          fab.style.display = 'none';
           popup.style.display = 'none';
-          wrap.style.display  = 'none';
+          wrap.style.display = 'none';
           popup.classList.remove('_3cx_active');
 
           window.__3cxRegistry__.recalculateStacking();
@@ -523,7 +523,7 @@
       var tryFill = function () {
         var phone = readGhlPhone();
         if (phone) {
-          try { iti.setNumber(phone); } catch (e) {}
+          try { iti.setNumber(phone); } catch (e) { }
           if (fabText) {
             var orig = fabText.textContent;
             fabText.textContent = 'Ready ✓';
@@ -541,7 +541,7 @@
     window.__3cxRegistry__.startSharedObserver();
 
     // ── Tabs ───────────────────────────────────────────────────────────────
-    var tabBtns     = wrap.querySelectorAll('._3cx_tab');
+    var tabBtns = wrap.querySelectorAll('._3cx_tab');
     var tabContents = wrap.querySelectorAll('._3cx_tc');
     tabBtns.forEach(function (tab) {
       tab.addEventListener('click', function () {
@@ -570,7 +570,7 @@
           pressTimer = setTimeout(function () {
             isLongPress = true;
             input.value += '+';
-            try { iti.setNumber(input.value); } catch (e) {}
+            try { iti.setNumber(input.value); } catch (e) { }
             key.style.background = '#cbd5e1';
             setTimeout(function () { key.style.background = ''; }, 200);
           }, 600);
@@ -585,11 +585,11 @@
           clearTimeout(pressTimer);
           if (!isLongPress) {
             input.value += val;
-            try { iti.setNumber(input.value); } catch (e) {}
+            try { iti.setNumber(input.value); } catch (e) { }
           }
         } else {
           input.value += val;
-          try { iti.setNumber(input.value); } catch (e) {}
+          try { iti.setNumber(input.value); } catch (e) { }
         }
       };
 
@@ -640,60 +640,60 @@
           contactId: ghlContactId || ''
         })
       })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (d.error) {
-          resetDialer();
-          showErr(d.error);
-          return;
-        }
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.error) {
+            resetDialer();
+            showErr(d.error);
+            return;
+          }
 
-        var wasConnected = false;
-        var idleCount = 0;
+          var wasConnected = false;
+          var idleCount = 0;
 
-        pollInterval = setInterval(function () {
-          fetch(apiBase + '/api/dialer/status?dialerId=' + DIALER_ID + '&extension=' + extension + '&destination=' + encodeURIComponent(destination) + '&duration=' + secondsElapsed + '&callId=' + (d.callId || ''))
-            .then(function (r) { return r.json(); })
-            .then(function (statusData) {
-              if (statusData.state === 'connected') {
-                idleCount = 0;
-                if (!wasConnected) {
-                  wasConnected = true;
-                  pcEl.classList.add('_3cx_conn');
-                  stitleEl.textContent = 'Call Connected';
-                  sdescEl.textContent = 'Conversation started.';
-                  timerEl.style.display = 'block';
-                  secondsElapsed = 0;
-                  timerEl.textContent = '00:00';
+          pollInterval = setInterval(function () {
+            fetch(apiBase + '/api/dialer/status?dialerId=' + DIALER_ID + '&extension=' + extension + '&destination=' + encodeURIComponent(destination) + '&duration=' + secondsElapsed + '&callId=' + (d.callId || ''))
+              .then(function (r) { return r.json(); })
+              .then(function (statusData) {
+                if (statusData.state === 'connected') {
+                  idleCount = 0;
+                  if (!wasConnected) {
+                    wasConnected = true;
+                    pcEl.classList.add('_3cx_conn');
+                    stitleEl.textContent = 'Call Connected';
+                    sdescEl.textContent = 'Conversation started.';
+                    timerEl.style.display = 'block';
+                    secondsElapsed = 0;
+                    timerEl.textContent = '00:00';
 
-                  clearInterval(callTimerInterval);
-                  callTimerInterval = setInterval(function () {
-                    secondsElapsed++;
-                    timerEl.textContent = formatTime(secondsElapsed);
-                  }, 1000);
+                    clearInterval(callTimerInterval);
+                    callTimerInterval = setInterval(function () {
+                      secondsElapsed++;
+                      timerEl.textContent = formatTime(secondsElapsed);
+                    }, 1000);
+                  }
+                } else if (statusData.state === 'idle') {
+                  idleCount++;
+                  if (wasConnected || idleCount >= 2) {
+                    pcEl.classList.remove('_3cx_conn');
+                    stitleEl.textContent = wasConnected ? 'Call Ended' : 'Call Ended / Cancelled';
+                    sdescEl.textContent = wasConnected ? ('Duration: ' + formatTime(secondsElapsed)) : 'The call did not connect.';
+                    clearInterval(callTimerInterval);
+                    clearInterval(pollInterval);
+
+                    setTimeout(function () {
+                      resetDialer();
+                      loadHistory(true);
+                    }, 2000);
+                  }
+                } else {
+                  idleCount = 0;
                 }
-              } else if (statusData.state === 'idle') {
-                idleCount++;
-                if (wasConnected || idleCount >= 2) {
-                  pcEl.classList.remove('_3cx_conn');
-                  stitleEl.textContent = wasConnected ? 'Call Ended' : 'Call Ended / Cancelled';
-                  sdescEl.textContent = wasConnected ? ('Duration: ' + formatTime(secondsElapsed)) : 'The call did not connect.';
-                  clearInterval(callTimerInterval);
-                  clearInterval(pollInterval);
-
-                  setTimeout(function () {
-                    resetDialer();
-                    loadHistory(true);
-                  }, 2000);
-                }
-              } else {
-                idleCount = 0;
-              }
-            })
-            .catch(function () {});
-        }, 2500);
-      })
-      .catch(function (e) { resetDialer(); showErr(e.message); });
+              })
+              .catch(function () { });
+          }, 2500);
+        })
+        .catch(function (e) { resetDialer(); showErr(e.message); });
     });
 
     wrap.querySelector('._3cx_hangup').addEventListener('click', function () {
@@ -717,7 +717,7 @@
 
     function showOverlay(title, desc) {
       stitleEl.textContent = title;
-      sdescEl.textContent  = desc || '';
+      sdescEl.textContent = desc || '';
       overlay.classList.add('_3cx_active');
     }
 
@@ -728,14 +728,14 @@
     }
 
     // ── History & Audio Player ──────────────────────────────────────────────
-    var histLoaded   = false;
-    var activeAudio  = null;
+    var histLoaded = false;
+    var activeAudio = null;
     var activeCallId = null;
 
     function stopActiveAudio(exceptId) {
       if (activeCallId && activeCallId === exceptId) return;
       if (activeAudio) {
-        try { activeAudio.pause(); } catch (e) {}
+        try { activeAudio.pause(); } catch (e) { }
         activeAudio = null;
       }
       if (activeCallId) {
@@ -772,50 +772,50 @@
 
             return '<li class="_3cx_hi" id="_3cx_hi_' + c.id + '">' +
               '<div class="_3cx_hi_top">' +
-                '<span class="_3cx_hnum" title="' + (c.destination || '') + '">' + (c.destination || '—') + '</span>' +
-                '<div class="_3cx_actions">' +
-                  (hasRecording ?
-                    '<button class="_3cx_rec_btn _3cx_rbtn_' + c.id + '" data-id="' + c.id + '" data-url="' + listenUrl + '" data-dl="' + downloadUrl + '" title="Play Recording">' +
-                      '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
-                    '</button>' : '') +
-                  '<button class="_3cx_rd" data-num="' + (c.destination || '') + '" title="Redial">' +
-                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>' +
-                  '</button>' +
-                '</div>' +
+              '<span class="_3cx_hnum" title="' + (c.destination || '') + '">' + (c.destination || '—') + '</span>' +
+              '<div class="_3cx_actions">' +
+              (hasRecording ?
+                '<button class="_3cx_rec_btn _3cx_rbtn_' + c.id + '" data-id="' + c.id + '" data-url="' + listenUrl + '" data-dl="' + downloadUrl + '" title="Play Recording">' +
+                '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
+                '</button>' : '') +
+              '<button class="_3cx_rd" data-num="' + (c.destination || '') + '" title="Redial">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>' +
+              '</button>' +
+              '</div>' +
               '</div>' +
               '<div class="_3cx_hi_sub">' +
-                '<span class="_3cx_hs ' + (isConnected ? '_3cx_conn' : '_3cx_miss') + '">' + (isConnected ? 'Connected' : c.status) + '</span>' +
-                '<span class="_3cx_htime">' + time + (dur ? ' • ' + dur : '') + '</span>' +
+              '<span class="_3cx_hs ' + (isConnected ? '_3cx_conn' : '_3cx_miss') + '">' + (isConnected ? 'Connected' : c.status) + '</span>' +
+              '<span class="_3cx_htime">' + time + (dur ? ' • ' + dur : '') + '</span>' +
               '</div>' +
               (hasRecording ?
                 '<div class="_3cx_player_box _3cx_pbox_' + c.id + '">' +
-                  '<button class="_3cx_player_toggle _3cx_ptog_' + c.id + '" title="Play/Pause">' +
-                    '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
-                  '</button>' +
-                  '<input type="range" class="_3cx_player_seek _3cx_pseek_' + c.id + '" value="0" min="0" max="100"/>' +
-                  '<span class="_3cx_player_time _3cx_ptime_' + c.id + '">00:00 / ' + (dur || '00:00') + '</span>' +
-                  '<a class="_3cx_player_dl" href="' + downloadUrl + '" target="_blank" download title="Download Recording">' +
-                    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>' +
-                  '</a>' +
+                '<button class="_3cx_player_toggle _3cx_ptog_' + c.id + '" title="Play/Pause">' +
+                '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
+                '</button>' +
+                '<input type="range" class="_3cx_player_seek _3cx_pseek_' + c.id + '" value="0" min="0" max="100"/>' +
+                '<span class="_3cx_player_time _3cx_ptime_' + c.id + '">00:00 / ' + (dur || '00:00') + '</span>' +
+                '<a class="_3cx_player_dl" href="' + downloadUrl + '" target="_blank" download title="Download Recording">' +
+                '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>' +
+                '</a>' +
                 '</div>' : '') +
-            '</li>';
+              '</li>';
           }).join('');
 
           list.querySelectorAll('._3cx_rd').forEach(function (btn) {
             btn.addEventListener('click', function () {
-              try { iti.setNumber(btn.dataset.num); } catch (e) {}
+              try { iti.setNumber(btn.dataset.num); } catch (e) { }
               wrap.querySelector('._3cx_tab[data-tab="dialer"]').click();
             });
           });
 
           list.querySelectorAll('._3cx_rec_btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
-              var callId  = btn.dataset.id;
-              var url     = btn.dataset.url;
-              var box     = wrap.querySelector('._3cx_pbox_' + callId);
-              var seek    = wrap.querySelector('._3cx_pseek_' + callId);
+              var callId = btn.dataset.id;
+              var url = btn.dataset.url;
+              var box = wrap.querySelector('._3cx_pbox_' + callId);
+              var seek = wrap.querySelector('._3cx_pseek_' + callId);
               var timeTxt = wrap.querySelector('._3cx_ptime_' + callId);
-              var togBtn  = wrap.querySelector('._3cx_ptog_' + callId);
+              var togBtn = wrap.querySelector('._3cx_ptog_' + callId);
 
               if (activeCallId === callId && activeAudio) {
                 if (activeAudio.paused) {
@@ -901,25 +901,25 @@
 
     // ── Draggable FAB ───────────────────────────────────────────────────────
     var isDragging = false, startX, startY, startLeft, startTop, didDrag = false;
-    var THRESHOLD  = 6;
+    var THRESHOLD = 6;
 
     function applyFabPos(left, top) {
       var w = fab.offsetWidth || 120, h = fab.offsetHeight || 40;
-      fab.style.left   = Math.max(8, Math.min(left, window.innerWidth  - w - 8)) + 'px';
-      fab.style.top    = Math.max(8, Math.min(top,  window.innerHeight - h - 8)) + 'px';
-      fab.style.right  = 'auto';
+      fab.style.left = Math.max(8, Math.min(left, window.innerWidth - w - 8)) + 'px';
+      fab.style.top = Math.max(8, Math.min(top, window.innerHeight - h - 8)) + 'px';
+      fab.style.right = 'auto';
       fab.style.bottom = 'auto';
     }
 
     function positionPopup() {
       var r = fab.getBoundingClientRect(), pW = 285, pH = 430;
-      var pTop  = r.top - pH - 8, pLeft = r.right - pW;
-      if (pTop  < 8) pTop  = r.bottom + 8;
+      var pTop = r.top - pH - 8, pLeft = r.right - pW;
+      if (pTop < 8) pTop = r.bottom + 8;
       if (pLeft < 8) pLeft = 8;
       if (pLeft + pW > window.innerWidth - 8) pLeft = window.innerWidth - pW - 8;
-      popup.style.top    = pTop  + 'px';
-      popup.style.left   = pLeft + 'px';
-      popup.style.right  = 'auto';
+      popup.style.top = pTop + 'px';
+      popup.style.left = pLeft + 'px';
+      popup.style.right = 'auto';
       popup.style.bottom = 'auto';
     }
 

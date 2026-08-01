@@ -36,6 +36,12 @@ const Widget = sequelize.define('Widget', {
     type: DataTypes.STRING,
     allowNull: true,   // now optional at create-time; managed via Agents tab
   },
+  dial_prefix: {
+    type: DataTypes.STRING,
+    defaultValue: '',
+    allowNull: true,
+    comment: 'Prefix prepended to the destination number before sending to 3CX',
+  },
   // OAuth 2.0 credentials (3CX API v2)
   client_id_3cx: {
     type: DataTypes.STRING,
@@ -268,6 +274,12 @@ const DialerWidget = sequelize.define('DialerWidget', {
   name: {
     type: DataTypes.STRING,
     allowNull: false,
+  },
+  dial_prefix: {
+    type: DataTypes.STRING,
+    defaultValue: '',
+    allowNull: true,
+    comment: 'Prefix prepended to the destination number before sending to 3CX',
   },
   fqdn_3cx: {
     type: DataTypes.STRING,

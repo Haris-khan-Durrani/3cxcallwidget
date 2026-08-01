@@ -736,7 +736,6 @@
     /* 4. Split Theme (Two-Column Agent & Form Split Panel) */
     @media(min-width: 501px) {
       #cx-modal.cx-theme-split {
-        display: grid !important;
         grid-template-columns: 40% 60%;
         grid-template-rows: auto 1fr auto;
         width: 500px;
@@ -858,8 +857,10 @@
         transform: ${POPUP_STYLE === 'center' ? 'translateY(-50%) scale(1)' : 'none'} !important;
       }
       #cx-modal.cx-theme-split {
-        display: block !important;
         min-height: auto;
+      }
+      #cx-modal.cx-theme-split.show {
+        display: block !important;
       }
       #cx-modal.cx-theme-split #cx-agent {
         display: block !important;

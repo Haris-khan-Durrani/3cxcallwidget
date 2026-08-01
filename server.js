@@ -345,7 +345,7 @@ async function triggerDialerWebhook(record, dialer) {
     }
 
     const urlInfo = parsePageUrlInfo(record.page_url);
-    const resolvedLocationId = urlInfo.locationId || agentLocationId || freshDialer.location_id || '';
+    const resolvedLocationId = record.location_id || urlInfo.locationId || agentLocationId || freshDialer.location_id || '';
     const resolvedContactId = record.contact_id || urlInfo.contactId || '';
 
     const payload = {

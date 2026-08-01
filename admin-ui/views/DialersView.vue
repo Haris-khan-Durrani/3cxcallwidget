@@ -101,10 +101,6 @@
                   <label class="form-label">Client Secret</label>
                   <input v-model="form.client_secret_3cx" type="password" class="input" placeholder="3CX System Owner Client Secret" />
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Dial Prefix (Optional)</label>
-                  <input v-model="form.dial_prefix" type="text" class="input" placeholder="e.g. 00 or 9" />
-                </div>
 
                 <!-- Test 3CX Connection Button & Result -->
                 <div style="margin-top: 6px;">
@@ -394,7 +390,7 @@ const testingConn = ref(false)
 const testResult = ref(null)
 
 const form = reactive({
-  name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '', dial_prefix: '',
+  name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '',
   webhook_initiated: '', webhook_connected: '', webhook_completed: '', webhook_failed: ''
 })
 
@@ -442,7 +438,7 @@ function openCreate() {
   testResult.value = null
   testingConn.value = false
   Object.assign(form, { 
-    name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '', dial_prefix: '',
+    name: '', fqdn_3cx: '', client_id_3cx: '', client_secret_3cx: '', location_id: '',
     webhook_initiated: '', webhook_connected: '', webhook_completed: '', webhook_failed: ''
   })
   showModal.value = true
@@ -460,7 +456,6 @@ function openEdit(dialer) {
     client_id_3cx: dialer.client_id_3cx, 
     client_secret_3cx: dialer.client_secret_3cx,
     location_id: dialer.location_id || '',
-    dial_prefix: dialer.dial_prefix || '',
     webhook_initiated: dialer.webhook_initiated || '',
     webhook_connected: dialer.webhook_connected || '',
     webhook_completed: dialer.webhook_completed || '',

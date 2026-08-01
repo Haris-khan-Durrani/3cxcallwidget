@@ -251,6 +251,10 @@
                 <label class="form-label">Client Secret</label>
                 <input v-model="editWidgetForm.client_secret_3cx" type="password" class="input" placeholder="••••••••••••"/>
               </div>
+              <div class="form-group" style="margin-top: 14px;">
+                <label class="form-label">Dial Prefix (Optional)</label>
+                <input v-model="editWidgetForm.dial_prefix" type="text" class="input" placeholder="e.g. 00 or 9"/>
+              </div>
               <div class="wc-form-row">
                 <div class="form-group">
                   <label class="form-label">Fallback Extension</label>
@@ -292,7 +296,7 @@ const editingAgentId = ref(null)
 
 const showEditWidgetModal = ref(false)
 const savingWidget = ref(false)
-const editWidgetForm = reactive({ name:'', location_id:'', fqdn_3cx:'', client_id_3cx:'', client_secret_3cx:'', agent_extension_3cx:'', webhook_url_n8n:'' })
+const editWidgetForm = reactive({ name:'', location_id:'', fqdn_3cx:'', client_id_3cx:'', client_secret_3cx:'', agent_extension_3cx:'', webhook_url_n8n:'', dial_prefix:'' })
 const agentForm = reactive({ first_name:'', last_name:'', extension:'', crm_agent_id:'', email:'', avatar_url:'' })
 
 const embedSrc = computed(() => `${window.location.origin}/widget.js?id=${props.widget.id}`)
@@ -303,7 +307,8 @@ function openEditWidget() {
     fqdn_3cx: props.widget.fqdn_3cx||'', client_id_3cx: props.widget.client_id_3cx||'',
     client_secret_3cx: props.widget.client_secret_3cx||'',
     agent_extension_3cx: props.widget.agent_extension_3cx||'',
-    webhook_url_n8n: props.widget.webhook_url_n8n||''
+    webhook_url_n8n: props.widget.webhook_url_n8n||'',
+    dial_prefix: props.widget.dial_prefix||''
   })
   showEditWidgetModal.value = true
 }

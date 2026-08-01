@@ -1017,7 +1017,12 @@ async function triggerFailoverCall(callRecord, widget) {
     const oldExt = lastExt || 'default';
     console.log(`[3CX] Call ${callRecord.id} missed/declined by Ext ${oldExt}. Auto-retrying with ${newAgent.first_name} (Ext ${newAgent.extension})...`);
 
-    const responseData = await execute3cxMakeCall(widget, newAgent.extension, callRecord.customer_phone);
+    let finalDestination = callRecord.customer_phone;
+    if (widget.dial_prefix) {
+      finalDestination = widget.dial_prefix + callRecord.customer_phone;
+    }
+
+    const responseData = await execute3cxMakeCall(widget, newAgent.extension, finalDestination);
 
     const newCallId = responseData?.result?.callid || responseData?.result?.id || responseData?.callid;
 

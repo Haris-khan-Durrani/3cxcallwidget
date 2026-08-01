@@ -646,32 +646,32 @@
     </div>
 
     <!-- Embed Settings Modal -->
-    <div v-if="showEmbedModal" class="dr-modal-overlay">
-      <div class="dr-modal">
-        <div class="dr-modal-header">
+    <div v-if="showEmbedModal" class="rp-modal-backdrop" @click="showEmbedModal = false">
+      <div class="rp-modal" @click.stop>
+        <div class="rp-modal-header">
           <h3>Embed Dialer Report</h3>
-          <button class="dr-modal-close" @click="showEmbedModal = false">&times;</button>
+          <button class="rp-modal-close" @click="showEmbedModal = false">&times;</button>
         </div>
-        <div class="dr-modal-body">
-          <div class="dr-form-group">
+        <div class="rp-modal-body">
+          <div class="rp-form-group">
             <label>Allowed Domains (comma separated)</label>
-            <p class="dr-form-hint" style="margin-bottom:10px; color:#a1a1aa;">E.g. example.com, myapp.net. Only these domains can load the iframe.</p>
-            <input v-model="embedDomains" type="text" class="dr-input" placeholder="example.com" />
+            <p class="rp-form-hint">E.g. example.com, myapp.net. Only these domains can load the iframe.</p>
+            <input v-model="embedDomains" type="text" class="rp-input" placeholder="example.com" />
           </div>
           
-          <div class="dr-form-group" style="margin-top:20px;" v-if="embedApiKey">
+          <div class="rp-form-group" style="margin-top:20px;" v-if="embedApiKey">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
               <label style="margin:0;">Embed Code (Script Snippet)</label>
-              <button class="btn-ghost" style="padding:2px 8px; font-size:12px;" @click="regenerateApiKey" :disabled="regeneratingKey">
+              <button class="rp-btn-ghost" style="padding:2px 8px; font-size:12px;" @click="regenerateApiKey" :disabled="regeneratingKey">
                 {{ regeneratingKey ? 'Generating...' : 'Regenerate API Key' }}
               </button>
             </div>
-            <textarea readonly class="dr-input rp-code-block" rows="4" @focus="$event.target.select()" style="font-family:monospace; background:rgba(0,0,0,0.2);">{{ embedCode }}</textarea>
+            <textarea readonly class="rp-input rp-code-block" rows="4" @focus="$event.target.select()">{{ embedCode }}</textarea>
           </div>
         </div>
-        <div class="dr-modal-footer">
-          <button class="btn-ghost" @click="showEmbedModal = false">Cancel</button>
-          <button class="btn-primary" @click="saveEmbedSettings" :disabled="savingEmbed">
+        <div class="rp-modal-footer">
+          <button class="rp-btn-ghost" @click="showEmbedModal = false">Cancel</button>
+          <button class="rp-btn-primary" @click="saveEmbedSettings" :disabled="savingEmbed">
             {{ savingEmbed ? 'Saving...' : 'Save & Generate' }}
           </button>
         </div>
@@ -1303,6 +1303,23 @@ function downloadCSV() {
 .btn-save { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 13.5px; font-weight: 600; transition: all 0.2s; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
 .btn-save:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4); }
 .btn-save:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ─── Embed Modal rp- styles ─── */
+.rp-modal-backdrop { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:center; justify-content:center; }
+.rp-modal { background:var(--bg); border:1px solid var(--border); border-radius:12px; width:100%; max-width:500px; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.5); }
+.rp-modal-header { padding:20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+.rp-modal-header h3 { margin:0; font-size:18px; color:var(--text); }
+.rp-modal-close { background:none; border:none; font-size:24px; color:var(--text3); cursor:pointer; }
+.rp-modal-body { padding:20px; }
+.rp-form-group { display:flex; flex-direction:column; gap:8px; }
+.rp-form-group label { font-size:13px; font-weight:600; color:var(--text2); }
+.rp-form-hint { font-size:12px; color:var(--text3); margin:0; }
+.rp-input { background:var(--bg2); border:1px solid var(--border); color:var(--text); padding:10px; border-radius:6px; font-family:inherit; }
+.rp-code-block { font-family:monospace; font-size:12px; resize:none; }
+.rp-modal-footer { padding:20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
+.rp-btn-ghost { background:transparent; color:var(--text2); border:1px solid var(--border); padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer; }
+.rp-btn-primary { background:var(--accent); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer; }
+
 
 
 /* ─── Filter Bar ─── */

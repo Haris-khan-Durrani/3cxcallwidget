@@ -4287,9 +4287,14 @@ app.post('/api/dialer/call', async (req, res) => {
     const dialer = await DialerWidget.findByPk(dialerId);
     if (!dialer) return res.status(404).json({ error: 'Dialer not found' });
 
-    console.log(`[3CX Dialer] Dialing ${destination} from extension ${extension} via https://${sanitizeFqdn(dialer.fqdn_3cx)}/callcontrol/${encodeURIComponent(extension)}/makecall`);
+    let finalDestination = destination;
+    if (dialer.dial_prefix) {
+      finalDestination = dialer.dial_prefix + destination;
+    }
 
-    await execute3cxMakeCall(dialer, extension, destination);
+    console.log(`[3CX Dialer] Dialing ${finalDestination} from extension ${extension} via https://${sanitizeFqdn(dialer.fqdn_3cx)}/callcontrol/${encodeURIComponent(extension)}/makecall`);
+
+    await execute3cxMakeCall(dialer, extension, finalDestination);
 
     const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || req.ip || '';
     const pageUrl = req.body.pageUrl || req.get('referer') || req.get('origin') || '';
